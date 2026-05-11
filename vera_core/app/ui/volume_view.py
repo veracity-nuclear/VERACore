@@ -146,11 +146,28 @@ def initialize(server, vera_out_file):
 
         # Now that we have the array, let's copy the assemblies into it
         for assembly_id in range(array.shape[3]):
-            core_i, core_j = map(int, np.where(reduced_core_map == assembly_id + 1))
-            i_range = (core_i * assembly_shape[0], (core_i + 1) * assembly_shape[0])
-            j_range = (core_j * assembly_shape[1], (core_j + 1) * assembly_shape[1])
+            target = assembly_id + 1
+            cols, rows = np.where(reduced_core_map == target)
 
-            volume_array[slice(*i_range), slice(*j_range)] = array[:, :, :, assembly_id]
+            if len(rows) == 0:
+                continue
+            if len(rows) > 1:
+                raise ValueError(
+                    f"Assembly {target} appears multiple times in reduced_core_map. Expected exactly one match, found {len(rows)}."
+                )
+            core_row = int(rows[0])
+            core_col = int(cols[0])
+
+            row_range = (
+                core_row * assembly_shape[0],
+                (core_row + 1) * assembly_shape[0],
+            )
+            col_range = (
+                core_col * assembly_shape[1],
+                (core_col + 1) * assembly_shape[1],
+            )
+
+            volume_array[slice(*row_range), slice(*col_range)] = array[:, :, :, assembly_id]
 
         # It's possible that a rectilinear grid would be better here rather
         # than repeating voxels. But it also doesn't look super straightforward

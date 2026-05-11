@@ -189,7 +189,18 @@ class VeraOutCore(LazyHDF5Loader):
         return int(self.reduced_core_map[j, i] - 1)
 
     def reduced_core_map_ij(self, assembly_idx):
-        j, i = map(int, np.where(self.reduced_core_map == assembly_idx + 1))
+        target = assembly_idx + 1
+        rows, cols = np.where(self.reduced_core_map == target)
+        if len(rows) == 0:
+            raise ValueError(
+                f"Assembly index {assembly_idx} was not found in reduced_core_map. \nLooked for value {target}."
+            )
+        if len(rows) > 1:
+            raise ValueError(
+                f"Assembly index {assembly_idx} appears multiple times in reduced_core_map. \n Looked for value {target}; found {len(rows)} matches."
+            )
+        i = int(rows[0])
+        j = int(cols[0])
         return i, j
 
     def reduced_core_map_label(self, assembly_idx):

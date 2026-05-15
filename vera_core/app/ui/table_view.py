@@ -1,6 +1,6 @@
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
-
+import numpy as np
 
 OPTION = {
     "name": "table_view",
@@ -41,12 +41,11 @@ def initialize(server, vera_out_file):
         for scalar_dataset in vera_out_file.active_state.scalar_datasets.keys():
             data_dict.update(
                 {
-                    scalar_dataset.replace("_", " ").title(): vera_out_file.array(
+                    scalar_dataset.replace("_", " ").title(): np.asarray(vera_out_file.array(
                         scalar_dataset
-                    )[0]
+                    )).item()
                 }
             )
-
         # Round floats so we don't display too many sig figs.
         # 7 sig figs matches veraview.
         sig_figs = 7

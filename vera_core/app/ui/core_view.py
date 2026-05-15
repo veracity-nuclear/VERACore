@@ -41,7 +41,7 @@ def initialize(server, vera_out_file):
                 if index == -1:
                     continue
 
-                assembly_array = layer_array[index]
+                assembly_array = layer_array[index].copy()
 
                 # Set control rod positions to be nan
                 assembly_array[control_rod_positions] = np.nan

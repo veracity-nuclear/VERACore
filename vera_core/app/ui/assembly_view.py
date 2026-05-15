@@ -44,9 +44,8 @@ def initialize(server, vera_out_file):
         # Extract data from H5 + add to cache
         if image_data is None:
             array = vera_out_file.array(selected_array)
-            image_data = array[:, :, selected_layer, selected_assembly]
+            image_data = array[:, :, selected_layer, selected_assembly].copy()
             control_rod_positions = vera_out_file.core.control_rod_positions
-
             # Make control rod positions equal to nan
             image_data[control_rod_positions] = np.nan
 

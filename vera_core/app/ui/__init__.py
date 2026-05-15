@@ -40,8 +40,9 @@ def initialize(server, vera_out_file):
     state.selected_layer = 24
     state.selected_assembly = 36
     state.selected_time = 0
+    state.max_time = max(0, len(vera_out_file.states) - 1)
     # FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+        
     @state.change("selected_time")
     def selected_time_changed(selected_time, **kwargs):
         selected_time = int(selected_time)
@@ -306,14 +307,14 @@ def initialize(server, vera_out_file):
             ):
                 vuetify.VIcon("mdi-minus")
             html.Div(
-                "State {{ selected_time }}",
+                "State {{ selected_time }} / {{ max_time }}",
                 classes="text-center",
                 style="width: 100px;",
             )
             with vuetify.VBtn(
                 icon=True,
                 small=True,
-                disabled=(f"selected_time == {len(vera_out_file.states) - 1}",),
+                disabled=("selected_time == max_time",),
                 click="selected_time++",
             ):
                 vuetify.VIcon("mdi-plus")
@@ -321,7 +322,7 @@ def initialize(server, vera_out_file):
             vuetify.VSlider(
                 v_model=("selected_time",),
                 min=0,
-                max=len(vera_out_file.states) - 1,
+                max=("max_time", 0),
                 dense=True,
                 hide_details=True,
                 ticks="always",

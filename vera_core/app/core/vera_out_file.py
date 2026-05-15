@@ -1,4 +1,5 @@
 from typing import Union
+from .vera_data_source import VeraDataSource
 
 import h5py
 import numpy as np
@@ -7,18 +8,22 @@ import string
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
 
 
-class VeraOutFile:
+class VeraOutFile(VeraDataSource):
     def __init__(self, filename):
         # Keep this open for better performance
         self.f = h5py.File(filename, "r")
-        self.core = VeraOutCore(self.f)
-        self.core._cache_all()
+        self._core = VeraOutCore(self.f)
+        self._core._cache_all()
 
-        self.states = []
+        self._states = []
 
         self._create_states()
 
         self.active_state_index = 0
+
+    @property
+    def core(self):
+        return self._core
 
     def close(self):
         self.f.close()
@@ -26,8 +31,12 @@ class VeraOutFile:
     def _create_states(self):
         state_keys = [key for key in self.f if key.startswith("STATE_")]
         indices = [int(key.split("_")[1]) for key in state_keys]
-        self.states = [VeraOutState(self.f, idx) for idx in indices]
+        self._states = [VeraOutState(self.f, idx) for idx in indices]
 
+    @property
+    def states(self):
+        return self._states
+        
     @property
     def active_state(self):
         return self.states[self.active_state_index]
@@ -112,16 +121,32 @@ class VeraOutCore(LazyHDF5Loader):
     core_sym: H5_ARRAY_TYPE = None
     pin_volumes: H5_ARRAY_TYPE = None
 
-    def __init__(self, f):
-        super().__init__(f, "/CORE", list(self.__annotations__))
+    def __init__(self, f = None, axial_mesh = None, core_map = None, core_sym = None, pin_volumes = None):
+        if f is not None:
+            super().__init__(f, "/CORE", list(self.__annotations__))
+        elif axial_mesh is not None and core_map is not None and core_sym is not None and pin_volumes is not None:
+            self.axial_mesh = axial_mesh
+            self.core_map = core_map
+            self.core_sym = core_sym
+            self.pin_volumes = pin_volumes
+        else:
+            raise ValueError("Either a filename or raw data must be provided")
         self.compute_reduced_core_map()
         self.compute_axial_mesh_pixels()
         self.compute_control_rod_positions()
         self.compute_axial_mesh_means()
 
+    @classmethod
+    def from_h5(cls, f):
+        return cls(f=f)
+
+    @classmethod
+    def from_data(cls, axial_mesh, core_map, core_sym, pin_volumes):
+        return cls(axial_mesh=axial_mesh, core_map=core_map, core_sym=core_sym, pin_volumes=pin_volumes)
+
     def compute_reduced_core_map(self):
         """Compute the reduced core map based upon the core_sym"""
-        sym = self.core_sym[0]
+        sym = self.core_sym[()] 
         if sym == 1:
             self.reduced_core_map = self.core_map[:].copy()
             self.reduced_core_map_start_index = 0
@@ -199,8 +224,8 @@ class VeraOutCore(LazyHDF5Loader):
             raise ValueError(
                 f"Assembly index {assembly_idx} appears multiple times in reduced_core_map. \n Looked for value {target}; found {len(rows)} matches."
             )
-        i = int(rows[0])
-        j = int(cols[0])
+        j = int(rows[0])
+        i = int(cols[0])
         return i, j
 
     def reduced_core_map_label(self, assembly_idx):
@@ -220,18 +245,32 @@ class VeraOutCore(LazyHDF5Loader):
 
 
 class VeraOutState(LazyHDF5Loader):
-    def __init__(self, f, idx):
+    def __init__(self, f=None, idx=None, full_core_datasets = None, scalar_datasets = None):
         # These are the attributes that will be read from the HDF5 file
-        self.__annotations__ = dict()
+        if f is not None:
+            self.__annotations__ = dict()
 
-        self.full_core_datasets = dict()
-        self.scalar_datasets = dict()
-        self.search_for_datasets(f, idx)
-        self.__annotations__.update(self.full_core_datasets)
-        self.__annotations__.update(self.scalar_datasets)
-        super().__init__(f, f"/STATE_{idx:04}", list(self.__annotations__))
-        self._index = idx
+            self.full_core_datasets = dict()
+            self.scalar_datasets = dict()
+            self.search_for_datasets(f, idx)
+            self.__annotations__.update(self.full_core_datasets)
+            self.__annotations__.update(self.scalar_datasets)
+            super().__init__(f, f"/STATE_{idx:04}", list(self.__annotations__))
+            self._index = idx
+        elif full_core_datasets is not None and scalar_datasets is not None:
+            self.full_core_datasets = full_core_datasets
+            self.scalar_datasets = scalar_datasets
+            for key in self.full_core_datasets.keys():
+                setattr(self, key, self.full_core_datasets[key])
+            for key in self.scalar_datasets.keys():
+                setattr(self, key, self.scalar_datasets[key])
+        else:
+            return ValueError("Must pass in filename or data parameters")
 
+    @classmethod
+    def from_data(cls, full_core_datasets, scalar_datasets):
+        return cls(full_core_datasets=full_core_datasets, scalar_datasets=scalar_datasets)
+    
     def search_for_datasets(self, f, idx):
         # Search for available full core/scalar datasets at each state point
         state = f[f"/STATE_{idx:04}"]

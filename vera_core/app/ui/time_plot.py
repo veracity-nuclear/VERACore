@@ -20,7 +20,7 @@ def initialize(server, vera_out_file):
         state.grid_options.append(OPTION)
 
     def create_line(selected_array, indices=(0, 0, 0, 0)):
-        exposures = [x.exposure[0] for x in vera_out_file.states]
+        exposures = [np.asarray(x.exposure).item() for x in vera_out_file.states]
 
         if selected_array == "pin_volumes":
             # It's just going to be a flat line. The volumes don't change.
@@ -51,7 +51,7 @@ def initialize(server, vera_out_file):
         # # Because the above won't work, we have to make it manually
         float_info = np.finfo(np.float64)
         kwargs = {
-            "x": [vera_out_file.active_state.exposure[0]] * 2,
+            "x": [np.asarray(vera_out_file.active_state.exposure).item()] * 2,
             "y": [float_info.min, float_info.max],
             "mode": "lines",
             "line": go.scatter.Line(color="red", dash="dash"),

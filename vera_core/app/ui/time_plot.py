@@ -6,99 +6,85 @@ from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
 
-OPTION = {
-    "name": "time_plot",
-    "label": "Time Plot",
-    "icon": "mdi-chart-line",
-}
+def option_for(view_id):
+    return {
+        "name": f"time_plot_{view_id}",
+        "label": "Time Plot",
+        "icon": "mdi-chart-line",
+    }
 
 
-def initialize(server, vera_out_file):
+def initialize(server, vera_out_file, view_id):
     state, ctrl = server.state, server.controller
 
-    if OPTION not in state.grid_options:
-        state.grid_options.append(OPTION)
+    option = option_for(view_id)
+    state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
+
+    selected_array_key = f"selected_array_{view_id}"
+    update_fn_name = f"update_time_plot_{view_id}"
 
     def create_line(selected_array, indices=(0, 0, 0, 0)):
         exposures = [np.asarray(x.exposure).item() for x in vera_out_file.states]
 
         if selected_array == "pin_volumes":
-            # It's just going to be a flat line. The volumes don't change.
+            # Volumes don't change with time, so this is a flat line.
             pin_volumes = vera_out_file.core.pin_volumes
             array = [pin_volumes[indices] for _ in vera_out_file.states]
         else:
             array = [getattr(x, selected_array)[indices] for x in vera_out_file.states]
 
-        kwargs = {
-            "x": exposures,
-            "y": array,
-            "labels": {
-                "x": "exposure",
-                "y": selected_array,
-            },
-        }
-        figure = px.line(**kwargs)
+        figure = px.line(
+            x=exposures,
+            y=array,
+            labels={"x": "exposure", "y": selected_array},
+        )
 
-        # Add a vertical line indicating our current exposure
-        # # FIXME: why is add_vline only plotting from y==0 to y==1?
-        # kwargs = {
-        #     "x": vera_out_file.active_state.exposure[0],
-        #     "line_dash": "dash",
-        #     "line_color": "red",
-        # }
-        # figure.add_vline(**kwargs)
-        #
-        # # Because the above won't work, we have to make it manually
+        # add_vline only plots y==0 to y==1, so draw the marker manually.
         float_info = np.finfo(np.float64)
-        kwargs = {
-            "x": [np.asarray(vera_out_file.active_state.exposure).item()] * 2,
-            "y": [float_info.min, float_info.max],
-            "mode": "lines",
-            "line": go.scatter.Line(color="red", dash="dash"),
-            "showlegend": False,
-        }
-        figure.add_trace(go.Scatter(**kwargs))
+        figure.add_trace(
+            go.Scatter(
+                x=[np.asarray(vera_out_file.active_state.exposure).item()] * 2,
+                y=[float_info.min, float_info.max],
+                mode="lines",
+                line=go.scatter.Line(color="red", dash="dash"),
+                showlegend=False,
+            )
+        )
 
         figure.update_layout(margin=dict(t=0, b=0, l=0, r=0))
         return figure
 
     @state.change(
-        "selected_array",
+        selected_array_key,
         "selected_assembly",
         "selected_layer",
         "selected_i",
         "selected_j",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
-    def on_cell_change(
-        selected_array,
-        selected_assembly,
-        selected_layer,
-        selected_i,
-        selected_j,
-        **kwargs
-    ):
-        indices = (selected_j, selected_i, selected_layer, selected_assembly)
-        indices = tuple(map(int, indices))
-        ctrl.update_time_plot(create_line(selected_array, indices))
+    def on_cell_change(**kwargs):
+        selected_array = state[selected_array_key]
+        indices = (
+            int(state.selected_j),
+            int(state.selected_i),
+            int(state.selected_layer),
+            int(state.selected_assembly),
+        )
+        update_fn = getattr(ctrl, update_fn_name, None)
+        if update_fn is not None:
+            update_fn(create_line(selected_array, indices))
 
-    with DivLayout(server, template_name="time_plot") as layout:
+    with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; width: 100%;"
 
-        style = "; ".join(
-            [
-                "width: 100%",
-                "height: 100%",
-                "user-select: none",
-            ]
-        )
+        style = "; ".join([
+            "width: 100%",
+            "height: 100%",
+            "user-select: none",
+        ])
         figure = plotly.Figure(
             display_logo=False,
             display_mode_bar=False,
             style=style,
-            # selected=(on_event, "["selected", utils.safe($event)]"),
-            # hover=(on_event, "["hover", utils.safe($event)]"),
-            # selecting=(on_event, "["selecting", $event]"),
-            # unhover=(on_event, "["unhover", $event]"),
         )
-        ctrl.update_time_plot = figure.update
+        setattr(ctrl, update_fn_name, figure.update)

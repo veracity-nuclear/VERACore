@@ -3,36 +3,44 @@ import numpy as np
 from trame.ui.html import DivLayout
 from vera_core.widgets import vera
 
-OPTION = {
-    "name": "assembly_view",
+def option_for(view_id):
+    return {
+    "name": f"assembly_view_{view_id}",
     "label": "Assembly View",
     "icon": "mdi-dots-grid",
 }
 
 
-def initialize(server, vera_out_file):
+def initialize(server, vera_out_file, view_id):
     state, ctrl = server.state, server.controller
 
-    if OPTION not in state.grid_options:
-        state.grid_options.append(OPTION)
+    # if OPTION not in state.grid_options:
+    #     state.grid_options.append(OPTION)
 
     # A cache of assembly images.
+    option = option_for(view_id)
+    state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
     cached_assembly_images = {}
+
+    selected_array_key = f"selected_array_{view_id}"
+    assembly_array = f"assembly_array_{view_id}"
+    state.setdefault(assembly_array, [])
 
     @state.change(
         "assembly_view_size",
-        "selected_array",
+        selected_array_key,
         "selected_assembly",
         "selected_layer",
         "color_range",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
-    def update_assembly_view(
-        selected_time, selected_array, selected_assembly, selected_layer, **kwargs
-    ):
-        selected_assembly = int(selected_assembly)
-        selected_layer = int(selected_layer)
+    def update_assembly_view(**kwargs):
+        selected_time = state["selected_time"]
+        selected_layer = int(state["selected_layer"])
+        selected_assembly = int(state["selected_assembly"])
+        selected_array = state[selected_array_key]
         image_data = None
+        
 
         # Extract from cache if possible
         cache_key = (selected_time, selected_array, selected_assembly, selected_layer)
@@ -57,13 +65,13 @@ def initialize(server, vera_out_file):
             cached_assembly_images[cache_key] = image_data
 
         # Update the client
-        state.assembly_array = np.ravel(image_data).tolist()
+        state[assembly_array] = np.ravel(image_data).tolist()
 
     # UI content
-    with DivLayout(server, template_name="assembly_view") as layout:
+    with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%;"
         vera.AssemblyView(
-            value=("assembly_array", []),
+            value=(f"assembly_array_{view_id}", []),
             selected_i=("selected_i", 7),
             selected_j=("selected_j", 7),
             color_preset="jet",

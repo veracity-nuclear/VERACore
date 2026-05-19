@@ -70,7 +70,16 @@ class VeraOutFile(VeraDataSource):
             return getattr(self.core, array_name)
 
         # If not on the core, assume it is on the active states.
-        return getattr(self.active_state, array_name)
+        ax, ay = self.core.reduced_core_map.shape        
+        array = getattr(self.active_state, array_name)
+        if self.core.core_sym == 4 and len(array.shape) == 4:
+            hpy = array.shape[0] // 2
+            hpx = array.shape[1] // 2
+            array[:hpy, :, :, :ax] = np.nan
+            array[:, :hpx, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
+            # array[:, :py, :, :ax] = np.nan
+            # array[:px, :, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
+        return array
 
 
 class LazyHDF5Loader:
@@ -151,6 +160,7 @@ class VeraOutCore(LazyHDF5Loader):
             self.reduced_core_map = self.core_map[:].copy()
             self.reduced_core_map_start_index = 0
         elif sym == 4:
+            print(self.core_map[:].shape)
             w, h = self.core_map[:].shape
             start_w = w // 2
             start_h = h // 2

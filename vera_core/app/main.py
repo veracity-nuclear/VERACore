@@ -50,7 +50,7 @@ def main(server=None, **kwargs):
     state_queue = StateQueue(raw_queue)
 
     if stream_port is not None:
-        vera_out_file = VeraDataStream(8000, state_queue)
+        vera_out_file = VeraDataStream(stream_port, state_queue)
         # this is a crude fix to prevent reads on empty states from the vera data stream
         # will fix change this
         while(len(vera_out_file.states) < 1):

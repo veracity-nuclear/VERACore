@@ -1,6 +1,7 @@
 import numpy as np
 
 from trame.ui.html import DivLayout
+from trame.widgets import html
 from vera_core.widgets import vera
 
 def option_for(view_id):
@@ -69,13 +70,19 @@ def initialize(server, vera_out_file, view_id):
 
     # UI content
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%;"
-        vera.AssemblyView(
-            value=(f"assembly_array_{view_id}", []),
-            selected_i=("selected_i", 7),
-            selected_j=("selected_j", 7),
-            color_preset="jet",
-            color_range=("color_range", [0, 3]),
-            click="setAll({ selected_i: $event.i, selected_j: $event.j})",
-            busy=("trame__busy",),
-        )
+        layout.root.style = "height: 100%; display: flex; flex-direction: column;"
+        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
+            vera.AssemblyView(
+                value=(f"assembly_array_{view_id}", []),
+                selected_i=("selected_i", 7),
+                selected_j=("selected_j", 7),
+                color_preset="jet",
+                color_range=(f"color_range_{view_id}", [0, 3]),
+                click="setAll({ selected_i: $event.i, selected_j: $event.j})",
+                busy=("trame__busy",),
+            )
+        with html.Div(style="flex: 0 0 auto; "):
+            vera.ColorMapEditor(
+                v_model=f"color_range_{view_id}",
+                color_preset="jet",
+            )

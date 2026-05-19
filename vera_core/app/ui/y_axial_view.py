@@ -1,6 +1,7 @@
 import numpy as np
 
 from trame.ui.html import DivLayout
+from trame.widgets import html
 from vera_core.widgets import vera
 
 
@@ -89,22 +90,27 @@ def initialize(server, vera_out_file, view_id):
         state[core_key] = core
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%;"
-        vera.AxialView(
-            value=(core_key, []),
+        layout.root.style = "height: 100%; display: flex; flex-direction: column;"
+        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
+            vera.AxialView(
+                value=(core_key, []),
+                color_preset="jet",
+                color_range=(f"color_range_{view_id}", [0, 3]),
+                x_sizes=(size_x_key, []),
+                y_sizes=(size_y_key, []),
+                x_labels=(label_x_key, list(range(start_x, stop_x))),
+                y_labels=(label_y_key, []),
+                selected_i=("selected_assembly_ij.j",),
+                selected_j=(f"{label_y_key}.length - selected_layer - 1",),
+                click=(
+                    axial_cell_selected,
+                    f"[{label_y_key}.length - $event.j - 1, $event.i]",
+                ),
+                x_scale=("3",),
+                y_scale=("3",),
+                busy=("trame__busy",),
+            )
+        vera.ColorMapEditor(
+            v_model=f"color_range_{view_id}",
             color_preset="jet",
-            color_range=("color_range", [0, 3]),
-            x_sizes=(size_x_key, []),
-            y_sizes=(size_y_key, []),
-            x_labels=(label_x_key, list(range(start_x, stop_x))),
-            y_labels=(label_y_key, []),
-            selected_i=("selected_assembly_ij.j",),
-            selected_j=(f"{label_y_key}.length - selected_layer - 1",),
-            click=(
-                axial_cell_selected,
-                f"[{label_y_key}.length - $event.j - 1, $event.i]",
-            ),
-            x_scale=("3",),
-            y_scale=("3",),
-            busy=("trame__busy",),
         )

@@ -54,7 +54,22 @@ def initialize(server, vera_out_file):
     state.selected_time = 0
     state.max_time = max(0, len(vera_out_file.states) - 1)
     # FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        
+    
+    def _array_range(selected_array):
+        array = vera_out_file.array(selected_array)
+        lo = float(np.nanmin(array))
+        hi = float(np.nanmax(array))
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            return (0.0, 1.0)
+        if lo == hi:
+            eps = max(abs(hi) * 1e-9, 1e-12)
+            return (lo, hi + eps)
+        return (lo, hi)
+
+    def _recompute_card_range(view_id):
+        selected_array = state[f"selected_array_{view_id}"]
+        state[f"color_range_{view_id}"] = _array_range(selected_array)
+       
     @state.change("selected_time")
     def selected_time_changed(selected_time, **kwargs):
         selected_time = int(selected_time)
@@ -64,12 +79,15 @@ def initialize(server, vera_out_file):
             selected_time=selected_time, **kwargs
         )
         # Automatically normalize color scale to current state
-        selected_array_changed(state.selected_array)
-
+        for view_id in all_view_ids:
+            _recompute_card_range(view_id)
+        # Keep the global range in sync with the toolbar selection (for volume view).
+        state.color_range = _array_range(state.selected_array)
+    
     @state.change("selected_array")
-    def selected_array_changed(selected_array, **kwargs):
-        array = vera_out_file.array(selected_array)
-        state.color_range = (np.nanmin(array), np.nanmax(array))
+    def toolbar_array_changed(selected_array, **kwargs):
+        # Global color_range still drives volume view.
+        state.color_range = _array_range(selected_array)
 
     # Keep selected_assembly and selected_assembly_ij in sync
     @state.change("selected_assembly_ij")
@@ -95,11 +113,22 @@ def initialize(server, vera_out_file):
     for view_id in all_view_ids:
         state[f"grid_options_{view_id}"] = []
         state[f"selected_array_{view_id}"] = "pin_powers"
+        state[f"color_range_{view_id}"] = (0.0, 1.0)  
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         for module in VIEW_MODULES:
             module.initialize(server, vera_out_file, view_id)
 
+    def _make_array_watcher(view_id):
+        @state.change(f"selected_array_{view_id}")
+        def _on_card_array_change(**kwargs):
+            _recompute_card_range(view_id)
+        return _on_card_array_change
+
+    for view_id in all_view_ids:
+        _make_array_watcher(view_id)
+        _recompute_card_range(view_id)  # initial population
     available_view_ids = list(all_view_ids)
+
     def place(module, x, y, w, h):
         view_id = available_view_ids.pop(0)
         state.grid_layout.append(dict(x=x, y=y, w=w, h=h, i=view_id))

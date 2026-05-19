@@ -160,7 +160,6 @@ class VeraOutCore(LazyHDF5Loader):
             self.reduced_core_map = self.core_map[:].copy()
             self.reduced_core_map_start_index = 0
         elif sym == 4:
-            print(self.core_map[:].shape)
             w, h = self.core_map[:].shape
             start_w = w // 2
             start_h = h // 2

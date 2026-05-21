@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
 .venv
+venv
 build
 .ipynb_checkpoints
 

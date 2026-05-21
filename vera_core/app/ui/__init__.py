@@ -3,6 +3,7 @@ import numpy as np
 from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import client, grid, html, vuetify
 from vera_core.widgets import vera
+
 from . import (
     assembly_view,
     axial_plot,
@@ -39,6 +40,43 @@ def get_next_y_from_layout(layout):
             next_y = y + h
     return next_y
 
+def create_diff_menu(state, ctrl, vera_out_file):
+    state.setdefault("show_diff_dialog", False)
+    state.setdefault("diff_name", "")
+    state.setdefault("diff_array_a", "pin_powers")
+    state.setdefault("diff_operator", "-")
+    state.setdefault("diff_array_b", "pin_powers")
+    state.setdefault("diff_error", "")
+    @ctrl.set("create_diff_dataset")
+    def create_diff_dataset():
+        state.show_diff_dialog = False
+        vera_out_file.add_new_diff_dataset(state["diff_array_a"], state["diff_array_b"], state["diff_name"])
+        state.available_arrays = [dict(text=k.replace("_", " ").title(), value=k) for k in vera_out_file.active_state_full_core_keys]
+
+def create_threshold_menu(state, ctrl, vera_out_file):
+    state.setdefault("show_threshold_dialog", False)
+    state.setdefault("thresholds", {})
+    state.setdefault("threshold_array", "pin_powers")
+    state.setdefault("threshold_value", None)
+    state.setdefault("threshold_error", "")
+    state.setdefault("threshold_operator", ">")
+
+    @ctrl.set("add_threshold")
+    def add_threshold():
+        name = state.threshold_array
+        entry = {"op": state.threshold_operator, "value": float(state.threshold_value)}
+        existing = state.thresholds.get(name, [])
+        state.thresholds = {**state.thresholds, name: [*existing, entry]}
+        state.threshold_value = None
+        state.threshold_error = ""
+
+    @ctrl.set("remove_threshold")
+    def remove_threshold(name, index):
+        remaining = [c for i, c in enumerate(state.thresholds.get(name, [])) if i != index]
+        if remaining:
+            state.thresholds = {**state.thresholds, name: remaining}
+        else:
+            state.thresholds = {k: v for k, v in state.thresholds.items() if k != name}
 
 def initialize(server, vera_out_file):
     state, ctrl = server.state, server.controller
@@ -54,7 +92,10 @@ def initialize(server, vera_out_file):
     state.selected_time = 0
     state.max_time = max(0, len(vera_out_file.states) - 1)
     # FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    
+    create_diff_menu(state=state, ctrl=ctrl, vera_out_file=vera_out_file)
+    create_threshold_menu(state=state, ctrl=ctrl, vera_out_file=vera_out_file)
+
+
     def _array_range(selected_array):
         array = vera_out_file.array(selected_array)
         lo = float(np.nanmin(array))
@@ -102,6 +143,9 @@ def initialize(server, vera_out_file):
     
     @ctrl.set("card_selected_array_changed")
     def card_selected_array_changed(view_id, selected_array):
+        if not selected_array:
+            return
+        print(view_id, selected_array)
         state[f"selected_array_{view_id}"] = selected_array
 
     # Initialize all visualizations
@@ -191,19 +235,146 @@ def initialize(server, vera_out_file):
                     "available_arrays",
                     [
                         dict(text=key.replace("_", " ").title(), value=key)
-                        for key in vera_out_file.active_state.full_core_datasets.keys()
+                        for key in vera_out_file.active_state_full_core_keys
                     ],
                 ),
                 hide_details=True,
                 dense=True,
                 style="max-width: 220px",
             )
+            with vuetify.VBtn(icon=True, click="show_diff_dialog = true"):
+                vuetify.VIcon("mdi-delta")
+
+            with vuetify.VBtn(icon=True, click="show_threshold_dialog = true"):
+                vuetify.VIcon("mdi-table-filter")
 
             with vuetify.VBtn(icon=True, click=ctrl.grid_add_view):
                 vuetify.VIcon("mdi-plus")
 
         with layout.content:
             layout.content.style = "overflow: auto; margin: 36px 0px 35px; padding: 0;"
+            with vuetify.VDialog(v_model=("show_diff_dialog",), max_width=480, persistent=True):
+                with vuetify.VCard():
+                    vuetify.VCardTitle("Create diff Dataset", classes="text-subtitle-1")
+                    vuetify.VDivider()
+                    with vuetify.VCardText(classes="pt-4"):
+                        vuetify.VTextField(
+                            v_model=("diff_name",),
+                            label="Name",
+                            hide_details=True,
+                            dense=True,
+                            classes="mb-3",
+                        )
+                        with vuetify.VRow(classes="ma-0", align="center"):
+                            with vuetify.VCol(classes="pa-0"):
+                                vuetify.VSelect(
+                                    v_model=("diff_array_a",),
+                                    items=("available_arrays",),
+                                    label="Array A",
+                                    hide_details=True,
+                                    dense=True,
+                                )
+                            with vuetify.VCol(cols="auto", classes="px-2"):
+                                vuetify.VSelect(
+                                    v_model=("diff_operator",),
+                                    items=("diff_operators", ["+", "-", "*", "/"]),
+                                    hide_details=True,
+                                    dense=True,
+                                    style="width: 64px",
+                                )
+                            with vuetify.VCol(classes="pa-0"):
+                                vuetify.VSelect(
+                                    v_model=("diff_array_b",),
+                                    items=("available_arrays",),
+                                    label="Array B",
+                                    hide_details=True,
+                                    dense=True,
+                                )
+                        vuetify.VAlert(
+                            "{{ diff_error }}",
+                            v_show=("diff_error",),
+                            type="error",
+                            dense=True,
+                            text=True,
+                            classes="mt-3 mb-0",
+                        )
+                    vuetify.VDivider()
+                    with vuetify.VCardActions():
+                        vuetify.VSpacer()
+                        vuetify.VBtn("Cancel", text=True, click="show_diff_dialog = false")
+                        vuetify.VBtn("Create", color="primary", click=ctrl.create_diff_dataset)
+            with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=480, persistent=True):
+                with vuetify.VCard():
+                    vuetify.VCardTitle("Dataset Thresholds", classes="text-subtitle-1")
+                    vuetify.VDivider()
+                    with vuetify.VCardText(classes="pt-4"):
+                        with vuetify.VRow(classes="ma-0", align="center"):
+                            with vuetify.VCol(classes="pa-0"):
+                                vuetify.VSelect(
+                                    v_model=("threshold_array",),
+                                    items=("available_arrays",),
+                                    label="Dataset",
+                                    hide_details=True,
+                                    dense=True,
+                                )
+                            with vuetify.VCol(cols="auto", classes="pl-2"):
+                                vuetify.VSelect(
+                                    v_model=("threshold_operator",),
+                                    items=("threshold_operators", [">", ">=", "<", "<=", "==", "!="]),
+                                    hide_details=True,
+                                    dense=True,
+                                    style="width: 80px",
+                                )
+                                
+                            with vuetify.VCol(cols="auto", classes="pl-2"):
+                                vuetify.VTextField(
+                                    v_model=("threshold_value",),
+                                    label="Value",
+                                    type="number",
+                                    hide_details=True,
+                                    dense=True,
+                                    style="width: 110px",
+                                )
+                            with vuetify.VCol(cols="auto", classes="pl-2"):
+                                with vuetify.VBtn(icon=True, click=ctrl.add_threshold):
+                                    vuetify.VIcon("mdi-plus")
+
+                        vuetify.VAlert(
+                            "{{ threshold_error }}",
+                            v_show=("threshold_error",),
+                            type="error",
+                            dense=True,
+                            text=True,
+                            classes="mt-3 mb-0",
+                        )
+
+                        vuetify.VDivider(classes="my-3")
+
+                        html.Div(
+                            "No thresholds set.",
+                            v_show=("Object.keys(thresholds).length === 0",),
+                            classes="text-caption text--secondary",
+                        )
+                        with vuetify.VList(dense=True, v_show=("Object.keys(thresholds).length > 0",)):
+                            with html.Template(v_for="(condition_list, name) in thresholds", key="name"):
+                                vuetify.VSubheader("{{ name }}", classes="px-2", style="height: 24px;")
+                                with vuetify.VListItem(
+                                    v_for="(condition, index) in condition_list",
+                                    key="index",
+                                ):
+                                    with vuetify.VListItemContent():
+                                        vuetify.VListItemTitle("{{ condition.op }} {{ condition.value }}")
+                                    with vuetify.VListItemAction():
+                                        with vuetify.VBtn(
+                                            icon=True, x_small=True,
+                                            click=(ctrl.remove_threshold, "[name, index]"),
+                                        ):
+                                            vuetify.VIcon("mdi-close", small=True)
+
+                        vuetify.VDivider()
+                        with vuetify.VCardActions():
+                            vuetify.VSpacer()
+                            vuetify.VBtn("Close", text=True, click="show_threshold_dialog = false")
             with vuetify.VContainer(
                 fluid=True,
                 classes="pa-0 fill-height",

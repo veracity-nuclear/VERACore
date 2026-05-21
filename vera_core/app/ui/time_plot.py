@@ -32,7 +32,6 @@ def initialize(server, vera_out_file, view_id):
             array = [pin_volumes[indices] for _ in vera_out_file.states]
         else:
             array = [getattr(x, selected_array)[indices] for x in vera_out_file.states]
-
         figure = px.line(
             x=exposures,
             y=array,
@@ -63,7 +62,10 @@ def initialize(server, vera_out_file, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
+        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+            return
         selected_array = state[selected_array_key]
+        print(selected_array)
         indices = (
             int(state.selected_j),
             int(state.selected_i),

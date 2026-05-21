@@ -50,6 +50,8 @@ def initialize(server, vera_out_file, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_axial_view(**kwargs):
+        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+            return
         selected_array = state[selected_array_key]
         selected_assembly = int(state.selected_assembly)
         selected_i = int(state.selected_i)

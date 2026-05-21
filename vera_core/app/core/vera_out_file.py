@@ -1,6 +1,6 @@
 from typing import Union
 from .vera_data_source import VeraDataSource
-
+from pyvera.io.VERAout import VERAout
 import h5py
 import numpy as np
 import string
@@ -11,12 +11,12 @@ H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
 class VeraOutFile(VeraDataSource):
     def __init__(self, filename):
         # Keep this open for better performance
+        self.veraout = VERAout(filename=filename)
         self.f = h5py.File(filename, "r")
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
-
+        
         self._states = []
-
         self._create_states()
 
         self.active_state_index = 0
@@ -40,6 +40,13 @@ class VeraOutFile(VeraDataSource):
     @property
     def active_state(self):
         return self.states[self.active_state_index]
+    
+    @property 
+    def active_state_full_core_keys(self):
+        full_core_keys = list(self.states[self.active_state_index].full_core_datasets.keys())
+        derived_full_core_keys = list(self.states[self.active_state_index].derived_datasets.keys())
+        diff_full_core_keys = list(self.states[self.active_state_index].diff_datasets.keys())
+        return [*full_core_keys, *derived_full_core_keys, *diff_full_core_keys]
 
     @property
     def active_state_index(self):
@@ -72,15 +79,24 @@ class VeraOutFile(VeraDataSource):
         # If not on the core, assume it is on the active states.
         ax, ay = self.core.reduced_core_map.shape        
         array = getattr(self.active_state, array_name)
-        if self.core.core_sym == 4 and len(array.shape) == 4:
+        if self.core.core_sym == 4 and len(array.shape) == 4: 
+            # this is a "lazy" approach to fixing qtr core sym, could switch to eager later if necessary
             hpy = array.shape[0] // 2
             hpx = array.shape[1] // 2
             array[:hpy, :, :, :ax] = np.nan
             array[:, :hpx, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
-            # array[:, :py, :, :ax] = np.nan
-            # array[:px, :, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
         return array
-
+    
+    def add_new_diff_dataset(self, ref_array_name, comp_array_name, new_diff_name):
+        ref = self.array(ref_array_name)
+        comp = self.array(comp_array_name)
+        for state in self._states:
+            if hasattr(state, ref_array_name) and hasattr(state, comp_array_name):
+                ref = getattr(state, ref_array_name)
+                comp = getattr(state, comp_array_name)
+                if ref.shape == comp.shape:
+                    diff = ref - comp
+                    state.add_diff_dataset(new_diff_name, diff)
 
 class LazyHDF5Loader:
     def __init__(self, f, path, dataset_names):
@@ -275,6 +291,8 @@ class VeraOutState(LazyHDF5Loader):
                 setattr(self, key, self.scalar_datasets[key])
         else:
             return ValueError("Must pass in filename or data parameters")
+        self.diff_datasets = dict()
+        self.derived_datasets = dict()
 
     @classmethod
     def from_data(cls, full_core_datasets, scalar_datasets):
@@ -291,3 +309,7 @@ class VeraOutState(LazyHDF5Loader):
                 self.full_core_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
             if dataset_shape in [(1,), ()]:
                 self.scalar_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+    
+    def add_diff_dataset(self, dataset_name, dataset):
+        setattr(self, dataset_name, dataset)
+        self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})

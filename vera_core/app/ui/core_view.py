@@ -3,7 +3,23 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
+import operator
 
+THRESHOLD_OPS = {
+    ">":  operator.gt,
+    ">=": operator.ge,
+    "<":  operator.lt,
+    "<=": operator.le,
+    "==": operator.eq,
+    "!=": operator.ne,
+}
+
+def apply_thresholds(array, conditions):
+    keep = np.ones(array.shape, dtype=bool)
+    for c in conditions:
+        print(c)
+        keep &= THRESHOLD_OPS[c["op"]](array, c["value"])
+    return np.where(keep, array, np.nan)
 
 def option_for(view_id):
     return {
@@ -23,16 +39,23 @@ def initialize(server, vera_out_file, view_id):
     core_assemblies_key = f"core_assemblies_{view_id}"
     state.setdefault(core_assemblies_key, [])
 
-    @state.change(selected_array_key, "selected_layer")
+    @state.change(selected_array_key, "selected_layer", "thresholds")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
+        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+            return
         selected_array = state[selected_array_key]
         selected_layer = int(state.selected_layer)
 
         array = vera_out_file.array(selected_array)
-        layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2)
+        layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2).copy()
 
         control_rod_positions = vera_out_file.core.control_rod_positions
+        rod_rows, rod_cols = control_rod_positions
+        layer_array[:, rod_rows, rod_cols] = np.nan
+        thres = state["thresholds"]
+        if thres.get(selected_array):
+            layer_array = apply_thresholds(layer_array, thres[selected_array])
         reduced_core_map = vera_out_file.core.reduced_core_map
         core_width = reduced_core_map.shape[0]
 
@@ -43,10 +66,8 @@ def initialize(server, vera_out_file, view_id):
             for j in range(core_width):
                 index = reduced_core_map[i, j] - 1
                 if index == -1:
-                    continue
-                assembly_array = layer_array[index].copy()
-                assembly_array[control_rod_positions] = np.nan
-                line.append(np.ravel(assembly_array).tolist())
+                    continue                  
+                line.append(np.ravel(layer_array[index]).tolist())
 
         state[core_assemblies_key] = result
 

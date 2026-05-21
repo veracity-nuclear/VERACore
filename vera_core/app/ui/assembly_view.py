@@ -36,6 +36,8 @@ def initialize(server, vera_out_file, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_assembly_view(**kwargs):
+        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+            return
         selected_time = state["selected_time"]
         selected_layer = int(state["selected_layer"])
         selected_assembly = int(state["selected_assembly"])

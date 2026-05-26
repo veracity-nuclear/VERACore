@@ -1,22 +1,24 @@
+import os, time
 from functools import partial
-import os
-
+from pathlib import Path
 from multiprocessing import Queue
+
 from trame.app import get_server, dev
 from trame.app.asynchronous import StateQueue, create_state_queue_monitor_task
-import time
+
 from . import ui
 from .core.vera_out_file import VeraOutFile
+from .core.vera_data import VeraDataRegistry
 from .core.vera_data_stream import VirtualVeraDataStream, VeraDataStream
 
 # The user can set this via an environment variable
 DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"
 
 
-def _reload(vera_out_file):
+def _reload(registry: VeraDataRegistry):
     server = get_server()
     dev.reload(ui)
-    ui.initialize(server, vera_out_file)
+    ui.initialize(server, registry)
 
 
 def main(server=None, **kwargs):
@@ -48,6 +50,7 @@ def main(server=None, **kwargs):
 
     raw_queue = Queue()
     state_queue = StateQueue(raw_queue)
+    registry : VeraDataRegistry = VeraDataRegistry()
 
     if stream_port is not None:
         vera_out_file = VeraDataStream(stream_port, state_queue)
@@ -56,15 +59,29 @@ def main(server=None, **kwargs):
         while(len(vera_out_file.states) < 1):
             time.sleep(0.3)
     else:
+        file_path = Path(data_file)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"{data_file} must be an exsisting path to a file")
         vera_out_file = VeraOutFile(data_file)
+        registry.add_source(source=vera_out_file, source_id=file_path.stem)
+        test_path = "/Users/jonathansalem/Desktop/p9_copy.h5"
+        test_file = Path(test_path)
+        if not test_file.is_file():
+            raise FileNotFoundError(f"{test_path} must be an exsisting path to a file")
+        test_vera_out_file = VeraOutFile(test_path)
+        registry.add_source(source=test_vera_out_file, source_id=test_file.stem)
+        print(registry.default)
+        print(registry.full_core_keys())
 
-    f = partial(_reload, vera_out_file=vera_out_file)
+
+
+    f = partial(_reload, registry=registry)
 
     # Make UI auto reload
     server.controller.on_server_reload.add(f)
 
     # Init application
-    ui.initialize(server, vera_out_file)
+    ui.initialize(server, registry)
     @server.controller.add("on_server_ready")
     def start_stream(**kwargs):
         create_state_queue_monitor_task(server, raw_queue, delay=0.1)

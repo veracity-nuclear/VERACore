@@ -1,25 +1,12 @@
 import numpy as np
+import operator
 
 from trame.ui.html import DivLayout
 from trame.widgets import html
+
 from vera_core.widgets import vera
-import operator
-
-THRESHOLD_OPS = {
-    ">":  operator.gt,
-    ">=": operator.ge,
-    "<":  operator.lt,
-    "<=": operator.le,
-    "==": operator.eq,
-    "!=": operator.ne,
-}
-
-def apply_thresholds(array, conditions):
-    keep = np.ones(array.shape, dtype=bool)
-    for c in conditions:
-        print(c)
-        keep &= THRESHOLD_OPS[c["op"]](array, c["value"])
-    return np.where(keep, array, np.nan)
+from vera_core.app.core.vera_data import VeraDataRegistry, VeraDatasetType, VeraDataSource
+from vera_core.app.core.thresholds import apply_thresholds
 
 def option_for(view_id):
     return {
@@ -29,34 +16,46 @@ def option_for(view_id):
     }
 
 
-def initialize(server, vera_out_file, view_id):
+def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
+    state[f"core_readout_{view_id}"] = {}
 
     selected_array_key = f"selected_array_{view_id}"
+    selected_file_key = f"selected_file_{view_id}"
     core_assemblies_key = f"core_assemblies_{view_id}"
     state.setdefault(core_assemblies_key, [])
 
-    @state.change(selected_array_key, "selected_layer", "thresholds")
+    @state.change(selected_array_key, selected_file_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
         if state[f"grid_view_{view_id}"]["name"] != option["name"]:
             return
         selected_array = state[selected_array_key]
+        selected_file = state[selected_file_key]
         selected_layer = int(state.selected_layer)
 
-        array = vera_out_file.array(selected_array)
-        layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2).copy()
+        vera_source : VeraDataSource = registry.get(selected_file)
+        array = vera_source.array(selected_array)
 
-        control_rod_positions = vera_out_file.core.control_rod_positions
-        rod_rows, rod_cols = control_rod_positions
-        layer_array[:, rod_rows, rod_cols] = np.nan
+        is_assembly_average = array.dataset_type == VeraDatasetType.ASSEMBLY 
+        if array.ndim == 4:
+            layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2).copy()
+            control_rod_positions = vera_source.core.control_rod_positions
+            rod_rows, rod_cols = control_rod_positions
+            layer_array[:, rod_rows, rod_cols] = np.nan
+            state[f"core_readout_{view_id}"] = {"values": []}
+        elif is_assembly_average:
+            layer_array = array[selected_layer, :]
+            state[f"core_readout_{view_id}"] = {"values": layer_array.tolist(),}
+        
+
         thres = state["thresholds"]
         if thres.get(selected_array):
             layer_array = apply_thresholds(layer_array, thres[selected_array])
-        reduced_core_map = vera_out_file.core.reduced_core_map
+        reduced_core_map = vera_source.core.reduced_core_map
         core_width = reduced_core_map.shape[0]
 
         result = []
@@ -66,8 +65,11 @@ def initialize(server, vera_out_file, view_id):
             for j in range(core_width):
                 index = reduced_core_map[i, j] - 1
                 if index == -1:
-                    continue                  
-                line.append(np.ravel(layer_array[index]).tolist())
+                    continue   
+                if is_assembly_average:
+                    line.append([float(layer_array[index])])
+                else:
+                    line.append(np.ravel(layer_array[index]).tolist())               
 
         state[core_assemblies_key] = result
 
@@ -75,6 +77,7 @@ def initialize(server, vera_out_file, view_id):
         layout.root.style = "height: 100%; display: flex; flex-direction: column;"
         with html.Div(style="flex: 1; min-height: 0; position: relative;"):
             vera.CoreView(
+                v_if=(f"{core_assemblies_key} && {core_assemblies_key}.length",),
                 value=(core_assemblies_key, []),
                 selected_i=("selected_assembly_ij.i",),
                 selected_j=("selected_assembly_ij.j",),
@@ -84,6 +87,11 @@ def initialize(server, vera_out_file, view_id):
                 busy=("trame__busy",),
             )
         with html.Div(style="flex: 0 0 auto; padding: 4px 0;"):
+            html.Div(
+                f"{{{{ selected_assembly != null && core_readout_{view_id}"
+                f" ? core_readout_{view_id}.values[selected_assembly] : '' }}}}",
+                classes="text-caption text-center",
+            )
             vera.ColorMapEditor(
                 v_model=f"color_range_{view_id}",
                 color_preset="jet",

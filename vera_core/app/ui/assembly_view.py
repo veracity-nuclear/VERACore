@@ -1,8 +1,11 @@
 import numpy as np
-
 from trame.ui.html import DivLayout
 from trame.widgets import html
+
 from vera_core.widgets import vera
+from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+from vera_core.app.core.thresholds import apply_thresholds
+
 
 def option_for(view_id):
     return {
@@ -12,7 +15,7 @@ def option_for(view_id):
 }
 
 
-def initialize(server, vera_out_file, view_id):
+def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
     # if OPTION not in state.grid_options:
@@ -24,15 +27,19 @@ def initialize(server, vera_out_file, view_id):
     cached_assembly_images = {}
 
     selected_array_key = f"selected_array_{view_id}"
+    selected_file_key = f"selected_file_{view_id}"
     assembly_array = f"assembly_array_{view_id}"
     state.setdefault(assembly_array, [])
 
     @state.change(
         "assembly_view_size",
         selected_array_key,
+        selected_file_key,
         "selected_assembly",
         "selected_layer",
         "color_range",
+        "thresholds",
+        f"grid_view_{view_id}"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_assembly_view(**kwargs):
@@ -42,11 +49,18 @@ def initialize(server, vera_out_file, view_id):
         selected_layer = int(state["selected_layer"])
         selected_assembly = int(state["selected_assembly"])
         selected_array = state[selected_array_key]
+        selected_file = state[selected_file_key]
+
+        thres = state["thresholds"]
+        thres_hash = 0
+        if thres.get(selected_array):
+            for condition in thres[selected_array]:
+                thres_hash += hash(condition["op"]) + hash(condition["value"])
         image_data = None
         
 
         # Extract from cache if possible
-        cache_key = (selected_time, selected_array, selected_assembly, selected_layer)
+        cache_key = (selected_time, selected_array, selected_assembly, selected_layer, thres_hash, selected_file)
         if cache_key in cached_assembly_images:
             # Shortcut if we have a cache. We might still need to redraw
             # if the figure size was updated.
@@ -54,9 +68,12 @@ def initialize(server, vera_out_file, view_id):
 
         # Extract data from H5 + add to cache
         if image_data is None:
-            array = vera_out_file.array(selected_array)
+            vera_source : VeraDataSource = registry.get(selected_file)
+            array = vera_source.array(selected_array)
             image_data = array[:, :, selected_layer, selected_assembly].copy()
-            control_rod_positions = vera_out_file.core.control_rod_positions
+            if thres.get(selected_array):
+                image_data = apply_thresholds(image_data, thres[selected_array])
+            control_rod_positions = vera_source.core.control_rod_positions
             # Make control rod positions equal to nan
             image_data[control_rod_positions] = np.nan
 

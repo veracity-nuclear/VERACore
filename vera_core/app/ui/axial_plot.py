@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
+from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+
 
 def option_for(view_id):
     return {
@@ -14,24 +16,26 @@ def option_for(view_id):
     }
 
 
-def initialize(server, vera_out_file, view_id):
+def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
 
     selected_array_key = f"selected_array_{view_id}"
+    selected_file_key = f"selected_file_{view_id}"
     update_fn_name = f"update_axial_plot_{view_id}"
 
-    def create_line(selected_array, indices=(0, 0, 0, 0)):
+
+    def create_line(source : VeraDataSource, selected_array, indices=(0, 0, 0, 0)):
         selected_j, selected_i, selected_layer, selected_assembly = indices
 
-        full_array = vera_out_file.array(selected_array)
+        full_array = source.array(selected_array)
         array = full_array[selected_j, selected_i, :, selected_assembly]
 
         figure = px.line(
             x=array,
-            y=vera_out_file.core.axial_mesh_means,
+            y=source.core.axial_mesh_means,
             labels={"x": selected_array, "y": "Axial (cm)"},
         )
 
@@ -40,7 +44,7 @@ def initialize(server, vera_out_file, view_id):
         figure.add_trace(
             go.Scatter(
                 x=[float_info.min, float_info.max],
-                y=[vera_out_file.core.axial_mesh_means[selected_layer]] * 2,
+                y=[source.core.axial_mesh_means[selected_layer]] * 2,
                 mode="lines",
                 line=go.scatter.Line(color="red", dash="dash"),
                 showlegend=False,
@@ -52,25 +56,29 @@ def initialize(server, vera_out_file, view_id):
 
     @state.change(
         selected_array_key,
+        selected_file_key,
         "selected_assembly",
         "selected_layer",
         "selected_i",
         "selected_j",
+        f"grid_view_{view_id}"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
         if state[f"grid_view_{view_id}"]["name"] != option["name"]:
             return
         selected_array = state[selected_array_key]
+        selected_file = state[selected_file_key]
         indices = (
             int(state.selected_j),
             int(state.selected_i),
             int(state.selected_layer),
             int(state.selected_assembly),
         )
+        source = registry.get(selected_file)
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:
-            update_fn(create_line(selected_array, indices))
+            update_fn(create_line(source, selected_array, indices))
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; width: 100%;"

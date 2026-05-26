@@ -3,6 +3,7 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
+from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
 
 
 def option_for(view_id):
@@ -13,13 +14,14 @@ def option_for(view_id):
     }
 
 
-def initialize(server, vera_out_file, view_id):
+def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
 
     selected_array_key = f"selected_array_{view_id}"
+    selected_file_key = f"selected_file_{view_id}"
     core_key = f"x_axial_core_{view_id}"
     size_x_key = f"x_axial_core_size_x_{view_id}"
     size_y_key = f"x_axial_core_size_y_{view_id}"
@@ -31,28 +33,35 @@ def initialize(server, vera_out_file, view_id):
 
     def axial_cell_selected(layer, assembly_i):
         assembly_j = state.selected_assembly_ij["j"]
-        state.selected_assembly = vera_out_file.core.reduced_core_map_assembly(
+        selected_file = state[selected_file_key]
+        vera_source = registry.get(selected_file)
+        state.selected_assembly = vera_source.core.reduced_core_map_assembly(
             assembly_i, assembly_j
         )
         state.selected_layer = layer
-
+    # @ctrl.add("on_vera_out_active_state_index_changed", f"grid_view_{view_id}")
     @state.change(
         selected_array_key,
+        selected_file_key,
         "selected_assembly",
         "selected_j",
+        f"grid_view_{view_id}"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_axial_view(**kwargs):
         if state[f"grid_view_{view_id}"]["name"] != option["name"]:
             return
         selected_array = state[selected_array_key]
+        selected_file = state[selected_file_key]
         selected_assembly = int(state.selected_assembly)
         selected_j = int(state.selected_j)
 
-        row_assembly_indices = vera_out_file.core.row_assembly_indices(
+        vera_source : VeraDataSource = registry.get(selected_file)
+
+        row_assembly_indices = vera_source.core.row_assembly_indices(
             selected_assembly
         )
-        array = vera_out_file.array(selected_array)
+        array = vera_source.array(selected_array)
         assembly_size = array.shape[0]
 
         # Numpy puts the indexing subspace on the front.
@@ -65,7 +74,7 @@ def initialize(server, vera_out_file, view_id):
         nb_lines = image_data.shape[0]
         nb_cols = int(image_data.shape[1] / assembly_size)
 
-        size_y = vera_out_file.core.axial_mesh_pixels.tolist()
+        size_y = vera_source.core.axial_mesh_pixels.tolist()
         label_y = [i + 1 for i in range(len(size_y))]
         label_y.reverse()
 

@@ -21,6 +21,8 @@ import vtk.util.numpy_support as np_s
 from trame.ui.html import DivLayout
 from trame.widgets import vtk, vuetify
 
+from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+
 
 # Single shared template; all volume cards render the same VTK view.
 SHARED_TEMPLATE_NAME = "volume_view"
@@ -38,7 +40,7 @@ def option_for(view_id):
     }
 
 
-def initialize(server, vera_out_file, view_id):
+def initialize(server, registry : VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
     # Register the option in this card's menu (always).
@@ -129,6 +131,7 @@ def initialize(server, vera_out_file, view_id):
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_volume_view(selected_array, **kwargs):
         global _reset_camera_count
+        vera_out_file = registry.default_source
         array = vera_out_file.array(selected_array)
 
         assembly_shape = array.shape[:2]

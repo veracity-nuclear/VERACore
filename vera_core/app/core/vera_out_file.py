@@ -1,18 +1,19 @@
+import string
+from enum import Enum
 from typing import Union
-from .vera_data_source import VeraDataSource
-from pyvera.io.VERAout import VERAout
+
 import h5py
 import numpy as np
-import string
+from pyvera.io.VERAout import VERAout
+
+from .vera_data import VeraDataSource, VeraDataset, VeraDatasetType, VeraDerivation
 
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
-
-
 class VeraOutFile(VeraDataSource):
     def __init__(self, filename):
         # Keep this open for better performance
-        self.veraout = VERAout(filename=filename)
         self.f = h5py.File(filename, "r")
+        self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
         
@@ -53,7 +54,7 @@ class VeraOutFile(VeraDataSource):
         return self._active_state_index
 
     @active_state_index.setter
-    def active_state_index(self, index):
+    def active_state_index(self, index: int):
         if hasattr(self, "_active_state_index"):
             if self._active_state_index == index:
                 return
@@ -64,7 +65,7 @@ class VeraOutFile(VeraDataSource):
         self._active_state_index = index
         self.active_state._cache_all()
 
-    def array(self, array_name):
+    def array(self, array_name: str, mask_reflected: bool = True) -> VeraDataset:
         # Get the array with the name "array_name", either on the active state,
         # or on the core.
 
@@ -78,8 +79,9 @@ class VeraOutFile(VeraDataSource):
 
         # If not on the core, assume it is on the active states.
         ax, ay = self.core.reduced_core_map.shape        
-        array = getattr(self.active_state, array_name)
-        if self.core.core_sym == 4 and len(array.shape) == 4: 
+        array = getattr(self.active_state, array_name).copy()
+        has_reflected_pins = array.dataset_type == VeraDatasetType.PIN
+        if mask_reflected and has_reflected_pins and self.core.core_sym == 4 and array.ndim == 4: 
             # this is a "lazy" approach to fixing qtr core sym, could switch to eager later if necessary
             hpy = array.shape[0] // 2
             hpx = array.shape[1] // 2
@@ -87,9 +89,7 @@ class VeraOutFile(VeraDataSource):
             array[:, :hpx, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
         return array
     
-    def add_new_diff_dataset(self, ref_array_name, comp_array_name, new_diff_name):
-        ref = self.array(ref_array_name)
-        comp = self.array(comp_array_name)
+    def add_new_diff_dataset(self, ref_array_name: str, comp_array_name: str, new_diff_name: str):
         for state in self._states:
             if hasattr(state, ref_array_name) and hasattr(state, comp_array_name):
                 ref = getattr(state, ref_array_name)
@@ -97,6 +97,29 @@ class VeraOutFile(VeraDataSource):
                 if ref.shape == comp.shape:
                     diff = ref - comp
                     state.add_diff_dataset(new_diff_name, diff)
+    
+    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, derivation: VeraDerivation):
+        for state in self._states:
+            if not hasattr(state, source_array_name):
+                continue
+            data = getattr(state, source_array_name)
+            match derivation:
+                case VeraDerivation.ASSEMBLY:
+                    der = VeraDataset(self.vera_calculator.Assembly(data), VeraDatasetType.ASSEMBLY)
+                case VeraDerivation.AXIAL:
+                    der = VeraDataset(self.vera_calculator.Axial(data), VeraDatasetType.AXIAL)
+                case VeraDerivation.RADIAL:
+                    der = VeraDataset(self.vera_calculator.Radial(data), VeraDatasetType.RADIAL)
+                case VeraDerivation.CORE:
+                    der = VeraDataset(self.vera_calculator.Average(data), VeraDatasetType.CORE)
+                case VeraDerivation.NODE:
+                    der = VeraDataset(self.vera_calculator.Node(data), VeraDatasetType.NODE)
+                case VeraDerivation.RADIAL_ASSEMBLY:
+                    der = VeraDataset(self.vera_calculator.Radial_Assembly(data), VeraDatasetType.RADIAL)
+                case _:
+                    raise ValueError(f"Derivation: {derivation} not implemented")
+            state.add_derived_dataset(new_dataset_name, der)
+        return True
 
 class LazyHDF5Loader:
     def __init__(self, f, path, dataset_names):
@@ -116,7 +139,10 @@ class LazyHDF5Loader:
 
         dataset = self._load_dataset(name)[()]
         if not isinstance(dataset, np.ndarray):
-            dataset = np.array([dataset])
+            dataset = VeraDataset(np.array([dataset]), VeraDatasetType.SCALAR)
+        else:
+            # FIXME : assuming a full core dataset must be pin, need to change this to acommondate channels 
+            dataset = VeraDataset(dataset, VeraDatasetType.PIN)
         setattr(self, name, dataset)
 
     def _uncache(self, name):
@@ -127,7 +153,10 @@ class LazyHDF5Loader:
         # to fix issue with scalar datasets being indexed with a [0]
         dataset = self._load_dataset(name)[()]
         if not isinstance(dataset, np.ndarray):
-            dataset = np.array([dataset])
+            dataset = VeraDataset(np.array([dataset]), VeraDatasetType.SCALAR)
+        else:
+            # FIXME : assuming a full core dataset must be pin, need to change this to acommondate channels 
+            dataset = VeraDataset(dataset, VeraDatasetType.PIN)
         setattr(self, name, dataset)
 
     def _cache_all(self):
@@ -310,6 +339,10 @@ class VeraOutState(LazyHDF5Loader):
             if dataset_shape in [(1,), ()]:
                 self.scalar_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
     
-    def add_diff_dataset(self, dataset_name, dataset):
+    def add_diff_dataset(self, dataset_name: VeraDataset, dataset):
         setattr(self, dataset_name, dataset)
         self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+
+    def add_derived_dataset(self, dataset_name: VeraDataset, dataset):
+        setattr(self, dataset_name, dataset)
+        self.derived_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})

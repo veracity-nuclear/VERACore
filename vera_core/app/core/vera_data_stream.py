@@ -1,4 +1,4 @@
-from .vera_data_source import VeraDataSource
+from .vera_data import VeraDataSource
 from .vera_out_file import VeraOutCore, VeraOutFile, VeraOutState
 import threading, time
 from multiprocessing import Queue

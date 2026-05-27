@@ -127,11 +127,11 @@ def initialize(server, registry : VeraDataRegistry, view_id):
         ren_win.Render()
         ctrl.view_update()
 
-    @state.change("selected_array")
+    @state.change("selected_array", "selected_file")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_volume_view(selected_array, **kwargs):
         global _reset_camera_count
-        vera_out_file = registry.default_source
+        vera_out_file = registry.get(state.selected_file)
         array = vera_out_file.array(selected_array)
 
         assembly_shape = array.shape[:2]

@@ -1,4 +1,5 @@
 from trame.widgets import html, vuetify
+from trame_server.core import State, Controller
 from vera_core.app.core import VeraDataRegistry, VeraDerivation
 from ..helpers import format_label, build_dataset_picker, refresh_file_tree
 
@@ -13,7 +14,7 @@ DERIVATION_PRESETS = [
 ]
 DERIVATION_METHODS = ["Average", "Sum", "Min", "Max"]  # placeholder
 
-def register_derived_state_ctrl(state, ctrl, registry: VeraDataRegistry):
+def register_derived_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_derived_dialog = False
     state.derived_source_array = "pin_powers"
     state.derived_source_file = registry.default

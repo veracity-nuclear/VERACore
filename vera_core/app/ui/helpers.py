@@ -1,15 +1,29 @@
-from trame.widgets import html, vuetify
+import numpy as np
 
-def format_label(file, key):
+from trame_server.core import State, Controller
+from trame.widgets import html, vuetify
+from vera_core.app.core import VeraDataRegistry
+
+def format_label(file : str, key : str):
     return f"{file} | {key.replace('_', ' ').upper()}"
 
-def refresh_file_tree(state, registry):
+def refresh_file_tree(state: State, registry : VeraDataRegistry):
     state.file_tree = {
         fid: [{"text": k.replace("_", " ").title(), "value": k}
               for k in registry.get(fid).active_state_full_core_keys]
         for fid in registry.source_ids()
     }
-    
+
+def array_range(array):
+    lo = float(np.nanmin(array))
+    hi = float(np.nanmax(array))
+    if not np.isfinite(lo) or not np.isfinite(hi):
+        return (0.0, 1.0)
+    if lo == hi:
+        eps = max(abs(hi) * 1e-9, 1e-12)
+        return (lo, hi + eps)
+    return (lo, hi)
+
 def get_next_y_from_layout(layout):
     next_y = 0
     for item in layout:
@@ -21,10 +35,19 @@ def get_next_y_from_layout(layout):
 def _make_label(selected_label_arg: str):
     return html.Span(f"{{{{ get(`{selected_label_arg}`) }}}}")
 
-def build_dataset_picker(ctrl, selected_label_arg, ctrl_func : str = "_noop", ctrl_func_args : str = "[]"):
+def build_dataset_picker(ctrl : Controller, selected_label_arg : str, ctrl_func : str = "_noop", ctrl_func_args : str = "[]"):
     with vuetify.VMenu(offset_y=True,close_on_content_click=False):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
-            with vuetify.VBtn(small=True, text=True, v_bind="attrs", v_on="on"):
+            with vuetify.VBtn(
+                    small=True, 
+                    text=True, 
+                    v_bind="attrs", 
+                    v_on="on", 
+                    style=(
+                    "border-bottom: 1px solid rgba(0,0,0,0.42);"
+                    "border-radius: 0;"
+                    "padding-bottom: 2px;")
+            ):
                 _make_label(selected_label_arg)
                 vuetify.VIcon("mdi-menu-down", small=True)
         with vuetify.VList(dense=True):

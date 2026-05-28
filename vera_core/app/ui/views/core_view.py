@@ -5,8 +5,9 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core.vera_data import VeraDataRegistry, VeraDatasetType, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDatasetType, VeraDataSource
 from vera_core.app.core.thresholds import apply_thresholds
+from ..helpers import format_label
 
 def option_for(view_id):
     return {
@@ -35,6 +36,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             return
         selected_array = state[selected_array_key]
         selected_file = state[selected_file_key]
+        thres_key = format_label(selected_file, selected_array)
         selected_layer = int(state.selected_layer)
 
         vera_source : VeraDataSource = registry.get(selected_file)
@@ -53,8 +55,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         
 
         thres = state["thresholds"]
-        if thres.get(selected_array):
-            layer_array = apply_thresholds(layer_array, thres[selected_array])
+        if thres.get(thres_key):
+            layer_array = apply_thresholds(layer_array, thres[thres_key])
         reduced_core_map = vera_source.core.reduced_core_map
         core_width = reduced_core_map.shape[0]
 
@@ -74,8 +76,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         state[core_assemblies_key] = result
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%; display: flex; flex-direction: column;"
-        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
+        layout.root.style = "height: 100%; display: flex; flex-direction: row;"
+        with html.Div(style="flex: 1; min-width: 0; position: relative;"):
             vera.CoreView(
                 v_if=(f"{core_assemblies_key} && {core_assemblies_key}.length",),
                 value=(core_assemblies_key, []),
@@ -86,13 +88,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 click="selected_assembly_ij = $event",
                 busy=("trame__busy",),
             )
-        with html.Div(style="flex: 0 0 auto; padding: 4px 0;"):
+        with html.Div(style="flex: 0 0 auto; padding: 4px 0; width: 70px;"):
             html.Div(
                 f"{{{{ selected_assembly != null && core_readout_{view_id}"
                 f" ? core_readout_{view_id}.values[selected_assembly] : '' }}}}",
                 classes="text-caption text-center",
             )
-            vera.ColorMapEditor(
+            vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}",
                 color_preset="jet",
             )

@@ -5,6 +5,7 @@ venv
 build
 .ipynb_checkpoints
 dist
+dist_pylauncher
 
 # local env files
 .env.local

@@ -92,3 +92,18 @@ class ColorMapEditor(HtmlElement):
         self._event_names += [
             "input",
         ]
+
+class VerticalColorMapEditor(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-vertical-color-map-editor",
+            **kwargs,
+        )
+        self._attr_names += [
+            "value",
+            ("color_preset", "colorPreset"),
+            "busy",
+        ]
+        self._event_names += [
+            "input",
+        ]

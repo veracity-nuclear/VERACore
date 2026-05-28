@@ -40,7 +40,7 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
-    def states(self):
+    def states(self) -> list:
         pass
 
     @abstractmethod
@@ -49,7 +49,7 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
-    def active_state_full_core_keys(self):
+    def active_state_full_core_keys(self) -> list:
         pass
 
     @property
@@ -59,7 +59,7 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
-    def active_state_index(self):
+    def active_state_index(self) -> int:
         pass
 
     @active_state_index.setter

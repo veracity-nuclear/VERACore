@@ -1,9 +1,11 @@
 import numpy as np
+
+from trame_server.core import Server
 from vera_core.app.core import VeraDataRegistry
 
 from .features import derive, threshold, diff
 from .layout import build_layout
-from .helpers import  format_label, get_next_y_from_layout
+from .helpers import  format_label, get_next_y_from_layout, array_range
 from .views import (
     assembly_view,
     axial_plot,
@@ -31,7 +33,7 @@ VIEW_MODULES = [
     y_axial_view,
 ]
 
-def initialize(server, registry: VeraDataRegistry):
+def initialize(server : Server, registry: VeraDataRegistry):
     state, ctrl = server.state, server.controller
     state.trame__title = "VERACore"
 
@@ -55,21 +57,11 @@ def initialize(server, registry: VeraDataRegistry):
     threshold.register_threshold_state_ctrl(state, ctrl, registry)
     derive.register_derived_state_ctrl(state, ctrl, registry)
 
-    def _array_range(selected_file, selected_array):
-        array = registry.get(selected_file).array(selected_array)
-        lo = float(np.nanmin(array))
-        hi = float(np.nanmax(array))
-        if not np.isfinite(lo) or not np.isfinite(hi):
-            return (0.0, 1.0)
-        if lo == hi:
-            eps = max(abs(hi) * 1e-9, 1e-12)
-            return (lo, hi + eps)
-        return (lo, hi)
-
     def _recompute_card_range(view_id):
         selected_array = state[f"selected_array_{view_id}"]
         selected_file = state[f"selected_file_{view_id}"]
-        state[f"color_range_{view_id}"] = _array_range(selected_file, selected_array)
+        array = registry.get(selected_file).array(selected_array)
+        state[f"color_range_{view_id}"] = array_range(array)
        
     @state.change("selected_time")
     def selected_time_changed(selected_time, **kwargs):
@@ -83,12 +75,14 @@ def initialize(server, registry: VeraDataRegistry):
         for view_id in all_view_ids:
             _recompute_card_range(view_id)
         # Keep the global range in sync with the toolbar selection (for volume view).
-        state.color_range = _array_range(state.selected_file, state.selected_array)
+        global_array = registry.get(state.selected_file).array(state.selected_array)
+        state.color_range = array_range(global_array)
     
     @state.change("selected_array")
     def toolbar_array_changed(selected_array, **kwargs):
         # Global color_range still drives volume view.
-        state.color_range = _array_range(registry.default, selected_array)
+        array = registry.get(state.selected_file).array(selected_array)
+        state.color_range = array_range(array)
 
     # Keep selected_assembly and selected_assembly_ij in sync
     @state.change("selected_assembly_ij")
@@ -186,5 +180,5 @@ def initialize(server, registry: VeraDataRegistry):
     place(volume_view,    3,  0, 3, 17)
     place(table_view,     0, 17, 6, 10)
 
-    build_layout(server, state, ctrl, registry)
+    build_layout(server, state, ctrl, registry) # vue ui is built here
             

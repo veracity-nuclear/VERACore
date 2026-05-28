@@ -1,5 +1,6 @@
 from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import client, grid, html, vuetify
+from trame_server.core import Server, Controller, State
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry
 
@@ -7,7 +8,7 @@ from .. import assets
 from ..helpers import build_dataset_picker
 from ..features import derive, diff, threshold
 
-def build_toolbar(tb, state, ctrl, registry):
+def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
     tb.height = 36
     html.Img(src=assets.LOGO, height=25)
@@ -42,7 +43,7 @@ def build_toolbar(tb, state, ctrl, registry):
         vuetify.VIcon("mdi-plus")
 
 
-def build_grid_card(state, ctrl, registry):
+def build_grid_card(ctrl : Controller):
     with grid.GridItem(
                 v_for="item in grid_layout",
                 key="item.i",
@@ -92,11 +93,11 @@ def build_grid_card(state, ctrl, registry):
             with vuetify.VCardText(style=style, classes="drag_ignore"):
                 client.ServerTemplate(name=("get(`grid_view_${item.i}`).name",))
 
-def build_content(layout, state, ctrl, registry: VeraDataRegistry):
+def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRegistry):
     layout.content.style = "overflow: auto; margin: 36px 0px 35px; padding: 0;"
     derive.build_derived_dialog(state, ctrl, registry)
     # build_diff_dialog(state, ctrl, registry)
-    threshold.build_threshold_dialog(state, ctrl, registry)
+    threshold.build_threshold_dialog(ctrl)
     
     with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
         with grid.GridLayout(layout=("grid_layout", []), 
@@ -104,9 +105,9 @@ def build_content(layout, state, ctrl, registry: VeraDataRegistry):
                              vertical_compact=True, 
                              style="width: 100%; height: 100%;"
         ):
-            build_grid_card(state, ctrl, registry)
+            build_grid_card(ctrl)
             
-def build_footer(ft, state):
+def build_footer(ft):
     ft.clear()
     ft.height = 35
     with vuetify.VBtn(
@@ -141,12 +142,12 @@ def build_footer(ft, state):
     )
 
 
-def build_layout(server, state, ctrl, registry):
+def build_layout(server : Server, state : State, ctrl : Controller, registry : VeraDataRegistry):
     with SinglePageLayout(server) as layout:
         layout.root.classes = ("{ busy: trame__busy }",)
         with layout.toolbar as tb: 
-            build_toolbar(tb, state, ctrl, registry)
+            build_toolbar(tb, ctrl, registry)
         with layout.content:       
             build_content(layout, state, ctrl, registry)
         with layout.footer as ft:  
-            build_footer(ft, state)
+            build_footer(ft)

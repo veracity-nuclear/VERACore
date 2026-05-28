@@ -1,11 +1,11 @@
-from trame.ui.vuetify import SinglePageLayout
-from trame.widgets import client, grid, html, vuetify
+from trame.widgets import html, vuetify
+from trame_server.core import State, Controller
 
 from vera_core.app.core import VeraDataRegistry
 from ..helpers import format_label, build_dataset_picker
 
 
-def register_threshold_state_ctrl(state, ctrl, registry: VeraDataRegistry):
+def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_threshold_dialog = False
     state.thresholds = {}
     state.threshold_array = "pin_powers"
@@ -16,7 +16,7 @@ def register_threshold_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     state.threshold_operator = ">"
 
     @ctrl.set("set_threshold")
-    def set_threshold(file, array):
+    def set_threshold(file : str, array : str):
         print("in set threshold")
         state.threshold_array = array
         state.threshold_file = file
@@ -26,6 +26,7 @@ def register_threshold_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     def add_threshold():
         print("in_add_threshold")
         name = format_label(state.threshold_file, state.threshold_array)
+        print(name, float(state.threshold_value))
         entry = {"op": state.threshold_operator, "value": float(state.threshold_value)}
         existing = state.thresholds.get(name, [])
         state.thresholds = {**state.thresholds, name: [*existing, entry]}
@@ -33,20 +34,20 @@ def register_threshold_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         state.threshold_error = ""
 
     @ctrl.set("remove_threshold")
-    def remove_threshold(name, index):
+    def remove_threshold(name : str, index : int):
         remaining = [c for i, c in enumerate(state.thresholds.get(name, [])) if i != index]
         if remaining:
             state.thresholds = {**state.thresholds, name: remaining}
         else:
             state.thresholds = {k: v for k, v in state.thresholds.items() if k != name}
 
-def build_threshold_dialog(state, ctrl, registry):
+def build_threshold_dialog(ctrl : Controller):
     with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=480, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Dataset Thresholds", classes="text-subtitle-1")
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
-                with vuetify.VRow(classes="ma-0", align="center"):
+                with html.Div(classes="d-flex align-center", style="gap: 8px;"):
                     build_dataset_picker(ctrl, "threshold_label", "set_threshold", "[file, entry.value]")
                     with vuetify.VCol(cols="auto", classes="pl-2"):
                         vuetify.VSelect(

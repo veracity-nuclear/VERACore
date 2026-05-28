@@ -5,6 +5,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
 from vera_core.app.core.thresholds import apply_thresholds
+from ..helpers import format_label
 
 
 def option_for(view_id):
@@ -50,11 +51,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_assembly = int(state["selected_assembly"])
         selected_array = state[selected_array_key]
         selected_file = state[selected_file_key]
+        thres_key = format_label(selected_file, selected_array)
 
         thres = state["thresholds"]
         thres_hash = 0
-        if thres.get(selected_array):
-            for condition in thres[selected_array]:
+        if thres.get(thres_key):
+            for condition in thres[thres_key]:
                 thres_hash += hash(condition["op"]) + hash(condition["value"])
         image_data = None
         
@@ -71,8 +73,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             vera_source : VeraDataSource = registry.get(selected_file)
             array = vera_source.array(selected_array)
             image_data = array[:, :, selected_layer, selected_assembly].copy()
-            if thres.get(selected_array):
-                image_data = apply_thresholds(image_data, thres[selected_array])
+            if thres.get(thres_key):
+                image_data = apply_thresholds(image_data, thres[thres_key])
             control_rod_positions = vera_source.core.control_rod_positions
             # Make control rod positions equal to nan
             image_data[control_rod_positions] = np.nan

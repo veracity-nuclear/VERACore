@@ -5,6 +5,7 @@ from multiprocessing import Queue
 
 from trame.app import get_server, dev
 from trame.app.asynchronous import StateQueue, create_state_queue_monitor_task
+from trame_server.core import Server
 
 from . import ui
 from .core.vera_out_file import VeraOutFile
@@ -17,11 +18,13 @@ DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"
 
 def _reload(registry: VeraDataRegistry):
     server = get_server()
+    if server is None:
+        return
     dev.reload(ui)
     ui.initialize(server, registry)
 
 
-def main(server=None, **kwargs):
+def main(server : Server | None | str = None, **kwargs):
     # Get or create server
     if server is None:
         server = get_server(client_type="vue2")
@@ -29,6 +32,10 @@ def main(server=None, **kwargs):
     if isinstance(server, str):
         server = get_server(server, client_type="vue2")
 
+    if server is None:
+        # if get_server returns a None
+        return
+    
     data_kwargs = {
         "help": "Data file to load",
         "dest": "data_file",
@@ -53,6 +60,7 @@ def main(server=None, **kwargs):
     registry : VeraDataRegistry = VeraDataRegistry()
 
     if stream_port is not None:
+        raise NotImplementedError("VeraDataStream is not fully implemented against VeraDataSource interface")
         vera_out_file = VeraDataStream(stream_port, state_queue)
         # this is a crude fix to prevent reads on empty states from the vera data stream
         # will fix change this

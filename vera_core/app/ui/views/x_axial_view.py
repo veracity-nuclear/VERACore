@@ -39,7 +39,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             assembly_i, assembly_j
         )
         state.selected_layer = layer
-    # @ctrl.add("on_vera_out_active_state_index_changed", f"grid_view_{view_id}")
     @state.change(
         selected_array_key,
         selected_file_key,

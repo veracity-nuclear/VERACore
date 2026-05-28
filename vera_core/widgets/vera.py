@@ -37,6 +37,7 @@ class CoreView(HtmlElement):
         )
         self._attr_names += [
             "value",
+            "labels",
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
             ("color_preset", "colorPreset"),

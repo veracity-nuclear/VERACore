@@ -55,7 +55,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_i",
         f"grid_view_{view_id}"
     )
-    @ctrl.add("on_vera_out_active_state_index_changed", f"grid_view_{view_id}")
+    @ctrl.add("on_vera_out_active_state_index_changed")
     def update_axial_view(**kwargs):
         if state[f"grid_view_{view_id}"]["name"] != option["name"]:
             return

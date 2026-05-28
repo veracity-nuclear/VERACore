@@ -62,12 +62,11 @@ def initialize(server : Server, registry: VeraDataRegistry):
         selected_file = state[f"selected_file_{view_id}"]
         array = registry.get(selected_file).array(selected_array)
         state[f"color_range_{view_id}"] = array_range(array)
-       
+
     @state.change("selected_time")
     def selected_time_changed(selected_time, **kwargs):
         selected_time = int(selected_time)
         registry.change_active_state(selected_time)
-
         ctrl.on_vera_out_active_state_index_changed(
             selected_time=selected_time, **kwargs
         )

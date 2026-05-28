@@ -10,7 +10,7 @@
   flex: 1;
   border-radius: 2px;
   overflow: hidden;
-  margin: 5px 0;
+  margin: 2px 0;
 }
 
 .colorBar {
@@ -23,9 +23,19 @@
 
 .textField {
   max-width: 70px;
+  flex: 0 0 auto;
 }
 
-/* center the input text since labels sit above/below the bar */
-.verticalColorMap .textField input {
+.verticalColorMap .textField ::v-deep input {
   text-align: center;
+}
+
+.verticalColorMap .textField ::v-deep .v-input__slot {
+  margin-bottom: 0;
+  min-height: auto;
+  padding: 0;
+}
+
+.verticalColorMap .textField ::v-deep .v-text-field__details {
+  display: none;
 }

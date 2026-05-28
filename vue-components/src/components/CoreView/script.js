@@ -47,6 +47,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    labels: {
+      type: Array,
+      default: () => [],
+    },
   },
   watch: {
     selectedI(i) {
@@ -137,6 +141,13 @@ export default {
     },
     toUrl(i, j) {
       return this.images?.[j]?.[i];
+    },
+    toLabel(i, j) {
+      const v = this.labels?.[j]?.[i];
+      if (v === undefined || v === null || Number.isNaN(v)) {
+        return '';
+      }
+      return Number(v).toFixed(2);
     },
   },
 };

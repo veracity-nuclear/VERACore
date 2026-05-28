@@ -1,7 +1,6 @@
 from trame.widgets import vuetify
 from vera_core.app.core import VeraDataRegistry
-from ..helpers import refresh_file_tree
-
+from .FileMenu import refresh_file_tree
 def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     state.setdefault("show_diff_dialog", False)
     state.setdefault("diff_name", "")

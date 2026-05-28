@@ -3,7 +3,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDataSource
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label
 

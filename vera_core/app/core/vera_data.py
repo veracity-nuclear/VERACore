@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from enum import Enum 
+from enum import Enum
 import numpy as np
 class VeraDatasetType(Enum):
     PIN = 1
@@ -78,32 +78,3 @@ class VeraDataSource(ABC):
     @abstractmethod
     def add_new_derived_dataset(self, source_array_name, new_dataset_name, derivation: VeraDerivation):
         pass
-
-
-class VeraDataRegistry:
-    def __init__(self):
-        self._sources : dict[str, VeraDataSource] = {}
-        self.default : str = None
-    
-    def add_source(self, source, source_id : str):
-        if self.default is None:
-            self.default = source_id
-        self._sources[source_id] = source
-
-    @property
-    def default_source(self) -> VeraDataSource:
-        return self._sources[self.default]
-    
-    def get(self, source_id: str) -> VeraDataSource:
-        return self._sources.get(source_id)
-    
-    def source_ids(self):
-        return self._sources.keys()
-    
-    def change_active_state(self, nstate: int):
-        for source in self._sources.values():
-            source.active_state_index = nstate
-    
-    def full_core_keys(self):
-        full_core_keys = {source_id : self._sources[source_id].active_state_full_core_keys for source_id in self._sources.keys()}
-        return full_core_keys

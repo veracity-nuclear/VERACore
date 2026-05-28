@@ -4,9 +4,8 @@ from trame_server.core import Server, Controller, State
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry
 
-from .. import assets
-from ..helpers import build_dataset_picker
-from ..features import derive, diff, threshold
+from . import assets
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
@@ -27,12 +26,15 @@ def build_toolbar(tb, ctrl: Controller, registry):
             width=3,
         )
 
-    build_dataset_picker(ctrl, "global_label", "global_array_change", "[file, entry.value]")
+    FileMenu.build_file_dataset_picker(ctrl, "global_label", "global_array_change", "[file, entry.value]")
     vuetify.VSpacer()
 
     with vuetify.VBtn(icon=True, click="show_diff_dialog = true"):
         vuetify.VIcon("mdi-delta")
     
+    with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
+                vuetify.VIcon("mdi-folder-open")
+
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true"):
         vuetify.VIcon("mdi-calculator-variant")
 
@@ -74,7 +76,7 @@ def build_grid_card(ctrl : Controller):
                                 vuetify.VIcon(v_text="option.icon")
                             vuetify.VListItemTitle("{{ option.label }}")
                 vuetify.VSpacer()
-                build_dataset_picker(ctrl, "selected_label_${item.i}", "pick_file_dataset", "[item.i, file, entry.value]")
+                FileMenu.build_file_dataset_picker(ctrl, "selected_label_${item.i}", "pick_file_dataset", "[item.i, file, entry.value]")
                 vuetify.VSpacer()
                 with vuetify.VBtn(
                     icon=True,
@@ -95,9 +97,10 @@ def build_grid_card(ctrl : Controller):
 
 def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRegistry):
     layout.content.style = "overflow: auto; margin: 36px 0px 35px; padding: 0;"
-    derive.build_derived_dialog(state, ctrl, registry)
+    DeriveMenu.build_derived_dialog(state, ctrl, registry)
     # build_diff_dialog(state, ctrl, registry)
-    threshold.build_threshold_dialog(ctrl)
+    ThresholdMenu.build_threshold_dialog(ctrl)
+    FileMenu.build_file_menu_dialog(ctrl)
     
     with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
         with grid.GridLayout(layout=("grid_layout", []), 

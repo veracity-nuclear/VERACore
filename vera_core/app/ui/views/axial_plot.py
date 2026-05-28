@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDataSource
 
 
 def option_for(view_id):

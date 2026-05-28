@@ -1,7 +1,8 @@
 from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
 from vera_core.app.core import VeraDataRegistry, VeraDerivation
-from ..helpers import format_label, build_dataset_picker, refresh_file_tree
+from .FileMenu import build_file_dataset_picker, refresh_file_tree
+from ..helpers import format_label
 
 DERIVATION_PRESETS = [
     {"text": "Assembly", "value": "ASSEMBLY"},
@@ -65,7 +66,7 @@ def build_derived_dialog(state, ctrl, registry):
             with vuetify.VCardText(classes="pt-4"):
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
                     html.Div("1. Select Dataset", classes="text-caption font-weight-medium mb-2")
-                    build_dataset_picker(ctrl, "derived_source_label", "set_derived_source", "[file, entry.value]")
+                    build_file_dataset_picker(ctrl, "derived_source_label", "set_derived_source", "[file, entry.value]")
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
                     html.Div("2. Select Axes Over Which to Derive", classes="text-caption font-weight-medium mb-2")
                     vuetify.VSelect(

@@ -2,7 +2,8 @@ from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
 
 from vera_core.app.core import VeraDataRegistry
-from ..helpers import format_label, build_dataset_picker
+from ..helpers import format_label
+from .FileMenu import build_file_dataset_picker
 
 
 def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
@@ -48,7 +49,7 @@ def build_threshold_dialog(ctrl : Controller):
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
                 with html.Div(classes="d-flex align-center", style="gap: 8px;"):
-                    build_dataset_picker(ctrl, "threshold_label", "set_threshold", "[file, entry.value]")
+                    build_file_dataset_picker(ctrl, "threshold_label", "set_threshold", "[file, entry.value]")
                     with vuetify.VCol(cols="auto", classes="pl-2"):
                         vuetify.VSelect(
                             v_model=("threshold_operator",),

@@ -21,7 +21,7 @@ import vtk.util.numpy_support as np_s
 from trame.ui.html import DivLayout
 from trame.widgets import vtk, vuetify
 
-from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDataSource
 
 
 # Single shared template; all volume cards render the same VTK view.

@@ -3,7 +3,7 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
-from vera_core.app.core.vera_data import VeraDataRegistry, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDataSource
 
 
 def option_for(view_id):

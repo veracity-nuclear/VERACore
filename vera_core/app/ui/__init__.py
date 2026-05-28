@@ -3,7 +3,7 @@ import numpy as np
 from trame_server.core import Server
 from vera_core.app.core import VeraDataRegistry
 
-from .features import derive, threshold, diff
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu
 from .layout import build_layout
 from .helpers import  format_label, get_next_y_from_layout, array_range
 from .views import (
@@ -46,16 +46,15 @@ def initialize(server : Server, registry: VeraDataRegistry):
     state.selected_assembly = 36
     state.selected_time = 0
     state.max_time = max(0, len(registry.default_source.states) - 1)
-    state.file_tree = {fid: [{"text": k.replace("_", " ").title(), "value": k} for k in keys]
-                            for fid, keys in registry.full_core_keys().items()}
     state.selected_array = "pin_powers"
     state.selected_file = registry.default 
     state.global_label = "Select a global dataset"
     # FIXME ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    diff.register_diff_state_ctrl(state, ctrl, registry)
-    threshold.register_threshold_state_ctrl(state, ctrl, registry)
-    derive.register_derived_state_ctrl(state, ctrl, registry)
+    DiffMenu.register_diff_state_ctrl(state, ctrl, registry)
+    ThresholdMenu.register_threshold_state_ctrl(state, ctrl, registry)
+    DeriveMenu.register_derived_state_ctrl(state, ctrl, registry)
+    FileMenu.register_file_menu_state_ctrl(state, ctrl, registry)
 
     def _recompute_card_range(view_id):
         selected_array = state[f"selected_array_{view_id}"]
@@ -104,7 +103,6 @@ def initialize(server : Server, registry: VeraDataRegistry):
     def global_array_change(selected_file: str, selected_array: str):
         if not selected_file or not selected_array:
             return
-        print("in global array changed")
         state.selected_array = selected_array
         state.selected_file = selected_file
         for view_id in all_view_ids:
@@ -149,7 +147,7 @@ def initialize(server : Server, registry: VeraDataRegistry):
 
     @ctrl.set("pick_file_dataset")
     def pick_file_dataset(view_id, file, key):
-        print("here", view_id, file, key)
+        print(f"View {view_id} selected a new file: {file} | dataset : {key}")
         state[f"selected_file_{view_id}"] = file
         state[f"selected_array_{view_id}"] = key
         state[f"selected_label_{view_id}"] = f"{file} | {key.replace('_', ' ').upper()}"

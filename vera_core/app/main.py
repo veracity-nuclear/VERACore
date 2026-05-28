@@ -8,8 +8,7 @@ from trame.app.asynchronous import StateQueue, create_state_queue_monitor_task
 from trame_server.core import Server
 
 from . import ui
-from .core.vera_out_file import VeraOutFile
-from .core.vera_data import VeraDataRegistry
+from .core import VeraDataRegistry, VeraOutFile, VeraDataSource
 from .core.vera_data_stream import VirtualVeraDataStream, VeraDataStream
 
 # The user can set this via an environment variable
@@ -72,16 +71,6 @@ def main(server : Server | None | str = None, **kwargs):
             raise FileNotFoundError(f"{data_file} must be an exsisting path to a file")
         vera_out_file = VeraOutFile(data_file)
         registry.add_source(source=vera_out_file, source_id=file_path.stem)
-        test_path = "/Users/jonathansalem/Desktop/p9_copy.h5"
-        test_file = Path(test_path)
-        if not test_file.is_file():
-            raise FileNotFoundError(f"{test_path} must be an exsisting path to a file")
-        test_vera_out_file = VeraOutFile(test_path)
-        registry.add_source(source=test_vera_out_file, source_id=test_file.stem)
-        print(registry.default)
-        print(registry.full_core_keys())
-
-
 
     f = partial(_reload, registry=registry)
 
@@ -97,7 +86,6 @@ def main(server : Server | None | str = None, **kwargs):
     kwargs.setdefault("disable_logging", False)
 
     server.start(**kwargs)
-
 
 if __name__ == "__main__":
     main()

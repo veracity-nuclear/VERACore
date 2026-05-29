@@ -21,7 +21,9 @@ class VeraDataRegistry:
         self.add_source(VeraOutFile(path), source_id=name)
 
     @property
-    def default_source(self) -> VeraDataSource:
+    def default_source(self) -> VeraDataSource | None:
+        if self.default is None:
+            return None
         return self._sources[self.default]
     
     def get(self, source_id: str) -> VeraDataSource:
@@ -30,7 +32,12 @@ class VeraDataRegistry:
     def source_ids(self):
         return self._sources.keys()
     
-    def change_active_state(self, nstate: int):
+    def change_active_state(self, source_id : str, nstate : int):
+        if source_id not in self._sources:
+            raise ValueError(f"Could not find {source_id} in registry")
+        self._sources[source_id].active_state_index = nstate
+
+    def change_all_active_state(self, nstate: int):
         for source in self._sources.values():
             source.active_state_index = nstate
     

@@ -44,13 +44,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_assembly_view(**kwargs):
-        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+        selected_file = state[selected_file_key]
+        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
             return
         selected_time = state["selected_time"]
         selected_layer = int(state["selected_layer"])
         selected_assembly = int(state["selected_assembly"])
         selected_array = state[selected_array_key]
-        selected_file = state[selected_file_key]
         thres_key = format_label(selected_file, selected_array)
 
         thres = state["thresholds"]

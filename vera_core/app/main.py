@@ -15,12 +15,12 @@ from .core.vera_data_stream import VirtualVeraDataStream, VeraDataStream
 DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"
 
 
-def _reload(registry: VeraDataRegistry):
+def _reload(registry: VeraDataRegistry, state_queue : StateQueue):
     server = get_server()
     if server is None:
         return
     dev.reload(ui)
-    ui.initialize(server, registry)
+    ui.initialize(server, registry, state_queue)
 
 
 def main(server : Server | None | str = None, **kwargs):
@@ -59,7 +59,6 @@ def main(server : Server | None | str = None, **kwargs):
     registry : VeraDataRegistry = VeraDataRegistry()
 
     if stream_port is not None:
-        raise NotImplementedError("VeraDataStream is not fully implemented against VeraDataSource interface")
         vera_out_file = VeraDataStream(stream_port, state_queue)
         # this is a crude fix to prevent reads on empty states from the vera data stream
         # will fix change this
@@ -78,7 +77,7 @@ def main(server : Server | None | str = None, **kwargs):
     server.controller.on_server_reload.add(f)
 
     # Init application
-    ui.initialize(server, registry)
+    ui.initialize(server, registry, state_queue)
     @server.controller.add("on_server_ready")
     def start_stream(**kwargs):
         create_state_queue_monitor_task(server, raw_queue, delay=0.1)

@@ -2,9 +2,10 @@ import functools
 import numpy as np
 
 from trame_server.core import Server
+from trame.app.asynchronous import StateQueue
 from vera_core.app.core import VeraDataRegistry
 
-from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu
 from .layout import build_layout
 from .helpers import format_label, get_next_y_from_layout, array_range
 from .views import (
@@ -44,7 +45,7 @@ def _center_assembly(reduced_core_map):
     return int(reduced_core_map[i, j]) - 1
 
 
-def initialize(server: Server, registry: VeraDataRegistry):
+def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQueue):
     state, ctrl = server.state, server.controller
     state.trame__title = "VERACore"
 
@@ -62,6 +63,7 @@ def initialize(server: Server, registry: VeraDataRegistry):
     ThresholdMenu.register_threshold_state_ctrl(state, ctrl, registry)
     DeriveMenu.register_derived_state_ctrl(state, ctrl, registry)
     FileMenu.register_file_menu_state_ctrl(state, ctrl, registry)
+    StreamMenu.register_stream_menu_state_ctrl(state, ctrl, registry, state_queue)
 
     all_view_ids = [f"{v + 1}" for v in range(NUM_VIEW_SLOTS)]
     available_view_ids = list(all_view_ids)
@@ -79,6 +81,8 @@ def initialize(server: Server, registry: VeraDataRegistry):
 
     @requires_source
     def _recompute_card_range(view_id):
+        if state[f"selected_file_{view_id}"] != state.selected_ft_source:
+            return
         source = registry.get(state[f"selected_file_{view_id}"])
         if source is None:
             return
@@ -86,19 +90,29 @@ def initialize(server: Server, registry: VeraDataRegistry):
         state[f"color_range_{view_id}"] = array_range(array)
 
     # --- Data-dependent watchers (no-op until a source is loaded) ---
-    @state.change("selected_time")
+    @state.change("selected_time", "selected_ft_source")
     @requires_source
-    def selected_time_changed(selected_time, **kwargs):
+    def selected_time_changed(selected_time, selected_ft_source, **kwargs):
+        if selected_ft_source not in registry.source_ids():
+            return
         selected_time = int(selected_time)
-        registry.change_active_state(selected_time)
+        registry.change_active_state(selected_ft_source, selected_time)
         ctrl.on_vera_out_active_state_index_changed(
             selected_time=selected_time, **kwargs
         )
         # Normalize color scale to the current state.
         for view_id in all_view_ids:
             _recompute_card_range(view_id)
-        global_array = registry.get(state.selected_file).array(state.selected_array)
+        global_array = registry.get(selected_ft_source).array(state.selected_array)
         state.color_range = array_range(global_array)
+    
+    @state.change("selected_ft_source")
+    def selected_ft_source_changed(selected_ft_source, **kwargs):
+        if selected_ft_source not in registry.source_ids():
+            return
+        source = registry.get(selected_ft_source)
+        state.max_time = max(0, len(source.states) - 1)
+        print(state.max_time)
 
     @state.change("selected_array")
     @requires_source
@@ -203,6 +217,7 @@ def initialize(server: Server, registry: VeraDataRegistry):
         state.selected_file = default_id
         state.selected_array = "pin_powers"
         state.selected_layer = nz // 2
+        state.selected_ft_source = registry.default
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
         state.selected_j = (ny // 2) - (1 if ny // 2 >= 1 else 0)
         state.selected_assembly = _center_assembly(source.core.reduced_core_map)

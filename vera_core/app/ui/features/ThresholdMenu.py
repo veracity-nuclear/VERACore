@@ -5,7 +5,6 @@ from vera_core.app.core import VeraDataRegistry
 from ..helpers import format_label
 from .FileMenu import build_file_dataset_picker
 
-
 def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_threshold_dialog = False
     state.thresholds = {}

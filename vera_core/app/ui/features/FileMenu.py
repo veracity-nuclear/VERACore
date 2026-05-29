@@ -1,11 +1,14 @@
 from pathlib import Path
 from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
-from vera_core.app.core import VeraDataRegistry, VeraOutFile
+from vera_core.app.core import VeraDataRegistry, VeraOutFile, VeraDataStream
 
 file_menu_state_initialized = False
 
 def refresh_file_tree(state: State, registry : VeraDataRegistry):
+    if registry.default is not None and isinstance(registry.default_source, VeraDataStream):
+        while(len(registry.default_source.states) == 0):
+            pass
     state.file_tree = {
         fid: [{"text": k.replace("_", " ").title(), "value": k}
               for k in registry.get(fid).active_state_full_core_keys]

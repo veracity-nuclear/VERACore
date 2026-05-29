@@ -5,7 +5,7 @@ from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry
 
 from . import assets
-from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
@@ -34,6 +34,9 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
+    
+    with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
+        vuetify.VIcon("mdi-access-point")
 
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
@@ -101,6 +104,7 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
     # build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
+    StreamMenu.build_stream_dialog(ctrl)
 
     with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
         # Empty state: prompt the user to open a file.
@@ -126,6 +130,14 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
 def build_footer(ft):
     ft.clear()
     ft.height = 35
+    vuetify.VSelect(
+        v_model=("selected_ft_source", None),
+        items=("Object.keys(file_tree)",),
+        hide_details=True,
+        top = True,
+        dense=True,
+        style="max-width: 200px"
+    )
     with vuetify.VBtn(
         icon=True,
         small=True,

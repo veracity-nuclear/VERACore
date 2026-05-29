@@ -32,10 +32,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(selected_array_key, selected_file_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
-        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+        selected_file = state[selected_file_key]
+        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
             return
         selected_array = state[selected_array_key]
-        selected_file = state[selected_file_key]
         thres_key = format_label(selected_file, selected_array)
         selected_layer = int(state.selected_layer)
 

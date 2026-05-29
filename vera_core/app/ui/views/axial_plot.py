@@ -65,10 +65,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
-        if state[f"grid_view_{view_id}"]["name"] != option["name"]:
+        selected_file = state[selected_file_key]
+        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
             return
         selected_array = state[selected_array_key]
-        selected_file = state[selected_file_key]
         indices = (
             int(state.selected_j),
             int(state.selected_i),

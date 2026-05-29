@@ -315,9 +315,9 @@ class VeraOutState(LazyHDF5Loader):
             self.full_core_datasets = full_core_datasets
             self.scalar_datasets = scalar_datasets
             for key in self.full_core_datasets.keys():
-                setattr(self, key, self.full_core_datasets[key])
+                setattr(self, key, VeraDataset(self.full_core_datasets[key], VeraDatasetType.PIN))
             for key in self.scalar_datasets.keys():
-                setattr(self, key, self.scalar_datasets[key])
+                setattr(self, key, VeraDataset(self.scalar_datasets[key], VeraDatasetType.SCALAR))
         else:
             return ValueError("Must pass in filename or data parameters")
         self.diff_datasets = dict()

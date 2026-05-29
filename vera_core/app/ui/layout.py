@@ -29,19 +29,19 @@ def build_toolbar(tb, ctrl: Controller, registry):
     FileMenu.build_file_dataset_picker(ctrl, "global_label", "global_array_change", "[file, entry.value]")
     vuetify.VSpacer()
 
-    with vuetify.VBtn(icon=True, click="show_diff_dialog = true"):
+    with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-delta")
-    
-    with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
-                vuetify.VIcon("mdi-folder-open")
 
-    with vuetify.VBtn(icon=True, click="show_derived_dialog = true"):
+    with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
+        vuetify.VIcon("mdi-folder-open")
+
+    with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
 
-    with vuetify.VBtn(icon=True, click="show_threshold_dialog = true"):
+    with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")
 
-    with vuetify.VBtn(icon=True, click=ctrl.grid_add_view):
+    with vuetify.VBtn(icon=True, click=ctrl.grid_add_view, disabled=("!has_data",)):
         vuetify.VIcon("mdi-plus")
 
 
@@ -101,15 +101,28 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
     # build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
-    
+
     with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
-        with grid.GridLayout(layout=("grid_layout", []), 
-                             row_height=30, 
-                             vertical_compact=True, 
-                             style="width: 100%; height: 100%;"
+        # Empty state: prompt the user to open a file.
+        with html.Div(
+            v_if=("!has_data",),
+            classes="d-flex flex-column align-center justify-center",
+            style="width: 100%; height: 100%; gap: 12px;",
+        ):
+            html.Div("No file loaded.", classes="text-h6 text--secondary")
+            with vuetify.VBtn(color="primary", click=ctrl.open_file_dialog):
+                vuetify.VIcon("mdi-folder-open", left=True)
+                html.Span("Open File")
+
+        with grid.GridLayout(
+            v_if=("has_data",),
+            layout=("grid_layout", []),
+            row_height=30,
+            vertical_compact=True,
+            style="width: 100%; height: 100%;",
         ):
             build_grid_card(ctrl)
-            
+
 def build_footer(ft):
     ft.clear()
     ft.height = 35
@@ -148,9 +161,9 @@ def build_footer(ft):
 def build_layout(server : Server, state : State, ctrl : Controller, registry : VeraDataRegistry):
     with SinglePageLayout(server) as layout:
         layout.root.classes = ("{ busy: trame__busy }",)
-        with layout.toolbar as tb: 
+        with layout.toolbar as tb:
             build_toolbar(tb, ctrl, registry)
-        with layout.content:       
+        with layout.content:
             build_content(layout, state, ctrl, registry)
-        with layout.footer as ft:  
+        with layout.footer as ft:
             build_footer(ft)

@@ -22,7 +22,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
-    state[f"core_readout_{view_id}"] = {}
+    state[f"core_readout_{view_id}"] = {"values": []}
 
     selected_array_key = f"selected_array_{view_id}"
     selected_file_key = f"selected_file_{view_id}"

@@ -29,6 +29,13 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     state.derivation_presets = DERIVATION_PRESETS
     state.derivation_methods = DERIVATION_METHODS
 
+    @state.change("has_data")
+    def update_label(has_data, **kwargs):
+        if has_data and state.derived_source_file is None:
+            state.derived_source_file = registry.default
+            state.derived_source_array = "pin_powers"
+            state.derived_source_label = format_label(registry.default, "pin_powers")
+
     @ctrl.set("set_derived_source")
     def set_derived_source(file, array):
         print("in_set_derived_source")

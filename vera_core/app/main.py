@@ -65,7 +65,7 @@ def main(server : Server | None | str = None, **kwargs):
         # will fix change this
         while(len(vera_out_file.states) < 1):
             time.sleep(0.3)
-    else:
+    elif data_file is not None:
         file_path = Path(data_file)
         if not file_path.is_file():
             raise FileNotFoundError(f"{data_file} must be an exsisting path to a file")

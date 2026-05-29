@@ -44,7 +44,7 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             state.file_error = f"File not found: {raw_path}"
             return
         try:
-            source_id = raw_path
+            was_empty = registry.default is None
             registry.add_source(VeraOutFile(raw_path), source_id=pathobj.stem)
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
@@ -52,6 +52,8 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             state.file_path = ""
             state.file_error = ""
             state.show_file_dialog = False
+            if was_empty:
+                ctrl.activate_source()
         except Exception as e:
             state.file_error = f"Could not load: {e}"
 
@@ -105,12 +107,10 @@ def build_file_menu_dialog(ctrl: Controller):
                 with vuetify.VBtn(color="primary", click=ctrl.load_selected_file,
                                 disabled=("!file_path",)):
                     html.Span("Open")
+                with vuetify.VBtn(color="primary", click="show_file_dialog = false"):
+                    html.Span("Close")
 
             vuetify.VDivider()
-            with vuetify.VCardActions():
-                vuetify.VBtn("Open File", color="primary", disabled=("!file_to_open",), click=ctrl.load_selected_file)
-                vuetify.VSpacer()
-                vuetify.VBtn("Close", text=True, click="show_file_dialog = false")
 
 def _make_label(selected_label_arg: str):
     return html.Span(f"{{{{ get(`{selected_label_arg}`) }}}}")

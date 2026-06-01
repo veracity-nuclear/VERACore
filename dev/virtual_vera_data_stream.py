@@ -44,5 +44,6 @@ with h5py.File(args.filename, "r") as f:
                    "scalar_datasets" : scalar_datasets}}
         publisher.send(msgpack.packb(payload))
         print(f"Sent {state_key}")
-        time.sleep(1)
+        time.sleep(0.3)
 
+    

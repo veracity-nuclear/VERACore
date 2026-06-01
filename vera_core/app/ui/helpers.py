@@ -1,8 +1,6 @@
 import numpy as np
 
-from trame_server.core import State, Controller
-from trame.widgets import html, vuetify
-from vera_core.app.core import VeraDataRegistry
+from trame_server.core import State
 
 def format_label(file : str, key : str):
     return f"{file} | {key.replace('_', ' ').upper()}"
@@ -24,3 +22,6 @@ def get_next_y_from_layout(layout):
         if y + h > next_y:
             next_y = y + h
     return next_y
+
+def is_non_active_view(state : State, view_id : int, option : dict[str, str]) -> bool:
+    return state[f"grid_view_{view_id}"]["name"] != option["name"]

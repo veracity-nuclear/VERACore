@@ -6,12 +6,13 @@ from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource
-
+from ..helpers import is_non_active_view
 
 def option_for(view_id):
     return {
         "name": f"time_plot_{view_id}",
         "label": "Time Plot",
+        "multi_picker" : False,
         "icon": "mdi-chart-line",
     }
 
@@ -67,9 +68,9 @@ def initialize(server, registry : VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
-        selected_file = state[selected_file_key]
-        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
+        if is_non_active_view(state, view_id, option):
             return
+        selected_file = state[selected_file_key]
         selected_array = state[selected_array_key]
         indices = (
             int(state.selected_j),

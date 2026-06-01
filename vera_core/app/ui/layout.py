@@ -79,7 +79,8 @@ def build_grid_card(ctrl : Controller):
                                 vuetify.VIcon(v_text="option.icon")
                             vuetify.VListItemTitle("{{ option.label }}")
                 vuetify.VSpacer()
-                FileMenu.build_file_dataset_picker(ctrl, "selected_label_${item.i}", "pick_file_dataset", "[item.i, file, entry.value]")
+                with vuetify.Template(v_if=("!get(`grid_view_${item.i}`).multi_picker",)):
+                    FileMenu.build_file_dataset_picker(ctrl, "selected_label_${item.i}", "pick_file_dataset", "[item.i, file, entry.value]")
                 vuetify.VSpacer()
                 with vuetify.VBtn(
                     icon=True,
@@ -130,14 +131,6 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
 def build_footer(ft):
     ft.clear()
     ft.height = 35
-    vuetify.VSelect(
-        v_model=("selected_ft_source", None),
-        items=("Object.keys(file_tree)",),
-        hide_details=True,
-        top = True,
-        dense=True,
-        style="max-width: 200px"
-    )
     with vuetify.VBtn(
         icon=True,
         small=True,

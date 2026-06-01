@@ -81,8 +81,6 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
     @requires_source
     def _recompute_card_range(view_id):
-        if state[f"selected_file_{view_id}"] != state.selected_ft_source:
-            return
         source = registry.get(state[f"selected_file_{view_id}"])
         if source is None:
             return
@@ -90,30 +88,20 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state[f"color_range_{view_id}"] = array_range(array)
 
     # --- Data-dependent watchers (no-op until a source is loaded) ---
-    @state.change("selected_time", "selected_ft_source")
+    @state.change("selected_time")
     @requires_source
-    def selected_time_changed(selected_time, selected_ft_source, **kwargs):
-        if selected_ft_source not in registry.source_ids():
-            return
+    def selected_time_changed(selected_time, **kwargs):
         selected_time = int(selected_time)
-        registry.change_active_state(selected_ft_source, selected_time)
+        registry.change_all_active_state(selected_time)
         ctrl.on_vera_out_active_state_index_changed(
             selected_time=selected_time, **kwargs
         )
         # Normalize color scale to the current state.
         for view_id in all_view_ids:
             _recompute_card_range(view_id)
-        global_array = registry.get(selected_ft_source).array(state.selected_array)
+        global_array = registry.get(state.selected_file).array(state.selected_array)
         state.color_range = array_range(global_array)
     
-    @state.change("selected_ft_source")
-    def selected_ft_source_changed(selected_ft_source, **kwargs):
-        if selected_ft_source not in registry.source_ids():
-            return
-        source = registry.get(selected_ft_source)
-        state.max_time = max(0, len(source.states) - 1)
-        print(state.max_time)
-
     @state.change("selected_array")
     @requires_source
     def toolbar_array_changed(selected_array, **kwargs):
@@ -124,12 +112,14 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     @state.change("selected_assembly_ij")
     @requires_source
     def selected_assembly_ij_changed(selected_assembly_ij, **kwargs):
+        print("here")
         i, j = selected_assembly_ij["i"], selected_assembly_ij["j"]
         state.selected_assembly = registry.default_source.core.reduced_core_map_assembly(i, j)
 
     @state.change("selected_assembly")
     @requires_source
     def selected_assembly_changed(selected_assembly, **kwargs):
+        print("here2")
         i, j = registry.default_source.core.reduced_core_map_ij(int(selected_assembly))
         state.selected_assembly_ij = dict(i=i, j=j)
 
@@ -197,7 +187,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.grid_layout.append(dict(x=x, y=y, w=w, h=h, i=view_id))
         state[f"grid_view_{view_id}"] = module.option_for(view_id)
 
-    activation = {"done": False}
+    activation_done = False
 
     def activate_source():
         """Run the data-dependent setup once, when the first source exists.
@@ -205,7 +195,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         Invoked immediately when a file is supplied at startup, or by the file
         menu the first time a file is opened from the UI.
         """
-        if activation["done"] or not has_source():
+        nonlocal activation_done
+        if activation_done or not has_source():
             return
 
         source = registry.default_source
@@ -217,12 +208,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.selected_file = default_id
         state.selected_array = "pin_powers"
         state.selected_layer = nz // 2
-        state.selected_ft_source = registry.default
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
         state.selected_j = (ny // 2) - (1 if ny // 2 >= 1 else 0)
         state.selected_assembly = _center_assembly(source.core.reduced_core_map)
         state.color_range = array_range(array)
-        state.max_time = max(0, len(source.states) - 1)
+        state.max_time = registry.max_state
         state.selected_time = 0
 
         for view_id in all_view_ids:
@@ -242,7 +232,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.dirty("grid_layout")
 
         state.has_data = True
-        activation["done"] = True
+        activation_done = True
 
     ctrl.activate_source = activate_source
 

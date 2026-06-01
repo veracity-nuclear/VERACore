@@ -26,6 +26,12 @@ class VeraDataRegistry:
             return None
         return self._sources[self.default]
     
+    @property
+    def max_state(self) -> int:
+        if not self._sources:
+            return 0
+        return max(max(len(source.states) for source in self._sources.values()) - 1, 0)
+
     def get(self, source_id: str) -> VeraDataSource:
         return self._sources.get(source_id)
     

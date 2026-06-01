@@ -7,12 +7,13 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDatasetType, VeraDataSource
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label
+from ..helpers import format_label, is_non_active_view
 
 def option_for(view_id):
     return {
         "name": f"core_view_{view_id}",
         "label": "Core View",
+        "multi_picker" : False,
         "icon": "mdi-chart-pie",
     }
 
@@ -32,9 +33,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(selected_array_key, selected_file_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
-        selected_file = state[selected_file_key]
-        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
+        if is_non_active_view(state, view_id, option):
             return
+        selected_file = state[selected_file_key]
         selected_array = state[selected_array_key]
         thres_key = format_label(selected_file, selected_array)
         selected_layer = int(state.selected_layer)
@@ -51,6 +52,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         elif is_assembly_average:
             layer_array = array[selected_layer, :]
             state[f"core_readout_{view_id}"] = {"values": layer_array.tolist(),}
+        else:
+            # FIXME vvvvvvvvvvvvvvvv
+            raise RuntimeError("Core View logic for non 4d and non assembly averaged datasets unimplemented")
         
 
         thres = state["thresholds"]
@@ -77,7 +81,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     line.append(np.ravel(layer_array[index]).tolist())               
 
         state[core_assemblies_key] = result
-        # ... after building `result` and computing assembly_means for the avg case ...
         state[f"core_labels_{view_id}"] = labels
 
     with DivLayout(server, template_name=option["name"]) as layout:

@@ -1,5 +1,4 @@
 import string
-from enum import Enum
 from typing import Union
 
 import h5py
@@ -55,6 +54,7 @@ class VeraOutFile(VeraDataSource):
 
     @active_state_index.setter
     def active_state_index(self, index: int):
+        index = max(0, min(index, len(self._states) - 1))
         if hasattr(self, "_active_state_index"):
             if self._active_state_index == index:
                 return
@@ -64,30 +64,6 @@ class VeraOutFile(VeraDataSource):
 
         self._active_state_index = index
         self.active_state._cache_all()
-
-    def array(self, array_name: str, mask_reflected: bool = True) -> VeraDataset:
-        # Get the array with the name "array_name", either on the active state,
-        # or on the core.
-
-        # These are on the core
-        arrays_on_core = [
-            "pin_volumes",
-        ]
-        if array_name in arrays_on_core:
-            # This one is on the core
-            return getattr(self.core, array_name)
-
-        # If not on the core, assume it is on the active states.
-        ax, ay = self.core.reduced_core_map.shape        
-        array = getattr(self.active_state, array_name).copy()
-        has_reflected_pins = array.dataset_type == VeraDatasetType.PIN
-        if mask_reflected and has_reflected_pins and self.core.core_sym == 4 and array.ndim == 4: 
-            # this is a "lazy" approach to fixing qtr core sym, could switch to eager later if necessary
-            hpy = array.shape[0] // 2
-            hpx = array.shape[1] // 2
-            array[:hpy, :, :, :ax] = np.nan
-            array[:, :hpx, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
-        return array
     
     def add_new_diff_dataset(self, ref_array_name: str, comp_array_name: str, new_diff_name: str):
         for state in self._states:
@@ -319,7 +295,7 @@ class VeraOutState(LazyHDF5Loader):
             for key in self.scalar_datasets.keys():
                 setattr(self, key, VeraDataset(self.scalar_datasets[key], VeraDatasetType.SCALAR))
         else:
-            return ValueError("Must pass in filename or data parameters")
+            raise ValueError("Must pass in filename or data parameters")
         self.diff_datasets = dict()
         self.derived_datasets = dict()
 

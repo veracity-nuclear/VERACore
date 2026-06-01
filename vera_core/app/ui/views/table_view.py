@@ -4,12 +4,13 @@ from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource
-
+from ..helpers import is_non_active_view
 
 def option_for(view_id):
     return {
         "name": f"table_view_{view_id}",
         "label": "Table View",
+        "multi_picker" : False,
         "icon": "mdi-table",
     }
 
@@ -38,9 +39,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_table(**kwargs):
-        selected_file = state[selected_file_key]
-        if state[f"grid_view_{view_id}"]["name"] != option["name"] or state["selected_ft_source"] != selected_file:
+        if is_non_active_view(state, view_id, option):
             return
+        selected_file = state[selected_file_key]
         selected_array = state[selected_array_key]
         selected_assembly = int(state.selected_assembly)
         selected_layer = int(state.selected_layer)

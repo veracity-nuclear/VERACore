@@ -8,9 +8,9 @@ from .FileMenu import build_file_dataset_picker
 def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_threshold_dialog = False
     state.thresholds = {}
-    state.threshold_file = "pin_powers"
+    state.threshold_array = "pin_powers"
     state.threshold_file = registry.default
-    state.threshold_file = format_label(registry.default, "pin_powers")
+    state.threshold_label = format_label(registry.default, "pin_powers")
     state.threshold_value = None
     state.threshold_error = ""
     state.threshold_operator = ">"
@@ -18,13 +18,12 @@ def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: Ve
     @state.change("has_data")
     def update_thres_label(has_data, **kwargs):
         if has_data and state.threshold_file is None:
+            state.threshold_array = "pin_powers"
             state.threshold_file = registry.default
-            state.threshold_file = "pin_powers"
-            state.threshold_file = format_label(registry.default, "pin_powers")
+            state.threshold_label = format_label(registry.default, "pin_powers")
 
     @ctrl.set("set_threshold")
     def set_threshold(file : str, array : str):
-        print("in set threshold")
         state.threshold_array = array
         state.threshold_file = file
         state.threshold_label = format_label(file, array)

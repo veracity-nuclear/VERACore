@@ -1,11 +1,7 @@
-import copy
-
 import numpy as np
 
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPiecewiseFunction
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
-from vtkmodules.vtkInteractionWidgets import vtkOrientationMarkerWidget
-from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
 from vtkmodules.vtkRenderingCore import (
     vtkColorTransferFunction,
     vtkRenderer,
@@ -19,182 +15,110 @@ from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkSmartVolumeMapper
 import vtk.util.numpy_support as np_s
 
 from trame.ui.html import DivLayout
-from trame.widgets import vtk, vuetify
+from trame.widgets import vtk, vuetify, html
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource
+from vera_core.app.core import VeraDataRegistry
+from vera_core.widgets import vera
 
 
-# Single shared template; all volume cards render the same VTK view.
-SHARED_TEMPLATE_NAME = "volume_view"
+_OPACITY_POINTS = [
+    (-10.0, 1.0),
+    (-1e-20, 1.0),
+    (-5e-21, 0.0),
+    (5e-21, 0.0),
+    (1e-20, 1.0),
+    (10.0, 1.0),
+]
 
-_initialized = False
-_reset_camera_count = 0
+_COLOR_POINTS = [
+    (0.000000, 0.0, 0.0, 0.5625),
+    (0.216992, 0.0, 0.0, 1.0000),
+    (0.712975, 0.0, 1.0, 1.0000),
+    (0.960965, 0.5, 1.0, 0.5000),
+    (1.208960, 1.0, 1.0, 0.0000),
+    (1.704940, 1.0, 0.0, 0.0000),
+    (1.952930, 0.5, 0.0, 0.0000),
+]
 
+_views = {}
 
 def option_for(view_id):
-    # Same name for every card -> ServerTemplate resolves to the one shared template.
     return {
-        "name": SHARED_TEMPLATE_NAME,
+        "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
     }
 
 
-def initialize(server, registry : VeraDataRegistry, view_id):
-    state, ctrl = server.state, server.controller
+def _is_active(state, view_id):
+    option = state[f"grid_view_{view_id}"]
+    return bool(option) and option.get("name") == f"volume_view_{view_id}"
 
-    # Register the option in this card's menu (always).
-    option = option_for(view_id)
-    state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
 
-    # Build VTK pipeline and DivLayout only once.
-    global _initialized
-    if _initialized:
-        return
-    _initialized = True
-
+def _build_view(server, view_id):
+    """Construct one slot's VTK pipeline and template at startup."""
     ren = vtkRenderer()
+    ren.SetBackground(1, 1, 1)
     ren_win = vtkRenderWindow()
     ren_win.AddRenderer(ren)
     ren_win.OffScreenRenderingOn()
-    ren.SetBackground(1, 1, 1)
 
     iren = vtkRenderWindowInteractor()
     iren.SetInteractorStyle(vtkInteractorStyleTrackballCamera())
     iren.SetRenderWindow(ren_win)
 
-    axes = vtkAxesActor()
-    orientation_marker = vtkOrientationMarkerWidget()
-    orientation_marker.SetOrientationMarker(axes)
-    orientation_marker.SetInteractor(iren)
-    # orientation_marker.EnabledOn()
-    # orientation_marker.InteractiveOn()
+    opacity_fn = vtkPiecewiseFunction()
+    for point in _OPACITY_POINTS:
+        opacity_fn.AddPoint(*point)
 
-    opacity_points = [
-        (-10.0, 1),
-        (-0.00000000000000000001, 1),
-        (-0.000000000000000000005, 0.0),
-        (0.000000000000000000005, 0.0),
-        (0.00000000000000000001, 1),
-        (10.0, 1),
-    ]
-    opacity_transfer_function = vtkPiecewiseFunction()
-    for point in opacity_points:
-        opacity_transfer_function.AddPoint(*point)
-
-    original_color_points = [
-        (0.000000, 0.0, 0.0, 0.5625),
-        (0.216992, 0.0, 0.0, 1.0000),
-        (0.712975, 0.0, 1.0, 1.0000),
-        (0.960965, 0.5, 1.0, 0.5000),
-        (1.208960, 1.0, 1.0, 0.0000),
-        (1.704940, 1.0, 0.0, 0.0000),
-        (1.952930, 0.5, 0.0, 0.0000),
-    ]
-    color_transfer_function = vtkColorTransferFunction()
-    for point in original_color_points:
-        color_transfer_function.AddRGBPoint(*point)
+    color_fn = vtkColorTransferFunction()
+    for point in _COLOR_POINTS:
+        color_fn.AddRGBPoint(*point)
 
     volume_property = vtkVolumeProperty()
-    volume_property.SetColor(color_transfer_function)
-    volume_property.SetScalarOpacity(opacity_transfer_function)
+    volume_property.SetColor(color_fn)
+    volume_property.SetScalarOpacity(opacity_fn)
 
     volume_data = vtkImageData()
-    volume_mapper = vtkSmartVolumeMapper()
-    volume_mapper.SetInputData(volume_data)
+    mapper = vtkSmartVolumeMapper()
+    mapper.SetInputData(volume_data)
+    mapper.SetAutoAdjustSampleDistances(True)
 
     volume = vtkVolume()
-    volume.SetMapper(volume_mapper)
+    volume.SetMapper(mapper)
     volume.SetProperty(volume_property)
-
     ren.AddVolume(volume)
 
     ren.GetActiveCamera().Pitch(90)
     ren.GetActiveCamera().OrthogonalizeViewUp()
 
-    @state.change("color_range")
-    def update_color_points(color_range, **kwargs):
-        original_range = (original_color_points[0][0], original_color_points[-1][0])
-        new_color_points = copy.deepcopy(original_color_points)
-        for i, row in enumerate(new_color_points):
-            new_value = np.interp(row[0], original_range, color_range)
-            new_color_points[i] = (new_value, *row[1:])
-
-        color_transfer_function.RemoveAllPoints()
-        for point in new_color_points:
-            color_transfer_function.AddRGBPoint(*point)
-
-        ren_win.Render()
-        ctrl.view_update()
-
-    @state.change("selected_array", "selected_file")
-    @ctrl.add("on_vera_out_active_state_index_changed")
-    def update_volume_view(selected_array, **kwargs):
-        global _reset_camera_count
-        vera_out_file = registry.get(state.selected_file)
-        array = vera_out_file.array(selected_array)
-
-        assembly_shape = array.shape[:2]
-        reduced_core_map = vera_out_file.core.reduced_core_map
-        reduced_map_shape = reduced_core_map.shape
-        expanded_core_shape = (
-            reduced_map_shape[0] * assembly_shape[0],
-            reduced_map_shape[1] * assembly_shape[1],
-        )
-        volume_shape = (*expanded_core_shape, array.shape[2])
-        volume_array = np.zeros(volume_shape, dtype=array.dtype)
-
-        for assembly_id in range(array.shape[3]):
-            target = assembly_id + 1
-            rows, cols = np.where(reduced_core_map == target)
-            if len(rows) == 0:
-                continue
-            if len(rows) > 1:
-                raise ValueError(
-                    f"Assembly {target} appears multiple times in reduced_core_map. "
-                    f"Expected exactly one match, found {len(rows)}."
-                )
-            core_row = int(rows[0])
-            core_col = int(cols[0])
-            row_range = (
-                core_row * assembly_shape[0],
-                (core_row + 1) * assembly_shape[0],
+    ctx = {
+        "ren": ren,
+        "ren_win": ren_win,
+        "iren": iren,
+        "color_fn": color_fn,
+        "volume_data": volume_data,
+        "reset_count": 0,
+        "view_update": lambda: None,
+        "reset_camera": lambda: None,
+    }
+    _views[view_id] = ctx
+    with DivLayout(server, template_name=f"volume_view_{view_id}") as layout:
+        layout.root.style = "height: 100%; display: flex; flex-direction: row;"
+        with html.Div(style=(
+            "flex: 1; min-width: 0;"
+            "display: flex; flex-direction: column;"
+        )):
+            with html.Div(style="flex: 1; min-height: 0; position: relative;"):
+                html_view = vtk.VtkRemoteView(
+                ren_win,
+                ref=f"volume_view_{view_id}",
+                interactive_ratio=2,
+                interactive_quality=40,
+                still_quality=90,
             )
-            col_range = (
-                core_col * assembly_shape[1],
-                (core_col + 1) * assembly_shape[1],
-            )
-            volume_array[slice(*row_range), slice(*col_range)] = array[:, :, :, assembly_id]
-
-        axial_mesh_pixels = vera_out_file.core.axial_mesh_pixels
-        volume_array = np.repeat(volume_array, axial_mesh_pixels, axis=2)
-
-        raveled = volume_array.copy().transpose(2, 1, 0).ravel()
-        vtk_array = np_s.numpy_to_vtk(raveled, deep=True)
-
-        volume_data.SetDimensions(*volume_array.shape)
-        pd = volume_data.GetPointData()
-        while pd.GetNumberOfArrays() > 0:
-            pd.RemoveArray(0)
-        pd.SetScalars(vtk_array)
-        volume_data.Modified()
-
-        if _reset_camera_count < 2:
-            ren.ResetCameraClippingRange()
-            ren.ResetCamera()
-            _reset_camera_count += 1
-            ctrl.reset_camera()
-
-        ctrl.view_update()
-
-        # Keep orientation_marker reference alive.
-        om = orientation_marker  # noqa
-
-    with DivLayout(server, template_name=SHARED_TEMPLATE_NAME) as layout:
-        layout.root.style = "height: 100%;"
-        html_view = vtk.VtkRemoteView(ren_win, ref="volume_view")
-        ctrl.reset_camera = html_view.reset_camera
-        ctrl.view_update = html_view.update
+            ctx["view_update"] = html_view.update
+            ctx["reset_camera"] = html_view.reset_camera
 
         with vuetify.VBtn(
             icon=True,
@@ -204,3 +128,123 @@ def initialize(server, registry : VeraDataRegistry, view_id):
             small=True,
         ):
             vuetify.VIcon("mdi-crop-free", small=True)
+
+        with html.Div(style=(
+            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+            "display: flex; align-self: stretch;"
+        )):
+            vera.VerticalColorMapEditor(
+                v_model=f"color_range_{view_id}",
+                color_preset="jet",
+            )
+
+    return ctx
+
+def _update_volume(server, registry, view_id):
+    state = server.state
+    ctx = _views.get(view_id)
+    if ctx is None or not _is_active(state, view_id):
+        return
+    src_id = state[f"selected_src_id_{view_id}"]
+    array_name = state[f"selected_array_{view_id}"]
+    vera_out_file = registry.get(src_id)
+    if vera_out_file is None or not array_name:
+        return
+    array = vera_out_file.array(array_name)
+    core = vera_out_file.core
+
+    assembly_shape = array.shape[:2]
+    reduced_core_map = core.reduced_core_map
+    expanded_core_shape = (
+        reduced_core_map.shape[0] * assembly_shape[0],
+        reduced_core_map.shape[1] * assembly_shape[1],
+    )
+    volume_shape = (*expanded_core_shape, array.shape[2])
+    volume_array = np.zeros(volume_shape, dtype=np.float32)
+
+    for assembly_id in range(array.shape[3]):
+        rows, cols = np.where(reduced_core_map == assembly_id + 1)
+        if len(rows) == 0:
+            continue
+        if len(rows) > 1:
+            raise ValueError(
+                f"Assembly {assembly_id + 1} appears multiple times in "
+                f"reduced_core_map; expected one match, found {len(rows)}."
+            )
+        core_row, core_col = int(rows[0]), int(cols[0])
+        row_slice = slice(core_row * assembly_shape[0], (core_row + 1) * assembly_shape[0])
+        col_slice = slice(core_col * assembly_shape[1], (core_col + 1) * assembly_shape[1])
+        volume_array[row_slice, col_slice] = array[:, :, :, assembly_id]
+
+    volume_array = np.repeat(volume_array, core.axial_mesh_pixels, axis=2)
+
+    scalars = volume_array.transpose(2, 1, 0).ravel()   # single contiguous copy
+    vtk_array = np_s.numpy_to_vtk(scalars, deep=True)
+
+    volume_data = ctx["volume_data"]
+    volume_data.SetDimensions(*volume_array.shape)
+    pd = volume_data.GetPointData()
+    while pd.GetNumberOfArrays() > 0:
+        pd.RemoveArray(0)
+    pd.SetScalars(vtk_array)
+    volume_data.Modified()
+
+    if ctx["reset_count"] < 2:
+        ctx["ren"].ResetCameraClippingRange()
+        ctx["ren"].ResetCamera()
+        ctx["reset_count"] += 1
+        ctx["reset_camera"]()
+
+    ctx["view_update"]()
+
+
+def _update_color(server, view_id):
+    state = server.state
+    ctx = _views.get(view_id)
+    if ctx is None or not _is_active(state, view_id):
+        return
+
+    color_range = state[f"color_range_{view_id}"]
+    original_range = (_COLOR_POINTS[0][0], _COLOR_POINTS[-1][0])
+    color_fn = ctx["color_fn"]
+    color_fn.RemoveAllPoints()
+    for row in _COLOR_POINTS:
+        new_value = np.interp(row[0], original_range, color_range)
+        color_fn.AddRGBPoint(new_value, *row[1:])
+
+    ctx["ren_win"].Render()
+    ctx["view_update"]()
+ 
+def initialize(server, registry: VeraDataRegistry, view_id):
+    state, ctrl = server.state, server.controller
+
+    option = option_for(view_id)
+    state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
+    _build_view(server, view_id)
+
+    @ctrl.add(f"reset_volume_{view_id}_camera")
+    def _reset(*args, **kwargs):
+        ctx = _views.get(view_id)
+        if ctx is None:
+            return
+        ctx["ren"].ResetCameraClippingRange()
+        ctx["ren"].ResetCamera()
+        ctx["reset_camera"]()
+        ctx["view_update"]()
+
+    @state.change(f"grid_view_{view_id}")
+    def _on_slot_changed(**kwargs):
+        if _is_active(state, view_id):
+            _update_volume(server, registry, view_id)
+
+    @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}")
+    def _on_selection_changed(**kwargs):
+        _update_volume(server, registry, view_id)
+
+    @state.change(f"color_range_{view_id}")
+    def _on_color_changed(**kwargs):
+        _update_color(server, view_id)
+
+    @ctrl.add("on_vera_out_active_state_index_changed")
+    def _on_state_index_changed(**kwargs):
+        _update_volume(server, registry, view_id)

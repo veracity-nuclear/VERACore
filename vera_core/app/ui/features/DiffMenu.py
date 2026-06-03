@@ -1,6 +1,7 @@
 from trame.widgets import vuetify
 from vera_core.app.core import VeraDataRegistry
-from .FileMenu import refresh_file_tree
+from .DatasetPicker import refresh_src_tree
+
 def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     state.setdefault("show_diff_dialog", False)
     state.setdefault("diff_name", "")
@@ -12,7 +13,7 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     def create_diff_dataset():
         state.show_diff_dialog = False
         registry.default_source.add_new_diff_dataset(state["diff_array_a"], state["diff_array_b"], state["diff_name"])
-        refresh_file_tree(state, registry)
+        refresh_src_tree(state, registry)
 
 def build_diff_dialog(state, ctrl, registry):
     with vuetify.VDialog(v_model=("show_diff_dialog",), max_width=480, persistent=True):

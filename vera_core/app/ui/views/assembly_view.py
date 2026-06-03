@@ -29,14 +29,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     cached_assembly_images = {}
 
     selected_array_key = f"selected_array_{view_id}"
-    selected_file_key = f"selected_file_{view_id}"
+    selected_src_key = f"selected_src_id_{view_id}"
     assembly_array = f"assembly_array_{view_id}"
     state.setdefault(assembly_array, [])
 
     @state.change(
         "assembly_view_size",
         selected_array_key,
-        selected_file_key,
+        selected_src_key,
         "selected_assembly",
         "selected_layer",
         "color_range",
@@ -47,12 +47,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_assembly_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_file = state[selected_file_key]
+        selected_src_id = state[selected_src_key]
         selected_time = state["selected_time"]
         selected_layer = int(state["selected_layer"])
         selected_assembly = int(state["selected_assembly"])
         selected_array = state[selected_array_key]
-        thres_key = format_label(selected_file, selected_array)
+        thres_key = format_label(selected_src_id, selected_array)
 
         thres = state["thresholds"]
         thres_hash = 0
@@ -63,7 +63,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         
 
         # Extract from cache if possible
-        cache_key = (selected_time, selected_array, selected_assembly, selected_layer, thres_hash, selected_file)
+        cache_key = (selected_time, selected_array, selected_assembly, selected_layer, thres_hash, selected_src_id)
         if cache_key in cached_assembly_images:
             # Shortcut if we have a cache. We might still need to redraw
             # if the figure size was updated.
@@ -71,7 +71,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # Extract data from H5 + add to cache
         if image_data is None:
-            vera_source : VeraDataSource = registry.get(selected_file)
+            vera_source : VeraDataSource = registry.get(selected_src_id)
             array = vera_source.array(selected_array)
             image_data = array[:, :, selected_layer, selected_assembly].copy()
             if thres.get(thres_key):

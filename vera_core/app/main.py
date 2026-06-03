@@ -1,4 +1,4 @@
-import os, time
+import os, time, sys
 from functools import partial
 from pathlib import Path
 from multiprocessing import Queue
@@ -13,6 +13,8 @@ from .core.vera_data_stream import VirtualVeraDataStream, VeraDataStream
 
 # The user can set this via an environment variable
 DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"
+import faulthandler, signal
+faulthandler.register(signal.SIGUSR1, all_threads=True)
 
 
 def _reload(registry: VeraDataRegistry, state_queue : StateQueue):
@@ -69,7 +71,7 @@ def main(server : Server | None | str = None, **kwargs):
         if not file_path.is_file():
             raise FileNotFoundError(f"{data_file} must be an exsisting path to a file")
         vera_out_file = VeraOutFile(data_file)
-        registry.add_source(source=vera_out_file, source_id=file_path.stem)
+        registry.add_src(src=vera_out_file, src_id=file_path.stem)
 
     f = partial(_reload, registry=registry)
 
@@ -81,6 +83,7 @@ def main(server : Server | None | str = None, **kwargs):
     @server.controller.add("on_server_ready")
     def start_stream(**kwargs):
         create_state_queue_monitor_task(server, raw_queue, delay=0.1)
+    
     # Start server
     kwargs.setdefault("disable_logging", False)
 

@@ -23,7 +23,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
 
     selected_array_key = f"selected_array_{view_id}"
-    selected_file_key = f"selected_file_{view_id}"
+    selected_src_key = f"selected_src_id_{view_id}"
 
     core_key = f"y_axial_core_{view_id}"
     size_x_key = f"y_axial_core_size_x_{view_id}"
@@ -32,8 +32,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     label_y_key = f"y_axial_core_label_y_{view_id}"
 
     # Convert these to 1-based indexing.
-    start_x = registry.default_source.core.reduced_core_map_start_index + 1
-    stop_x = len(registry.default_source.core.core_map) + 1
+    start_x = registry.default_src.core.reduced_core_map_start_index + 1
+    stop_x = len(registry.default_src.core.core_map) + 1
 
     state.setdefault(core_key, [])
     state.setdefault(size_x_key, [])
@@ -43,8 +43,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     def axial_cell_selected(layer, assembly_j):
         assembly_i = state.selected_assembly_ij["i"]
-        selected_file = state[selected_file_key]
-        vera_source = registry.get(selected_file)
+        selected_src_id = state[selected_src_key]
+        vera_source = registry.get(selected_src_id)
         state.selected_assembly = vera_source.core.reduced_core_map_assembly(
             assembly_i, assembly_j
         )
@@ -52,7 +52,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @state.change(
         selected_array_key,
-        selected_file_key,
+        selected_src_key,
         "selected_assembly",
         "selected_i",
         f"grid_view_{view_id}"
@@ -61,12 +61,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_axial_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_file = state[selected_file_key]
+        selected_src_id = state[selected_src_key]
         selected_array = state[selected_array_key]
         selected_assembly = int(state.selected_assembly)
         selected_i = int(state.selected_i)
 
-        vera_source = registry.get(selected_file)
+        vera_source = registry.get(selected_src_id)
 
         col_assembly_indices = vera_source.core.col_assembly_indices(
             selected_assembly

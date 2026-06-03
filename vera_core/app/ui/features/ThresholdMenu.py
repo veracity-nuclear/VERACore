@@ -3,14 +3,14 @@ from trame_server.core import State, Controller
 
 from vera_core.app.core import VeraDataRegistry
 from ..helpers import format_label
-from .FileMenu import build_file_dataset_picker
+from .DatasetPicker import build_dataset_picker
 
 def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_threshold_dialog = False
     state.thresholds = {}
     state.threshold_array = "pin_powers"
-    state.threshold_file = registry.default
-    state.threshold_label = format_label(registry.default, "pin_powers")
+    state.threshold_file = registry.default_src_id
+    state.threshold_label = format_label(registry.default_src_id, "pin_powers")
     state.threshold_value = None
     state.threshold_error = ""
     state.threshold_operator = ">"
@@ -19,8 +19,8 @@ def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: Ve
     def update_thres_label(has_data, **kwargs):
         if has_data and state.threshold_file is None:
             state.threshold_array = "pin_powers"
-            state.threshold_file = registry.default
-            state.threshold_label = format_label(registry.default, "pin_powers")
+            state.threshold_file = registry.default_src_id
+            state.threshold_label = format_label(registry.default_src_id, "pin_powers")
 
     @ctrl.set("set_threshold")
     def set_threshold(file : str, array : str):
@@ -54,7 +54,7 @@ def build_threshold_dialog(ctrl : Controller):
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
                 with html.Div(classes="d-flex align-center", style="gap: 8px;"):
-                    build_file_dataset_picker(ctrl, "threshold_label", "set_threshold", "[file, entry.value]")
+                    build_dataset_picker(ctrl, "threshold_label", "set_threshold", "[src, entry.value]")
                     with vuetify.VCol(cols="auto", classes="pl-2"):
                         vuetify.VSelect(
                             v_model=("threshold_operator",),

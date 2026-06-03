@@ -26,21 +26,21 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state[f"core_readout_{view_id}"] = {"values": []}
 
     selected_array_key = f"selected_array_{view_id}"
-    selected_file_key = f"selected_file_{view_id}"
+    selected_src_key = f"selected_src_id_{view_id}"
     core_assemblies_key = f"core_assemblies_{view_id}"
     state.setdefault(core_assemblies_key, [])
 
-    @state.change(selected_array_key, selected_file_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
+    @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_file = state[selected_file_key]
+        selected_src_id = state[selected_src_key]
         selected_array = state[selected_array_key]
-        thres_key = format_label(selected_file, selected_array)
+        thres_key = format_label(selected_src_id, selected_array)
         selected_layer = int(state.selected_layer)
 
-        vera_source : VeraDataSource = registry.get(selected_file)
+        vera_source : VeraDataSource = registry.get(selected_src_id)
         array = vera_source.array(selected_array)
         is_assembly_average = array.dataset_type == VeraDatasetType.ASSEMBLY 
         if array.ndim == 4:

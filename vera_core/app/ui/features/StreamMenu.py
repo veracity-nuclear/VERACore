@@ -5,7 +5,7 @@ from trame.app.asynchronous import StateQueue
 
 from vera_core.app.core import VeraDataRegistry
 from vera_core.app.core import VeraDataStream, generate_stream_identifier
-from .FileMenu import refresh_file_tree
+from .DatasetPicker import refresh_src_tree
 
 stream_menu_state_initialized = False
 
@@ -20,13 +20,13 @@ def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: Ve
     def _make_stream_watcher(stream_source_name, stream_source):
         @state.change(generate_stream_identifier(stream_source_name))
         def _on_stream_data_ready(**kwargs):
-            if stream_source_name in registry.source_ids():
+            if stream_source_name in registry.src_ids():
                 return
-            was_empty = registry.default is None
-            registry.add_source(stream_source , stream_source_name)
-            refresh_file_tree(state, registry)
+            was_empty = registry.default_src_id is None
+            registry.add_src(stream_source , stream_source_name)
+            refresh_src_tree(state, registry)
             if was_empty:
-                ctrl.activate_source()
+                ctrl.activate_src()
             state.stream_connecting = False
             state.show_stream_dialog = False
             state.stream_port = None
@@ -34,7 +34,7 @@ def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: Ve
 
         @state.change(f"{generate_stream_identifier(stream_source_name)}_state_count")
         def _on_state_recieved(**kwargs):
-            if stream_source_name not in registry.source_ids():
+            if stream_source_name not in registry.src_ids():
                 return
             if registry.max_state > state.max_time:
                 state.max_time = registry.max_state

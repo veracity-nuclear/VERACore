@@ -1,25 +1,33 @@
 from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
 from vera_core.app.core import VeraDataRegistry, VeraDerivation
-from .FileMenu import build_file_dataset_picker, refresh_file_tree
+from .DatasetPicker import build_dataset_picker, refresh_src_tree
 from ..helpers import format_label
+
+"""
+Commented out derivation presets and methods need to be implemented
+"""
 
 DERIVATION_PRESETS = [
     {"text": "Assembly", "value": "ASSEMBLY"},
-    {"text": "Axial", "value": "AXIAL"},
-    {"text": "Radial", "value": "RADIAL"},
-    {"text": "Core", "value": "CORE"},
-    {"text": "Node", "value": "NODE"},
-    {"text": "Radial Assembly", "value": "RADIAL_ASSEMBLY"},
-    {"text": "Radial Node", "value": "RADIAL_NODE"},
+    # {"text": "Axial", "value": "AXIAL"},
+    # {"text": "Radial", "value": "RADIAL"},
+    # {"text": "Core", "value": "CORE"},
+    # {"text": "Node", "value": "NODE"},
+    # {"text": "Radial Assembly", "value": "RADIAL_ASSEMBLY"},
+    # {"text": "Radial Node", "value": "RADIAL_NODE"},
 ]
-DERIVATION_METHODS = ["Average", "Sum", "Min", "Max"]  # placeholder
+DERIVATION_METHODS = ["Average", 
+                    #   "Sum", 
+                    #   "Min", 
+                    #   "Max"
+                      ] 
 
 def register_derived_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
     state.show_derived_dialog = False
     state.derived_source_array = "pin_powers"
-    state.derived_source_file = registry.default
-    state.derived_source_label = format_label(registry.default, "pin_powers")
+    state.derived_source_file = registry.default_src_id
+    state.derived_source_label = format_label(registry.default_src_id, "pin_powers")
     state.derived_preset = "ASSEMBLY"
     state.derived_method = "Average"
     state.derived_use_factors = True
@@ -32,9 +40,9 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     @state.change("has_data")
     def update_label(has_data, **kwargs):
         if has_data and state.derived_source_file is None:
-            state.derived_source_file = registry.default
+            state.derived_source_file = registry.default_src_id
             state.derived_source_array = "pin_powers"
-            state.derived_source_label = format_label(registry.default, "pin_powers")
+            state.derived_source_label = format_label(registry.default_src_id, "pin_powers")
 
     @ctrl.set("set_derived_source")
     def set_derived_source(file, array):
@@ -47,7 +55,7 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     def create_derived_dataset():
         try:
             registry.get(state["derived_source_file"]).add_new_derived_dataset(state["derived_source_array"], state["derived_name"], VeraDerivation[state["derived_preset"]])
-            refresh_file_tree(state, registry)
+            refresh_src_tree(state, registry)
         except Exception as e:
             print(e)
             state.derived_error = "Something went wrong"
@@ -56,11 +64,11 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     def create_derived_dataset_and_close():
         try:
             registry.get(state["derived_source_file"]).add_new_derived_dataset(state["derived_source_array"], state["derived_name"], VeraDerivation[state["derived_preset"]])
-            refresh_file_tree(state, registry)
+            refresh_src_tree(state, registry)
             state.show_derived_dialog = False
             state.derived_source_array = "pin_powers"
-            state.derived_source_file = registry.default
-            state.derived_source_label = format_label(registry.default, "pin_powers")
+            state.derived_source_file = registry.default_src_id
+            state.derived_source_label = format_label(registry.default_src_id, "pin_powers")
         except Exception as e:
             print(e)
             state.derived_error = "Something went wrong"
@@ -73,7 +81,7 @@ def build_derived_dialog(state, ctrl, registry):
             with vuetify.VCardText(classes="pt-4"):
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
                     html.Div("1. Select Dataset", classes="text-caption font-weight-medium mb-2")
-                    build_file_dataset_picker(ctrl, "derived_source_label", "set_derived_source", "[file, entry.value]")
+                    build_dataset_picker(ctrl, "derived_source_label", "set_derived_source", "[src, entry.value]")
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
                     html.Div("2. Select Axes Over Which to Derive", classes="text-caption font-weight-medium mb-2")
                     vuetify.VSelect(

@@ -22,7 +22,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
 
     selected_array_key = f"selected_array_{view_id}"
-    selected_file_key = f"selected_file_{view_id}"
+    selected_src_key = f"selected_src_id_{view_id}"
     headers_key = f"table_view_headers_{view_id}"
     rows_key = f"table_view_rows_{view_id}"
     state.setdefault(headers_key, [])
@@ -30,7 +30,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @state.change(
         selected_array_key,
-        selected_file_key,
+        selected_src_key,
         "selected_assembly",
         "selected_layer",
         "selected_i",
@@ -41,7 +41,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_table(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_file = state[selected_file_key]
+        selected_src_id = state[selected_src_key]
         selected_array = state[selected_array_key]
         selected_assembly = int(state.selected_assembly)
         selected_layer = int(state.selected_layer)
@@ -49,7 +49,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_j = int(state.selected_j)
 
         indices = (selected_j, selected_i, selected_layer, selected_assembly)
-        vera_source : VeraDataSource = registry.get(selected_file)
+        vera_source : VeraDataSource = registry.get(selected_src_id)
         array = vera_source.array(selected_array)
         value = array[indices]
 

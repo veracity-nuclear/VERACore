@@ -5,14 +5,12 @@ from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry
 
 from . import assets
-from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
     tb.height = 36
     html.Img(src=assets.LOGO, height=25)
-    vuetify.VSpacer()
-    vera.ColorMapEditor(v_model="color_range", color_preset="jet")
     vuetify.VSpacer()
     with html.Div(style="width: 25px", classes="mr-2"):
         vuetify.VProgressCircular(
@@ -26,11 +24,7 @@ def build_toolbar(tb, ctrl: Controller, registry):
             width=3,
         )
 
-    FileMenu.build_file_dataset_picker(ctrl, "global_label", "global_array_change", "[file, entry.value]")
     vuetify.VSpacer()
-
-    with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
-        vuetify.VIcon("mdi-delta")
 
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
@@ -43,6 +37,13 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")
+    
+    # FIXME this is btn for opening up the menu for creating difference datasets. 
+    # Interpolation between datasets with different axial meshes not handled yet so button is not displayed.
+    # vvvvv
+
+    # with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
+    #     vuetify.VIcon("mdi-delta")
 
     with vuetify.VBtn(icon=True, click=ctrl.grid_add_view, disabled=("!has_data",)):
         vuetify.VIcon("mdi-plus")
@@ -80,7 +81,15 @@ def build_grid_card(ctrl : Controller):
                             vuetify.VListItemTitle("{{ option.label }}")
                 vuetify.VSpacer()
                 with vuetify.Template(v_if=("!get(`grid_view_${item.i}`).multi_picker",)):
-                    FileMenu.build_file_dataset_picker(ctrl, "selected_label_${item.i}", "pick_file_dataset", "[item.i, file, entry.value]")
+                    DatasetPicker.build_dataset_picker(ctrl, "selected_label_${item.i}", "select_dataset", "[item.i, src, entry.value]")
+                with vuetify.Template(v_if=("get(`grid_view_${item.i}`).multi_picker",)):
+                    DatasetPicker.build_dataset_multi_picker(
+                        ctrl,
+                        "multi_label_${item.i}",
+                        "multi_selected_${item.i}",
+                        "toggle_multi_array",
+                        "[item.i, src, entry.value]",
+                    )
                 vuetify.VSpacer()
                 with vuetify.VBtn(
                     icon=True,
@@ -102,6 +111,7 @@ def build_grid_card(ctrl : Controller):
 def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRegistry):
     layout.content.style = "overflow: auto; margin: 36px 0px 35px; padding: 0;"
     DeriveMenu.build_derived_dialog(state, ctrl, registry)
+    # FIXME vvvv
     # build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)

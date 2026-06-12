@@ -1,7 +1,7 @@
 # .github/workflows/build_installables.yml
 # Builds the PyInstaller app on macOS (arm64 & Intel).
 
-name: build
+name: build_macos
 
 on:
   workflow_dispatch:

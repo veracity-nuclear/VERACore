@@ -1,7 +1,7 @@
 # .github/workflows/build_installables.yml
 # Builds the PyInstaller app on Windows
 
-name: build
+name: build_windows
 
 on:
   workflow_dispatch:

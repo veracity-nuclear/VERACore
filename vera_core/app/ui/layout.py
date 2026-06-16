@@ -102,6 +102,16 @@ def build_grid_card(ctrl : Controller):
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
+                    click="set(`locked_${item.i}`, !get(`locked_${item.i}`))",
+                ):
+                    vuetify.VIcon(
+                        v_text="get(`locked_${item.i}`) ? 'mdi-lock' : 'mdi-lock-open-variant'",
+                        small=True,
+                    )
+                vuetify.VSpacer()
+                with vuetify.VBtn(
+                    icon=True,
+                    x_small=True,
                     click=(ctrl.grid_remove_view, "[item.i]"),
                 ):
                     vuetify.VIcon("mdi-delete-forever-outline", small=True)

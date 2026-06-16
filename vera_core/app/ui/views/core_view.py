@@ -7,7 +7,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label, is_non_active_view
+from ..helpers import format_label, is_non_active_view, set_info
 
 def option_for(view_id):
     return {
@@ -30,10 +30,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_src_key = f"selected_src_id_{view_id}"
     core_assemblies_key = f"core_assemblies_{view_id}"
     aspect_ratio_key = f"aspect_ratio_{view_id}"
+    lock_flag = f"locked_{view_id}"
+    info = f"lock_info_{view_id}"
+
     state.setdefault(core_assemblies_key, [])
     state.setdefault(aspect_ratio_key, 1)
+    
 
-    @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}")
+    @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
         if is_non_active_view(state, view_id, option):
@@ -91,9 +95,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     labels_line.append(np.round(layer_array[index], 2))
                 else:
                     line.append(np.ravel(layer_array[index]).tolist())               
-
         state[core_assemblies_key] = result
         state[f"core_labels_{view_id}"] = labels
+        set_info(state, vera_source, view_id)
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -119,6 +123,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 f" ? core_readout_{view_id}.values[selected_assembly] : '' }}}}",
                 classes="text-caption text-center",
                 style="flex: 0 0 auto; padding: 4px 0;",
+            )
+            html.Div(
+                "Exposure {{ " + info + ".Exposure }}"
+                " · ({{ " + info + ".Assembly }})"
+                " · Axial - {{ " + info + ".Layer }}",
+                classes="text-caption text-center",
             )
         with html.Div(style=(
             "flex: 0 0 auto; width: 70px; padding: 4px 0;"

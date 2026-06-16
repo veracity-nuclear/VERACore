@@ -24,8 +24,20 @@ def get_next_y_from_layout(layout):
             next_y = y + h
     return next_y
 
+def is_view_locked(state, view_id):
+    return bool(state[f"locked_{view_id}"])
+
 def is_non_active_view(state : State, view_id : int, option : dict[str, str]) -> bool:
-    return state[f"grid_view_{view_id}"]["name"] != option["name"]
+    return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
+
+def set_info(state : State, vera_source : VeraDataSource, view_id : int):
+    state[f"lock_info_{view_id}"] = {
+            "Exposure": np.round(vera_source.active_state.exposure[0], decimals=3),
+            "Assembly": vera_source.core.reduced_core_map_label(state.selected_assembly),
+            "Layer": vera_source.core.axial_mesh_means[state.selected_layer],
+            "Pin_x" : int(state.selected_i),
+            "Pin_y" : int(state.selected_j),
+        }
 
 def make_safe_index(selected_j, 
                     selected_i, 

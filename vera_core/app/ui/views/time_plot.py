@@ -99,6 +99,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_i",
         "selected_j",
         f"grid_view_{view_id}",
+        f"locked_{view_id}",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):

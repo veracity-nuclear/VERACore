@@ -5,7 +5,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label, is_non_active_view, make_safe_index
+from ..helpers import format_label, is_non_active_view, make_safe_index, set_info
 
 
 def option_for(view_id):
@@ -33,6 +33,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_src_key = f"selected_src_id_{view_id}"
     assembly_array = f"assembly_array_{view_id}"
     state.setdefault(assembly_array, [])
+    info = f"lock_info_{view_id}"
+
 
     @state.change(
         "assembly_view_size",
@@ -42,7 +44,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_layer",
         "color_range",
         "thresholds",
-        f"grid_view_{view_id}"
+        f"grid_view_{view_id}",
+        f"locked_{view_id}",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_assembly_view(**kwargs):
@@ -96,6 +99,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 cached_assembly_images.pop(next(iter(cached_assembly_images)))
 
             cached_assembly_images[cache_key] = image_data
+            set_info(state, vera_source, view_id)
 
         # Update the client
         state[assembly_array] = np.ravel(image_data).tolist()
@@ -117,6 +121,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     click="setAll({ selected_i: $event.i, selected_j: $event.j})",
                     busy=("trame__busy",),
                 )
+            html.Div(
+                "Exposure {{ " + info + ".Exposure }}"
+                " · ({{ " + info + ".Assembly }})"
+                " · Axial - {{ " + info + ".Layer }}",
+                classes="text-caption text-center",
+            )
         with html.Div(style=(
             "flex: 0 0 auto; width: 70px; padding: 4px 0;"
             "display: flex; align-self: stretch;"

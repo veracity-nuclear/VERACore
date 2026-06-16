@@ -7,7 +7,7 @@ from vera_core.app.core import VeraDataRegistry
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
 from .layout import build_layout
-from .helpers import format_label, get_next_y_from_layout, array_range
+from .helpers import format_label, get_next_y_from_layout, array_range, is_view_locked
 from .views import (
     assembly_view,
     axial_plot,
@@ -103,7 +103,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         )
         # Normalize color scale to the current state.
         for view_id in all_view_ids:
-            _recompute_card_range(view_id)
+            if not is_view_locked(state, view_id):
+                _recompute_card_range(view_id)
 
     @state.change("selected_assembly_ij")
     @requires_src
@@ -186,7 +187,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
     def _make_array_watcher(view_id):
         """factory function for creating a state watcher that keeps the color bar in sync with the card view's visualized dataset"""
-        @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}")
+        @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}", f"locked_{view_id}")
         def _on_card_array_change(**kwargs):
             _recompute_card_range(view_id)
         return _on_card_array_change
@@ -241,6 +242,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         for view_id in all_view_ids:
             state[f"selected_src_id_{view_id}"] = default_id
             state[f"selected_array_{view_id}"] = "pin_powers"
+            state[f"locked_{view_id}"] = False
+            state[f"lock_info_{view_id}"] = {"Exposure": "-", "Assembly": "-", "Layer": "-", "Pin_x" : "-", "Pin_y" : "-"}
             state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
             state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{"pin_powers"}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"

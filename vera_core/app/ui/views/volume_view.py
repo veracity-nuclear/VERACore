@@ -233,7 +233,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         ctx["reset_camera"]()
         ctx["view_update"]()
 
-    @state.change(f"grid_view_{view_id}")
+    @state.change(f"grid_view_{view_id}", f"locked_{view_id}")
     def _on_slot_changed(**kwargs):
         if _is_active(state, view_id):
             _update_volume(server, registry, view_id)

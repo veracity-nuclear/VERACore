@@ -4,7 +4,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from ..helpers import is_non_active_view, make_safe_index, set_info
 
 _AXIS_OPTIONS = {
     "x": {
@@ -45,6 +45,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     size_y_key = f"{prefix}_size_y_{view_id}"
     label_x_key = f"{prefix}_label_x_{view_id}"
     label_y_key = f"{prefix}_label_y_{view_id}"
+    info = f"lock_info_{view_id}"
 
     pin_key = "selected_j" if is_x else "selected_i"
 
@@ -74,6 +75,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         "selected_assembly",
         pin_key,
         f"grid_view_{view_id}",
+        f"locked_{view_id}",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_axial_view(**kwargs):
@@ -159,6 +161,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                     ]
                     line.append(np.ravel(assembly).tolist())
         state[core_key] = core
+        set_info(state, vera_source, view_id)
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -187,6 +190,11 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                 if not is_x:
                     axial_kwargs["x_labels"] = (label_x_key, [])
                 vera.AxialView(**axial_kwargs)
+            html.Div(
+                "Exposure {{ " + info + ".Exposure }}"
+                " · ({{ " + info + ".Assembly }})",
+                classes="text-caption text-center",
+            )
         with html.Div(style=(
             "flex: 0 0 auto; width: 70px; padding: 4px 0;"
             "display: flex; align-self: stretch;"

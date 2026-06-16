@@ -1,18 +1,18 @@
+import string
 from typing import Union
-from .vera_data_source import VeraDataSource
-from pyvera.io.VERAout import VERAout
+
 import h5py
 import numpy as np
-import string
+from .vera_tools.VERAout import VERAout
+
+from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, dataset_shape_category_dict
 
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
-
-
 class VeraOutFile(VeraDataSource):
     def __init__(self, filename):
         # Keep this open for better performance
-        self.veraout = VERAout(filename=filename)
         self.f = h5py.File(filename, "r")
+        self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
         
@@ -20,6 +20,27 @@ class VeraOutFile(VeraDataSource):
         self._create_states()
 
         self.active_state_index = 0
+        num_pin = self.vera_calculator.num_pins
+        naxx = self.vera_calculator.num_axials
+        nass = self.vera_calculator.num_assys
+        self._core_shape = (num_pin, num_pin, naxx, nass)
+        self.dataset_shape_to_category_lookup = dataset_shape_category_dict(self.core_shape)
+        if (
+            hasattr(self.core, "pin_volumes") 
+            and self.core.pin_volumes is not None 
+            and self.core.pin_volumes.shape != self.core_shape
+        ):
+            raise ValueError("[ERROR] Core shape and pin volumes mismatch. Unable to determine core dimensions.")
+        if (
+            hasattr(self.active_state, "pin_powers") 
+            and self.active_state.pin_powers is not None
+            and self.active_state.pin_powers.shape != self.core_shape
+        ):
+            raise ValueError("[ERROR] Core shape and pin powers mismatch. Unable to determine core dimensions.")
+
+    @property
+    def core_shape(self):
+        return self._core_shape
 
     @property
     def core(self):
@@ -41,19 +62,21 @@ class VeraOutFile(VeraDataSource):
     def active_state(self):
         return self.states[self.active_state_index]
     
-    @property 
+    @property
     def active_state_full_core_keys(self):
-        full_core_keys = list(self.states[self.active_state_index].full_core_datasets.keys())
-        derived_full_core_keys = list(self.states[self.active_state_index].derived_datasets.keys())
-        diff_full_core_keys = list(self.states[self.active_state_index].diff_datasets.keys())
-        return [*full_core_keys, *derived_full_core_keys, *diff_full_core_keys]
+        return self.active_state.full_core_keys
+
+    @property
+    def active_state_grouped_keys(self):
+        return self.active_state.grouped_full_core_keys
 
     @property
     def active_state_index(self):
         return self._active_state_index
 
     @active_state_index.setter
-    def active_state_index(self, index):
+    def active_state_index(self, index: int):
+        index = max(0, min(index, len(self._states) - 1))
         if hasattr(self, "_active_state_index"):
             if self._active_state_index == index:
                 return
@@ -63,72 +86,83 @@ class VeraOutFile(VeraDataSource):
 
         self._active_state_index = index
         self.active_state._cache_all()
-
-    def array(self, array_name):
-        # Get the array with the name "array_name", either on the active state,
-        # or on the core.
-
-        # These are on the core
-        arrays_on_core = [
-            "pin_volumes",
-        ]
-        if array_name in arrays_on_core:
-            # This one is on the core
-            return getattr(self.core, array_name)
-
-        # If not on the core, assume it is on the active states.
-        ax, ay = self.core.reduced_core_map.shape        
-        array = getattr(self.active_state, array_name)
-        if self.core.core_sym == 4 and len(array.shape) == 4: 
-            # this is a "lazy" approach to fixing qtr core sym, could switch to eager later if necessary
-            hpy = array.shape[0] // 2
-            hpx = array.shape[1] // 2
-            array[:hpy, :, :, :ax] = np.nan
-            array[:, :hpx, :, self.core.reduced_core_map[:, 0] - 1] = np.nan
-        return array
     
-    def add_new_diff_dataset(self, ref_array_name, comp_array_name, new_diff_name):
-        ref = self.array(ref_array_name)
-        comp = self.array(comp_array_name)
+    def add_new_diff_dataset(self, ref_array_name: str, comp_array_name: str, new_diff_name: str):
         for state in self._states:
-            if hasattr(state, ref_array_name) and hasattr(state, comp_array_name):
+            if state.has_dataset(ref_array_name) and state.has_dataset(comp_array_name):
                 ref = getattr(state, ref_array_name)
                 comp = getattr(state, comp_array_name)
                 if ref.shape == comp.shape:
                     diff = ref - comp
                     state.add_diff_dataset(new_diff_name, diff)
+    
+    def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
+        match axes:
+            case VeraAxes.ASSEMBLY:
+                der = VeraDataset(self.vera_calculator.Assembly(data), VeraDtype.ASSEMBLY)
+            case VeraAxes.AXIAL:
+                der = VeraDataset(self.vera_calculator.Axial(data), VeraDtype.AXIAL)
+            case VeraAxes.CORE:
+                der = VeraDataset(np.array([self.vera_calculator.Average(data)]), VeraDtype.SCALAR)
+            case VeraAxes.NODE:
+                der = VeraDataset(self.vera_calculator.Node(data), VeraDtype.NODE)
+            case VeraAxes.RADIAL:
+                der = VeraDataset(self.vera_calculator.Radial(data), VeraDtype.RADIAL)
+            case VeraAxes.RADIAL_ASSEMBLY:
+                der = VeraDataset(self.vera_calculator.Radial_Assembly(data), VeraDtype.RADIAL_ASSEMBLY)
+            case _:
+                raise ValueError(f"Derivation: {axes} not implemented")
+        return der
+    
+    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes):
+        for state in self._states:
+            if state.has_dataset(new_dataset_name):
+                raise ValueError(f"A dataset named {new_dataset_name} already exists in this source, please pick a unique name.")
+            if not state.has_dataset(source_array_name):
+                continue
+            data = getattr(state, source_array_name)
+            match der_method:
+                case DerivationMethod.AVERAGE:
+                    der = self._run_avg_over_axes(data, axes)
+                case DerivationMethod.STDDEV:
+                    mean = self._run_avg_over_axes(data)
+                    var = self._run_avg_over_axes((data - mean)**2, axes)
+                    der = np.sqrt(var)
+                case DerivationMethod.RMS:
+                    der = np.sqrt(self._run_avg_over_axes(data**2, axes))
+            state.add_derived_dataset(new_dataset_name, der)
+        return True
 
 class LazyHDF5Loader:
-    def __init__(self, f, path, dataset_names):
+    def __init__(self, f, path, dataset_names, dataset_shapes = None):
         self._f = f
         self._path = path
         self._dataset_names = dataset_names
+        self._dataset_shapes = dataset_shapes
 
-        self._uncache_all()
+        self._uncache_all()  # start lazy
 
     def _load_dataset(self, name):
         return self._f[f"{self._path}/{name}"]
 
+    def _make_dataset(self, name) -> VeraDataset:
+        raw = self._load_dataset(name)[()]
+        shape = np.shape(raw)
+        dtype = VeraDtype.UNKNOWN
+        if self._dataset_shapes and self._dataset_shapes.get(shape) is not None:
+            dtype = self._dataset_shapes.get(shape)
+        arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
+        return VeraDataset(arr, dtype)
+
     def _cache(self, name):
-        # Set the attribute to be the loaded numpy array
         if name not in self._dataset_names:
             raise AttributeError(name)
-
-        dataset = self._load_dataset(name)[()]
-        if not isinstance(dataset, np.ndarray):
-            dataset = np.array([dataset])
-        setattr(self, name, dataset)
+        setattr(self, name, self._make_dataset(name))
 
     def _uncache(self, name):
-        # Set the attribute to be the h5py dataset
         if name not in self._dataset_names:
             raise AttributeError(name)
-
-        # to fix issue with scalar datasets being indexed with a [0]
-        dataset = self._load_dataset(name)[()]
-        if not isinstance(dataset, np.ndarray):
-            dataset = np.array([dataset])
-        setattr(self, name, dataset)
+        self.__dict__.pop(name, None)
 
     def _cache_all(self):
         for name in self._dataset_names:
@@ -137,8 +171,16 @@ class LazyHDF5Loader:
     def _uncache_all(self):
         for name in self._dataset_names:
             self._uncache(name)
+    
+    def has_dataset(self, name):
+        return name in self._dataset_names or name in self.__dict__
 
-
+    def __getattr__(self, name):
+        # Runs only when normal lookup fails (name was uncached/deleted).
+        names = self.__dict__.get("_dataset_names")  # avoid recursion
+        if names and name in names:
+            return self._make_dataset(name)  # transient: not stored
+        raise AttributeError(name)
 class VeraOutCore(LazyHDF5Loader):
     # These are the attributes that will be read from the HDF5 file
     axial_mesh: H5_ARRAY_TYPE = None
@@ -146,14 +188,23 @@ class VeraOutCore(LazyHDF5Loader):
     core_sym: H5_ARRAY_TYPE = None
     pin_volumes: H5_ARRAY_TYPE = None
 
-    def __init__(self, f = None, axial_mesh = None, core_map = None, core_sym = None, pin_volumes = None):
+    def __init__(self, f = None, axial_mesh = None, core_map = None, core_sym = None, pin_volumes = None, aspect_ratio = None):
         if f is not None:
             super().__init__(f, "/CORE", list(self.__annotations__))
-        elif axial_mesh is not None and core_map is not None and core_sym is not None and pin_volumes is not None:
+            self.aspect_ratio = f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1 # dx / dy
+            self._cache_all()
+        elif (
+            axial_mesh is not None 
+            and core_map is not None 
+            and core_sym is not None 
+            and pin_volumes is not None 
+            and aspect_ratio is not None
+        ):
             self.axial_mesh = axial_mesh
             self.core_map = core_map
             self.core_sym = core_sym
             self.pin_volumes = pin_volumes
+            self.aspect_ratio = aspect_ratio
         else:
             raise ValueError("Either a filename or raw data must be provided")
         self.compute_reduced_core_map()
@@ -166,8 +217,8 @@ class VeraOutCore(LazyHDF5Loader):
         return cls(f=f)
 
     @classmethod
-    def from_data(cls, axial_mesh, core_map, core_sym, pin_volumes):
-        return cls(axial_mesh=axial_mesh, core_map=core_map, core_sym=core_sym, pin_volumes=pin_volumes)
+    def from_data(cls, axial_mesh, core_map, core_sym, pin_volumes, aspect_ratio):
+        return cls(axial_mesh, core_map, core_sym, pin_volumes, aspect_ratio)
 
     def compute_reduced_core_map(self):
         """Compute the reduced core map based upon the core_sym"""
@@ -274,23 +325,21 @@ class VeraOutState(LazyHDF5Loader):
         # These are the attributes that will be read from the HDF5 file
         if f is not None:
             self.__annotations__ = dict()
-
-            self.full_core_datasets = dict()
-            self.scalar_datasets = dict()
-            self.search_for_datasets(f, idx)
-            self.__annotations__.update(self.full_core_datasets)
-            self.__annotations__.update(self.scalar_datasets)
-            super().__init__(f, f"/STATE_{idx:04}", list(self.__annotations__))
+            self.dataset_shapes = dict()
+            self.dataset_categories = { str(dataset_type) : set() for dataset_type in VeraDtype}
+            self._search_for_datasets(f, idx)
+            self.all_datasets = [dataset for category in self.dataset_categories.values() for dataset in category]
+            super().__init__(f, f"/STATE_{idx:04}", self.all_datasets, dataset_shapes=self.dataset_shapes)
             self._index = idx
         elif full_core_datasets is not None and scalar_datasets is not None:
             self.full_core_datasets = full_core_datasets
             self.scalar_datasets = scalar_datasets
             for key in self.full_core_datasets.keys():
-                setattr(self, key, self.full_core_datasets[key])
+                setattr(self, key, VeraDataset(self.full_core_datasets[key], VeraDtype.PIN))
             for key in self.scalar_datasets.keys():
-                setattr(self, key, self.scalar_datasets[key])
+                setattr(self, key, VeraDataset(self.scalar_datasets[key], VeraDtype.SCALAR))
         else:
-            return ValueError("Must pass in filename or data parameters")
+            raise ValueError("Must pass in filename or data parameters")
         self.diff_datasets = dict()
         self.derived_datasets = dict()
 
@@ -298,18 +347,62 @@ class VeraOutState(LazyHDF5Loader):
     def from_data(cls, full_core_datasets, scalar_datasets):
         return cls(full_core_datasets=full_core_datasets, scalar_datasets=scalar_datasets)
     
-    def search_for_datasets(self, f, idx):
+    @property
+    def scalar_datasets(self):
+        return self.dataset_categories[str(VeraDtype.SCALAR)]
+    
+    _CATEGORY_ORDER = [
+        VeraDtype.PIN,
+        VeraDtype.CHANNEL,
+        VeraDtype.CHANNEL_RADIAL,
+        VeraDtype.ASSEMBLY,
+        VeraDtype.RADIAL,
+        VeraDtype.RADIAL_ASSEMBLY,
+        VeraDtype.AXIAL,
+        VeraDtype.NODE,
+        VeraDtype.RADIAL_NODE,
+        VeraDtype.SCALAR,
+        VeraDtype.UNKNOWN,
+    ]
+
+    @property
+    def grouped_full_core_keys(self):
+        groups = []
+        for dtype in self._CATEGORY_ORDER:
+            names = sorted(self.dataset_categories[str(dtype)])
+            if names:
+                groups.append((str(dtype), names))
+        # if self.derived_datasets:
+        #     groups.append(("DERIVED", sorted(self.derived_datasets)))
+        # if self.diff_datasets:
+        #     groups.append(("DIFF", sorted(self.diff_datasets)))
+        return groups
+
+    @property
+    def full_core_keys(self):
+        return [name for _, names in self.grouped_full_core_keys for name in names]
+
+    def _search_for_datasets(self, f, idx):
         # Search for available full core/scalar datasets at each state point
         state = f[f"/STATE_{idx:04}"]
         pin_powers = state["pin_powers"]
         core_shape = np.shape(pin_powers)
+        self.dataset_shapes = dataset_shape_category_dict(core_shape)
+        
         for dataset_name in state.keys():
             dataset_shape = np.shape(state[dataset_name])
-            if dataset_shape == core_shape:
-                self.full_core_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
-            if dataset_shape in [(1,), ()]:
-                self.scalar_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+            if dataset_shape in self.dataset_shapes:
+                dataset_type_str = str(self.dataset_shapes[dataset_shape])
+                self.dataset_categories[dataset_type_str].add(dataset_name) 
     
-    def add_diff_dataset(self, dataset_name, dataset):
+    def add_diff_dataset(self, dataset_name: str, dataset : VeraDataset):
         setattr(self, dataset_name, dataset)
         self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+
+    def add_derived_dataset(self, dataset_name: str, dataset : VeraDataset):
+        setattr(self, dataset_name, dataset)
+        self.derived_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+        dataset_shape = np.shape(dataset)
+        if dataset_shape in self.dataset_shapes:
+                dataset_type_str = str(self.dataset_shapes[dataset_shape])
+                self.dataset_categories[dataset_type_str].add(dataset_name) 

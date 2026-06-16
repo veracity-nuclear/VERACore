@@ -47,6 +47,7 @@ Get the code base and build its widgets
     cd vue-components
     npm i
     npm run build
+    if error on "npm run build" use NODE_OPTIONS=--openssl-legacy-provider npm run build
     cd ..
 
     # Install local repository into your venv

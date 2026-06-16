@@ -1,4 +1,4 @@
-import { LookupTable } from '../../utils/Colors';
+ import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
 export default {
@@ -67,7 +67,10 @@ export default {
     selectedJ(j) {
       this.activeJ = j;
     },
-    value() {
+    xSizes() {
+      this.resize();
+    },
+    ySizes() {
       this.resize();
     },
   },
@@ -77,32 +80,79 @@ export default {
       activeJ: this.selectedJ,
       sizeStyle: { width: '100px', height: '100px' },
       scaleStyle: { scale: 1 },
-      imagesReady: 0,
     };
   },
   computed: {
     colorMap() {
       return this.lookupTable.update(this.colorPreset, this.colorRange);
     },
-    images() {
-      // Dependencies
+    // One image URL per row instead of one per cell. Each row's cells are
+    // concatenated into a single pixel strip and converted once, cutting
+    // ~735 canvas/base64/decode operations down to ~49 per update.
+    rowImages() {
       const array = this.value;
       const lut = this.colorMap;
 
-      // Build computed structure
-      const images = [];
+      const urls = [];
       for (let j = 0; j < array.length; j++) {
         const line = array[j];
-        const lineImages = [];
-        images.push(lineImages);
+        // Flatten this row's cells into a single pixel array.
+        let rowPixels = [];
         for (let i = 0; i < line.length; i++) {
-          const cell = line[i];
-          const cellWidth = cell.length;
-          lineImages.push(toImageURL(lut, cell, cellWidth, 1, this.xScale, 1));
+          rowPixels = rowPixels.concat(line[i]);
         }
+        const rowWidth = rowPixels.length;
+        urls.push(toImageURL(lut, rowPixels, rowWidth, 1, this.xScale, 1));
       }
-      this.imagesReady++;
-      return images;
+      return urls;
+    },
+    // Cumulative pixel offset of each column / row edge, in layout space
+    // (pre-CSS-transform). Index k = left/top edge of cell k.
+    // 30px label gutter, gapless cells.
+    xOffsets() {
+      const offsets = [];
+      let acc = 30;
+      for (let i = 0; i < this.xSizes.length; i++) {
+        offsets.push(acc);
+        acc += this.xSizes[i] * this.xScale;
+      }
+      return offsets;
+    },
+    yOffsets() {
+      const offsets = [];
+      let acc = 30;
+      for (let j = 0; j < this.ySizes.length; j++) {
+        offsets.push(acc);
+        acc += this.ySizes[j] * this.yScale;
+      }
+      return offsets;
+    },
+    // Total width of the data area (excludes the 30px label gutter).
+    rowWidthPx() {
+      let w = 0;
+      for (let i = 0; i < this.xSizes.length; i++) {
+        w += this.xSizes[i] * this.xScale;
+      }
+      return w;
+    },
+    highlightStyle() {
+      const i = this.activeI;
+      const j = this.activeJ;
+      if (
+        i < 0 || j < 0 ||
+        i >= this.xSizes.length || j >= this.ySizes.length
+      ) {
+        return { display: 'none' };
+      }
+      return {
+        position: 'absolute',
+        left: `${this.xOffsets[i]}px`,
+        top: `${this.yOffsets[j]}px`,
+        width: `${this.xSizes[i] * this.xScale}px`,
+        height: `${this.ySizes[j] * this.yScale}px`,
+        pointerEvents: 'none',
+        ...this.activeStyle,
+      };
     },
   },
   created() {
@@ -119,13 +169,10 @@ export default {
   methods: {
     resize() {
       const { width, height } = this.$el.getBoundingClientRect();
-      let neededWidth = 50;
-      for (let i = 0; i < this.xSizes.length; i++) {
-        neededWidth += 2 + this.xSizes[i] * this.xScale;
-      }
-      let neededHeight = 50;
+      let neededWidth = 30 + this.rowWidthPx;
+      let neededHeight = 30;
       for (let i = 0; i < this.ySizes.length; i++) {
-        neededHeight += 2 + this.ySizes[i] * this.yScale;
+        neededHeight += this.ySizes[i] * this.yScale;
       }
       const scale = Math.min(width / neededWidth, height / neededHeight);
       this.scaleStyle = { scale };
@@ -134,23 +181,35 @@ export default {
         height: `${neededHeight + 10}px`,
       };
     },
-    hover(i, j) {
-      this.activeI = i;
+    // Map an x position within a row's data strip to a column index.
+    // The strip starts after the 30px gutter, so shift into layout space
+    // before comparing against xOffsets (which include the gutter).
+    columnFromX(xInStrip) {
+      const xLayout = xInStrip + 30;
+      const offsets = this.xOffsets;
+      for (let i = offsets.length - 1; i >= 0; i--) {
+        if (xLayout >= offsets[i]) {
+          return i;
+        }
+      }
+      return 0;
+    },
+    onRowClick(event, j) {
+      // offsetX is relative to the strip element's own box, before the
+      // parent CSS scale transform, so it is already in layout space.
+      const i = this.columnFromX(event.offsetX);
+      this.$emit('click', { i, j });
+    },
+    onRowHover(event, j) {
+      this.activeI = this.columnFromX(event.offsetX);
       this.activeJ = j;
     },
     exit() {
       this.activeI = this.selectedI;
       this.activeJ = this.selectedJ;
     },
-    toStyle(i, j) {
-      const style = {};
-      if (i == this.activeI && j == this.activeJ) {
-        Object.assign(style, this.activeStyle);
-      }
-      return style;
-    },
-    toUrl(i, j) {
-      return this.images?.[j]?.[i];
+    rowUrl(j) {
+      return this.rowImages?.[j];
     },
   },
 };

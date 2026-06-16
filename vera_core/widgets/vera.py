@@ -37,8 +37,10 @@ class CoreView(HtmlElement):
         )
         self._attr_names += [
             "value",
+            "labels",
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
+            ("aspect_ratio", "aspectRatio"),
             ("color_preset", "colorPreset"),
             ("color_range", "colorRange"),
             ("active_style", ":activeStyle"),
@@ -82,6 +84,21 @@ class ColorMapEditor(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
             "vera-color-map-editor",
+            **kwargs,
+        )
+        self._attr_names += [
+            "value",
+            ("color_preset", "colorPreset"),
+            "busy",
+        ]
+        self._event_names += [
+            "input",
+        ]
+
+class VerticalColorMapEditor(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-vertical-color-map-editor",
             **kwargs,
         )
         self._attr_names += [

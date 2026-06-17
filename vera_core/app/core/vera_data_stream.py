@@ -1,5 +1,4 @@
-from .vera_data import VeraDataSource, VeraAxes
-from .vera_out_file import VeraOutCore, VeraOutFile, VeraOutState, VeraDataset
+from .vera_data import VeraDataSource, VeraAxes, VeraOutCore, VeraOutState
 import threading, time
 from multiprocessing import Queue
 from trame.app.asynchronous import StateQueue
@@ -94,14 +93,20 @@ class VeraDataStream(VeraDataSource):
         self._thread = threading.Thread(target=self._data_reciever, daemon=True)
         self._thread.start()
 
+    def _setup_core_data(self, core : VeraOutCore):
+        self._core = core
+        self._core_shape = core.pin_volumes.shape
+        if len(self.core_shape) != 4:
+            raise ValueError("[ERROR] Core shape should have 4 dimensions. Unbale to determine core dimensions.")
+
     def _data_reciever(self):
         state_counter = 1
         has_recieved_state = False
         while True:
             message = msgpack.unpackb(self.subscriber.recv(), raw=False)
             if self._core is None:
-                self._core = VeraOutCore.from_data(**message["core"])
-            self._states.append(VeraOutState.from_data(**message["data"]))
+                self._setup_core_data(VeraOutCore.from_data(**message["core"], aspect_ratio=1))
+            self._states.append(VeraOutState.from_data(message["datasets"]))
             if self._queue is not None:
                 if not has_recieved_state:
                     self._queue.update({self.stream_id : True})
@@ -111,6 +116,10 @@ class VeraDataStream(VeraDataSource):
     @property
     def core(self):
         return self._core
+    
+    @property
+    def core_shape(self):
+        return self._core_shape
     
     def close(self):
         self.subscriber.close()
@@ -130,8 +139,12 @@ class VeraDataStream(VeraDataSource):
         return self._active_state_index
     
     @property
-    def active_state_full_core_keys(self) -> list:
-        return list(self.states[self.active_state_index].full_core_datasets.keys())
+    def active_state_full_core_keys(self):
+        return self.active_state.full_core_keys
+
+    @property
+    def active_state_grouped_keys(self):
+        return self.active_state.grouped_full_core_keys
 
     @active_state_index.setter
     def active_state_index(self, index):

@@ -30,18 +30,14 @@ with h5py.File(args.filename, "r") as f:
         state = f[state_key]
         pin_powers = state["pin_powers"]
         core_shape = np.shape(pin_powers)
-        full_core_datasets = {}
-        scalar_datasets = {}
+        datasets = {}
         for dataset_name in state.keys():
             dataset_shape = np.shape(state[dataset_name])
-            if dataset_shape == core_shape:
-                full_core_datasets.update({dataset_name: state[dataset_name][()]})
-            if dataset_shape in [(1,), ()]:
-                scalar_datasets.update({dataset_name: state[dataset_name][()]})
+            if dataset_shape is not None and len(dataset_shape) <= 4:
+                datasets.update({dataset_name : state[dataset_name][()]})
         payload = {"core" : core_data,
                    "state" : state_key,
-                   "data" : {"full_core_datasets" : full_core_datasets,
-                   "scalar_datasets" : scalar_datasets}}
+                   "datasets" : datasets}
         publisher.send(msgpack.packb(payload))
         print(f"Sent {state_key}")
         time.sleep(0.3)

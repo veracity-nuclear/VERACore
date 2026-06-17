@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from typing import Union
 from enum import Enum, StrEnum
 import numpy as np
-from enum import StrEnum
 import h5py
 class VeraDtype(Enum):
     """Dataset Identifiers"""
@@ -146,12 +145,16 @@ class LazyHDF5Loader:
 
     def _cache(self, name) -> None:
         """Read a dataset and store it as an instance attribute."""
+        if self._f is None:
+            return
         if name not in self._dataset_names:
             raise AttributeError(name)
         setattr(self, name, self._make_dataset(name))
 
     def _uncache(self, name) -> None:
         """Drop a dataset's resident attribute so access reverts to lazy."""
+        if self._f is None:
+            return
         if name not in self._dataset_names:
             raise AttributeError(name)
         self.__dict__.pop(name, None)
@@ -374,48 +377,42 @@ class VeraOutState(LazyHDF5Loader):
     through LazyHDF5Loader. Diff and derived datasets added after
     construction live on the instance but are never written back to the file.
     """
-    def __init__(self, 
-                 f : "h5py.File | None" = None, 
-                 idx : int | None = None, 
-                 full_core_datasets : dict[str, np.ndarray] | None = None, 
-                 scalar_datasets : dict[str, np.ndarray] | None = None
-    ):
+    def __init__(self, f : "h5py.File | None" = None, idx : int | None = None, data : dict[str, np.ndarray] | None = None):
         """Build a state either from an open h5 file or from raw Python data.
 
         Pass either (f, idx) to read from a file, or
-        (full_core_datasets, scalar_datasets) to construct in memory.
+        (data) to construct in memory.
 
         args:
             f: an open h5py.File handle (not a path), kept open by the owner
             idx: the state number, formatted into the /STATE_{idx:04} group
-            full_core_datasets: name -> array map, treated as PIN data
-            scalar_datasets: name -> array map, treated as SCALAR data
+            data: name -> vera dataset array map
         """
         # These are the attributes that will be read from the HDF5 file
+        self.dataset_shapes = dict()
+        self.dataset_categories = { str(dataset_type) : set() for dataset_type in VeraDtype}
         if f is not None:
             self.__annotations__ = dict()
-            self.dataset_shapes = dict()
-            self.dataset_categories = { str(dataset_type) : set() for dataset_type in VeraDtype}
-            self._search_for_datasets(f, idx)
+            self._search_for_datasets_in_file(f, idx)
             self.all_datasets = [dataset for category in self.dataset_categories.values() for dataset in category]
             super().__init__(f, f"/STATE_{idx:04}", self.all_datasets, dataset_shapes=self.dataset_shapes)
             self._index = idx
-        elif full_core_datasets is not None and scalar_datasets is not None:
-            self.full_core_datasets = full_core_datasets
-            self.scalar_datasets = scalar_datasets
-            for key in self.full_core_datasets.keys():
-                setattr(self, key, VeraDataset(self.full_core_datasets[key], VeraDtype.PIN))
-            for key in self.scalar_datasets.keys():
-                setattr(self, key, VeraDataset(self.scalar_datasets[key], VeraDtype.SCALAR))
+        elif data is not None:
+            self._search_for_datasets(data, raw=True)
+            self.all_datasets = [dataset for category in self.dataset_categories.values() for dataset in category]
+            self._f = None
+            self._path = None
+            self._dataset_names = self.all_datasets
+            self._dataset_shapes = self.dataset_shapes
         else:
             raise ValueError("Must pass in filename or data parameters")
         self.diff_datasets = dict()
         self.derived_datasets = dict()
 
     @classmethod
-    def from_data(cls, full_core_datasets, scalar_datasets) -> "VeraOutState":
+    def from_data(cls, data) -> "VeraOutState":
         """Construct a state from in-memory data instead of a file."""
-        return cls(full_core_datasets=full_core_datasets, scalar_datasets=scalar_datasets)
+        return cls(data=data)
     
     @property
     def scalar_datasets(self) -> set[str]:
@@ -455,24 +452,31 @@ class VeraOutState(LazyHDF5Loader):
     def full_core_keys(self) -> list[str]:
         """Flat, category-ordered list of all dataset names."""
         return [name for _, names in self.grouped_full_core_keys for name in names]
-
-    def _search_for_datasets(self, f, idx) -> None:
+    
+    def _search_for_datasets(self, data, raw = False):
         """Populate dataset_shapes and dataset_categories for one state.
 
         Uses pin_powers as the reference full-core shape, builds the
         shape -> category map from it, then bins every dataset in the state
         group whose shape matches a known category.
         """
-        state = f[f"/STATE_{idx:04}"]
-        pin_powers = state["pin_powers"]
-        core_shape = np.shape(pin_powers)
+        core_shape = np.shape(data["pin_powers"])
         self.dataset_shapes = dataset_shape_category_dict(core_shape)
-        
-        for dataset_name in state.keys():
-            dataset_shape = np.shape(state[dataset_name])
-            if dataset_shape in self.dataset_shapes:
-                dataset_type_str = str(self.dataset_shapes[dataset_shape])
-                self.dataset_categories[dataset_type_str].add(dataset_name) 
+        for dataset_name in data.keys():
+            dataset = data[dataset_name]
+            dataset_shape = np.shape(dataset)
+            if dataset_shape not in self.dataset_shapes:
+                continue
+            dtype = self.dataset_shapes[dataset_shape]
+            self.dataset_categories[str(dtype)].add(dataset_name)
+            if raw:
+                arr = dataset if isinstance(dataset, np.ndarray) else np.array([dataset])
+                setattr(self, dataset_name, VeraDataset(arr, dtype))
+
+    def _search_for_datasets_in_file(self, f, idx) -> None:
+        """Populate dataset_shapes and dataset_categories for one state from a file handle."""
+        state = f[f"/STATE_{idx:04}"]
+        self._search_for_datasets(state)
     
     def add_diff_dataset(self, dataset_name: str, dataset : VeraDataset)-> None:
         """Attach an in-memory diff dataset to this state.
@@ -585,7 +589,7 @@ class VeraDataSource(ABC):
         if array_name in arrays_on_core:
             # This one is on the core
             return getattr(self.core, array_name).dataset_type
-        if hasattr(self.active_state, array_name) and isinstance(getattr(self.active_state, array_name), VeraDataset):
+        if self.active_state.has_dataset(array_name) and isinstance(getattr(self.active_state, array_name), VeraDataset):
             return getattr(self.active_state, array_name).dataset_type
         else:
             return VeraDtype.UNKNOWN

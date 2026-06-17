@@ -4,11 +4,6 @@ VERACore
 VERACore is a Python application for visualization and engineering analyses of output data from VERA (Virtual Environment for Reactor Applications).
 Implemented in Python, it provides instantaneous 2D and 3D images, 1D plots, and alphanumeric data from VERA multi-physics simulations.
 
-For an interactive online example, see `here <https://vera.trame.kitware.com/>`_.
-
-.. image:: https://raw.githubusercontent.com/Kitware/VERACore/refs/heads/master/veracore.png
-  :alt: VeraCore UI
-
 Installing
 ----------------------------------------
 
@@ -22,7 +17,7 @@ To use it locally within a virtual environment, you can run the following comman
     pip install -U pip
     pip install vera-core
 
-    vera-core --data <path-to-vera-out-file>
+    vera-core --app --data <path-to-vera-out-file>
 
 
 Development

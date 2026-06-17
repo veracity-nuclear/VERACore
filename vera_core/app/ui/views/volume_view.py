@@ -19,6 +19,7 @@ from trame.widgets import vtk, vuetify, html
 
 from vera_core.app.core import VeraDataRegistry
 from vera_core.widgets import vera
+from ..helpers import is_view_locked
 
 
 _OPACITY_POINTS = [
@@ -52,6 +53,8 @@ def option_for(view_id):
 
 
 def _is_active(state, view_id):
+    if is_view_locked(state, view_id):
+        return False
     option = state[f"grid_view_{view_id}"]
     return bool(option) and option.get("name") == f"volume_view_{view_id}"
 

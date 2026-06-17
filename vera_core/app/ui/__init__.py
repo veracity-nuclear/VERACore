@@ -126,14 +126,35 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         if state.selected_assembly_ij != new_ij:
             state.selected_assembly_ij = new_ij
 
-    # initialize state for each each view template. Each grid card owns a view_id, so the templates initiliazed with that specific view_id belong to the card
+    # initialize state for each each view template. Each view_id has a full set of the templates initiliazed with that specific view_id
     for view_id in all_view_ids:
+        #
+        # Per view_id state
+        # each card gets assigned a view_id, this defines which state the card uses
+
+        # state.selected_src_id_{{view_id}} : state that stores the selected dataset source id (id in a registry) that 
+        #     the view is reading its datasets from
+        # state.selected_array_{{view_id}} : state that stores the selected dataset name that the view
+        #     is visualizing
+        # state.locked_{{view_id}} : state that stores whether the view responds/updates to global changes to 
+        #     selected_i, selected_j, selected_layer, selected_assembly. If true the view is "locked" and
+        #     will not change until unlocked.
+        # state.label_info_{{view_id}} : state that stores the selected_i, selected_j, selected_layer, and selected_assembly
+        #     and exposure of the data being visualized by the view
+        # state.selected_label_{{view_id}} : state the stores a formatted label of the view's selected source and dataset
+        # state.multi_selected_{{view_id}} : state the stores a list of source-datasets that are being visualized by the view,
+        #     note that only view's that support visualizing multiple datasets at a time use this
+        # state.multi_label_{{view_id}} : state the stores a string label of how many datasets are being visualized by the view,
+        #     only used by view's that support visualizing multiple datasets.
+        #
         state[f"grid_options_{view_id}"] = []
         state[f"selected_array_{view_id}"] = ""
         state[f"selected_src_id_{view_id}"] = registry.default_src_id
         state[f"color_range_{view_id}"] = (0.0, 1.0)
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         state[f"selected_label_{view_id}"] = format_label(registry.default_src_id, "pin_powers")
+        state[f"locked_{view_id}"] = False
+        state[f"label_info_{view_id}"] = {"Exposure": "-", "Assembly": "-", "Layer": "-", "Pin_x" : "-", "Pin_y" : "-"}
         state[f"multi_selected_{view_id}"] = []
         state[f"multi_label_{view_id}"] = "Select datasets"
         for module in VIEW_MODULES:
@@ -220,20 +241,14 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         core_shape = src.core_shape
         ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
 
-        """
-        Global State
-
-        state.selected_layer : state for tracking which axial_plane is selected 
-
-        state.selected_i : state for tracking the x-index of the selected pin 
-        state.selected_j : state for tracking the y-index of the selected pin
-        
-        state.selected_assembly : state for tracking id of the selected assembly
-        state.selected_assembly_ij : state for tracking the row and col of the selected assembly in the core_map
-
-        state.max_time : state for tracking the maximum state number of all sources in the registry
-        state.selected_time : state for tracking the STATE_n being visualized, i.e. if state.selected_time == 2, STATE_0002 in the vera source is being visualized
-        """
+        # Global State
+        # state.selected_layer : state for tracking which axial_plane is selected 
+        # state.selected_i : state for tracking the x-index of the selected pin 
+        # state.selected_j : state for tracking the y-index of the selected pin
+        # state.selected_assembly : state for tracking id of the selected assembly
+        # state.selected_assembly_ij : state for tracking the row and col of the selected assembly in the core_map
+        # state.max_time : state for tracking the maximum state number of all sources in the registry
+        # state.selected_time : state for tracking the STATE_n being visualized, i.e. if state.selected_time == 2, STATE_0002 in the vera source is being visualized
         state.selected_layer = nz // 2
         state.max_layer = nz - 1
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
@@ -244,29 +259,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.max_time = registry.max_state
         state.selected_time = 0
         for view_id in all_view_ids:
-            """
-            Per view_id state
-            each card gets assigned a view_id, this defines which state the card uses
-
-            state.selected_src_id_{{view_id}} : state that stores the selected dataset source id (id in a registry) that 
-                the view is reading its datasets from
-            state.selected_array_{{view_id}} : state that stores the selected dataset name that the view
-                is visualizing
-            state.locked_{{view_id}} : state that stores whether the view responds/updates to global changes to 
-                selected_i, selected_j, selected_layer, selected_assembly. If true the view is "locked" and
-                will not change until unlocked.
-            state.label_info_{{view_id}} : state that stores the selected_i, selected_j, selected_layer, and selected_assembly
-                and exposure of the data being visualized by the view
-            state.selected_label_{{view_id}} : state the stores a formatted label of the view's selected source and dataset
-            state.multi_selected_{{view_id}} : state the stores a list of source-datasets that are being visualized by the view,
-                note that only view's that support visualizing multiple datasets at a time use this
-            state.multi_label_{{view_id}} : state the stores a string label of how many datasets are being visualized by the view,
-                only used by view's that support visualizing multiple datasets.
-            """
             state[f"selected_src_id_{view_id}"] = default_id
             state[f"selected_array_{view_id}"] = "pin_powers"
-            state[f"locked_{view_id}"] = False
-            state[f"label_info_{view_id}"] = {"Exposure": "-", "Assembly": "-", "Layer": "-", "Pin_x" : "-", "Pin_y" : "-"}
             state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
             state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{"pin_powers"}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"

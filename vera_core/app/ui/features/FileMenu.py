@@ -85,11 +85,11 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
 
     @ctrl.set("close_file")
     def close_file(file_id):
-        #FIXME remove_source not implemented yet
-        # registry.remove_source(file_id)
-        # refresh_src_tree(state, registry)
-        state.file_error = "Remove file not implemented yet."
-        pass
+        try:
+            registry.remove_src(file_id)
+            refresh_src_tree(state, registry)
+        except Exception as e:
+            state.file_error = f"Could not remove file: {file_id}"
     
     global file_menu_state_initialized
     file_menu_state_initialized = True
@@ -117,10 +117,9 @@ def build_file_menu_dialog(ctrl: Controller):
                                     html.Td("{{ file }}")
                                     html.Td("{{ info.shape }}")
                                     html.Td("{{ info.states }}")
-                                    # FIXME close_file logic depends on unimplememted registry.remove_src()
-                                    # with html.Td():
-                                    #     with vuetify.VBtn(icon=True, x_small=True, click=(ctrl.close_file, "[file]")):
-                                    #         vuetify.VIcon("mdi-close", small=True)
+                                    with html.Td():
+                                        with vuetify.VBtn(icon=True, x_small=True, click=(ctrl.close_file, "[file]")):
+                                            vuetify.VIcon("mdi-close", small=True)
 
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-3"):

@@ -31,7 +31,7 @@ def is_non_active_view(state : State, view_id : int, option : dict[str, str]) ->
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
 
 def set_info(state : State, vera_source : VeraDataSource, view_id : int):
-    state[f"lock_info_{view_id}"] = {
+    state[f"label_info_{view_id}"] = {
             "Exposure": np.round(vera_source.active_state.exposure[0], decimals=3),
             "Assembly": vera_source.core.reduced_core_map_label(state.selected_assembly),
             "Layer": vera_source.core.axial_mesh_means[state.selected_layer],

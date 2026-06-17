@@ -73,7 +73,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
     all_view_ids = [f"{v + 1}" for v in range(NUM_VIEW_SLOTS)]
     available_view_ids = list(all_view_ids)
-
+    """
+    A view_id is an id assigned to each card that namespaces its per-view state.
+    """
     # wrapper for guarding against an empty registry
     def requires_src(func):
         @functools.wraps(func)
@@ -219,6 +221,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
 
         """
+        Global State
+
         state.selected_layer : state for tracking which axial_plane is selected 
 
         state.selected_i : state for tracking the x-index of the selected pin 
@@ -240,10 +244,29 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.max_time = registry.max_state
         state.selected_time = 0
         for view_id in all_view_ids:
+            """
+            Per view_id state
+            each card gets assigned a view_id, this defines which state the card uses
+
+            state.selected_src_id_{{view_id}} : state that stores the selected dataset source id (id in a registry) that 
+                the view is reading its datasets from
+            state.selected_array_{{view_id}} : state that stores the selected dataset name that the view
+                is visualizing
+            state.locked_{{view_id}} : state that stores whether the view responds/updates to global changes to 
+                selected_i, selected_j, selected_layer, selected_assembly. If true the view is "locked" and
+                will not change until unlocked.
+            state.label_info_{{view_id}} : state that stores the selected_i, selected_j, selected_layer, and selected_assembly
+                and exposure of the data being visualized by the view
+            state.selected_label_{{view_id}} : state the stores a formatted label of the view's selected source and dataset
+            state.multi_selected_{{view_id}} : state the stores a list of source-datasets that are being visualized by the view,
+                note that only view's that support visualizing multiple datasets at a time use this
+            state.multi_label_{{view_id}} : state the stores a string label of how many datasets are being visualized by the view,
+                only used by view's that support visualizing multiple datasets.
+            """
             state[f"selected_src_id_{view_id}"] = default_id
             state[f"selected_array_{view_id}"] = "pin_powers"
             state[f"locked_{view_id}"] = False
-            state[f"lock_info_{view_id}"] = {"Exposure": "-", "Assembly": "-", "Layer": "-", "Pin_x" : "-", "Pin_y" : "-"}
+            state[f"label_info_{view_id}"] = {"Exposure": "-", "Assembly": "-", "Layer": "-", "Pin_x" : "-", "Pin_y" : "-"}
             state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
             state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{"pin_powers"}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"

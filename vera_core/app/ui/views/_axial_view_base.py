@@ -45,7 +45,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     size_y_key = f"{prefix}_size_y_{view_id}"
     label_x_key = f"{prefix}_label_x_{view_id}"
     label_y_key = f"{prefix}_label_y_{view_id}"
-    info = f"lock_info_{view_id}"
+    info = f"label_info_{view_id}"
 
     pin_key = "selected_j" if is_x else "selected_i"
 

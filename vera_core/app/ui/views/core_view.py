@@ -31,7 +31,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     core_assemblies_key = f"core_assemblies_{view_id}"
     aspect_ratio_key = f"aspect_ratio_{view_id}"
     lock_flag = f"locked_{view_id}"
-    info = f"lock_info_{view_id}"
+    info = f"label_info_{view_id}"
 
     state.setdefault(core_assemblies_key, [])
     state.setdefault(aspect_ratio_key, 1)

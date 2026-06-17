@@ -33,7 +33,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_src_key = f"selected_src_id_{view_id}"
     assembly_array = f"assembly_array_{view_id}"
     state.setdefault(assembly_array, [])
-    info = f"lock_info_{view_id}"
+    info = f"label_info_{view_id}"
 
 
     @state.change(

@@ -24,7 +24,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
-    state[f"core_readout_{view_id}"] = {"values": []}
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
@@ -71,7 +70,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             layer_array[:, rod_rows, rod_cols] = np.nan
         # set labels if array_dtype is assembly valued dtype
         is_assembly_avg = array_dtype in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY)
-        state[f"core_readout_{view_id}"] = {"values": layer_array.tolist(),} if is_assembly_avg else {"values": []}
 
         thres = state["thresholds"]
         if thres.get(thres_key):
@@ -118,12 +116,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     click="selected_assembly_ij = $event",
                     busy=("trame__busy",),
                 )
-            html.Div(
-                f"{{{{ selected_assembly != null && core_readout_{view_id}"
-                f" ? core_readout_{view_id}.values[selected_assembly] : '' }}}}",
-                classes="text-caption text-center",
-                style="flex: 0 0 auto; padding: 4px 0;",
-            )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})"

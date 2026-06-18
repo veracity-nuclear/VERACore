@@ -18,6 +18,7 @@ from .views import (
     x_axial_view,
     y_axial_view,
     volume_view,
+    core_axial_view,
 )
 
 DEFAULT_NB_ROWS = 8
@@ -35,6 +36,7 @@ VIEW_MODULES = [
     volume_view,
     x_axial_view,
     y_axial_view,
+    core_axial_view
 ]
 
 def _center_assembly(reduced_core_map):

@@ -53,7 +53,28 @@ class CoreView(HtmlElement):
             "click",
         ]
 
-
+class CoreAxialView(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-core-axial-view",
+            **kwargs,
+        )
+        self._attr_names += [
+            "value",
+            "labels",
+            ("x_range", "xRange"),
+            ("selected_i", "selectedI"),
+            ("selected_j", "selectedJ"),
+            ("aspect_ratio", "aspectRatio"),
+            ("active_style", "activeStyle"),
+            ("x_labels", "xLabels"),
+            ("y_labels", "yLabels"),
+            ("cell_size", "cellSize"),
+            "busy",
+        ]
+        self._event_names += [
+            "click",
+        ]
 class AxialView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(

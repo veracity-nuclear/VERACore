@@ -40,13 +40,9 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")
-    
-    # FIXME this is btn for opening up the menu for creating difference datasets. 
-    # Interpolation between datasets with different axial meshes not handled yet so button is not displayed.
-    # vvvvv
 
-    # with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
-    #     vuetify.VIcon("mdi-delta")
+    with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
+        vuetify.VIcon("mdi-delta")
 
     with vuetify.VBtn(icon=True, click=ctrl.grid_add_view, disabled=("!has_data",)):
         vuetify.VIcon("mdi-plus")
@@ -129,8 +125,7 @@ def build_grid_card(ctrl : Controller):
 def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRegistry):
     layout.content.style = "overflow: auto; margin: 36px 72px 35px 0px; padding: 0;"
     DeriveMenu.build_derived_dialog(state, ctrl, registry)
-    # FIXME vvvv
-    # build_diff_dialog(state, ctrl, registry)
+    DiffMenu.build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
     StreamMenu.build_stream_dialog(ctrl)

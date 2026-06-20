@@ -486,6 +486,10 @@ class VeraOutState(LazyHDF5Loader):
         """
         setattr(self, dataset_name, dataset)
         self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+        dataset_shape = np.shape(dataset)
+        if dataset_shape in self.dataset_shapes:
+                dataset_type_str = str(self.dataset_shapes[dataset_shape])
+                self.dataset_categories[dataset_type_str].add(dataset_name)
 
     def add_derived_dataset(self, dataset_name: str, dataset : VeraDataset) -> None:
         """Attach an in-memory derived dataset to this state.
@@ -595,7 +599,7 @@ class VeraDataSource(ABC):
             return VeraDtype.UNKNOWN
 
     @abstractmethod
-    def add_new_diff_dataset(self, ref_array_name : str, comp_array_name : str, new_diff_name : str):
+    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : "VeraDataSource", comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
         """Create a difference dataset (ref minus comp) on each state."""
         pass
 

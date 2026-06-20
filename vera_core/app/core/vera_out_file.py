@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+from scipy.interpolate import make_interp_spline
 from .vera_tools.VERAout import VERAout
 from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, dataset_shape_category_dict, VeraOutCore, VeraOutState
 class VeraOutFile(VeraDataSource):
@@ -94,14 +95,26 @@ class VeraOutFile(VeraDataSource):
         self._active_state_index = index
         self.active_state._cache_all()
     
-    def add_new_diff_dataset(self, ref_array_name: str, comp_array_name: str, new_diff_name: str):
-        for state in self._states:
-            if state.has_dataset(ref_array_name) and state.has_dataset(comp_array_name):
-                ref = getattr(state, ref_array_name)
-                comp = getattr(state, comp_array_name)
-                if ref.shape == comp.shape:
-                    diff = ref - comp
-                    state.add_diff_dataset(new_diff_name, diff)
+    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : VeraDataSource, comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
+        for idx, state in enumerate(self._states):
+            if idx >= len(comp_src.states):
+                return
+            if not state.has_dataset(ref_dataset_name) or not state.has_dataset(comp_dataset_name):
+                continue
+            ref_data = getattr(state, ref_dataset_name)
+            comp_data = getattr(comp_src.states[idx], comp_dataset_name)
+            ref_axial_mesh_means = self.core.axial_mesh_means
+            comp_axial_mesh_means = comp_src.core.axial_mesh_means
+            if ref_data.dataset_type != comp_data.dataset_type:
+                continue
+            if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
+                diff = ref_data - comp_data
+            else:
+                # data is (py, px, nax, nass) shape. py, px, and nass must match between the two dataset
+                spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=2)
+                comp_data_on_ref_mesh = spl(ref_axial_mesh_means, extrapolate=False)
+                diff = ref_data - comp_data_on_ref_mesh
+            state.add_diff_dataset(new_diff_name, diff)
     
     def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
         """Reduce data over the given axes using the VERAout calculator.

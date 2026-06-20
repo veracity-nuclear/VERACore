@@ -93,7 +93,7 @@ class VeraDataStream(VeraDataSource):
                 return
             self._active_state_index = index
     
-    def add_new_diff_dataset(self, ref_array_name : str, comp_array_name : str, new_diff_name : str):
+    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : VeraDataSource, comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
         pass
 
     def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes):

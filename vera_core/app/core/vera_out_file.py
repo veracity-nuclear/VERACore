@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import os
 from scipy.interpolate import make_interp_spline
 from .vera_tools.VERAout import VERAout
 from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, dataset_shape_category_dict, VeraOutCore, VeraOutState
@@ -12,20 +13,18 @@ class VeraOutFile(VeraDataSource):
         for averaging). 
         It eagerly caches the core, and validates that the core shape agrees with pin_volumes and pin_powers.
         """
-        self.f = h5py.File(filename, "r")
-        self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+        self.f = h5py.File(filename, "r", locking=False)
+        try:
+            self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+        except Exception as e:
+            print(str(e))
+            self.vera_calculator = None
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
-        
         self._states = []
+        self._determine_core_shape()
         self._create_states()
-
         self.active_state_index = 0
-        num_pin = self.vera_calculator.num_pins
-        naxx = self.vera_calculator.num_axials
-        nass = self.vera_calculator.num_assys
-        self._core_shape = (num_pin, num_pin, naxx, nass)
-        self.dataset_shape_to_category_lookup = dataset_shape_category_dict(self.core_shape)
         if (
             hasattr(self.core, "pin_volumes") 
             and self.core.pin_volumes is not None 
@@ -38,10 +37,34 @@ class VeraOutFile(VeraDataSource):
             and self.active_state.pin_powers.shape != self.core_shape
         ):
             raise ValueError("[ERROR] Core shape and pin powers mismatch. Unable to determine core dimensions.")
+        
+        
+    def _determine_core_shape(self):
+        if self.vera_calculator is not None:
+            num_pin = self.vera_calculator.num_pins
+            nax = self.vera_calculator.num_axials
+            nass = self.vera_calculator.num_assys
+            self._core_shape = {"npiny" : num_pin, "npinx" : num_pin, "nax" : nax, "nass" : nass}
+        else:
+            cm = self._core.core_map
+            nass = np.count_nonzero(np.unique(cm[~np.isnan(cm)]))
+            nax = len(self._core.axial_mesh) - 1
+            print(nass, nax)
+            self._core_shape = {"npiny" : None, "npinx" : None, "nax" : nax, "nass" : nass}
+        self.dataset_shape_to_category_lookup = dataset_shape_category_dict(**self._core_shape)
 
     @property
     def core_shape(self):
-        return self._core_shape
+        if (self._core_shape["npiny"] is not None 
+            and self._core_shape["npinx"] is not None
+            and self._core_shape["nax"] is not None
+            and self._core_shape["nass"] is not None):
+
+            return (self._core_shape["npiny"], self._core_shape["npinx"], self._core_shape["nax"], self._core_shape["nass"])
+        elif self._core_shape["nax"] is not None and self._core_shape["nass"] is not None:
+            return (self._core_shape["nax"], self._core_shape["nass"])
+        else:
+            raise RuntimeError("Could not determine core shape")
 
     @property
     def core(self):
@@ -55,7 +78,16 @@ class VeraOutFile(VeraDataSource):
         """Build a VeraOutState for every STATE_ group found in the file."""
         state_keys = [key for key in self.f if key.startswith("STATE_")]
         indices = [int(key.split("_")[1]) for key in state_keys]
-        self._states = [VeraOutState(self.f, idx) for idx in indices]
+        self._states = [VeraOutState(self.f, idx, core_shape=self._core_shape) for idx in indices]
+
+    def default_datasets(self):
+        dataset_categories = self.active_state.dataset_categories
+        default_names = {dtype : next(iter(dataset_categories[dtype])) for dtype in dataset_categories if len(dataset_categories[dtype]) > 0}
+        if not default_names:
+            return None
+        if default_names and str(VeraDtype.PIN) in dataset_categories and "pin_powers" in dataset_categories[str(VeraDtype.PIN)]:
+            default_names[str(VeraDtype.PIN)] = "pin_powers"
+        return default_names
 
     @property
     def states(self):
@@ -141,6 +173,8 @@ class VeraOutFile(VeraDataSource):
         return der
     
     def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes):
+        if not self.vera_calculator:
+            return
         for state in self._states:
             if state.has_dataset(new_dataset_name):
                 raise ValueError(f"A dataset named {new_dataset_name} already exists in this source, please pick a unique name.")

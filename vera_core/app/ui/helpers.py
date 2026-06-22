@@ -45,20 +45,23 @@ def make_safe_index(selected_j,
                     selected_assy, 
                     dataset_type : VeraDtype, 
                     core_shape: tuple[int, ...]):
-    if len(core_shape) != 4:
-        raise ValueError("core_shape must have 4 dim: npy, npx, nax, nass")
-    selected_j = int(selected_j)
-    selected_i = int(selected_i)
-    selected_layer = int(selected_layer)
-    selected_assy = int(selected_assy)
-    npy, npx, nax, nass = core_shape
-    ncy, ncx = npy + 1, npx + 1
+    if len(core_shape) != 4 and len(core_shape) != 2:
+        raise ValueError("core_shape must have 4 dim: npy, npx, nax, nass or 2 dim: nax, nass")
+    if len(core_shape) == 4:
+        selected_j = int(selected_j)
+        selected_i = int(selected_i)
+        selected_layer = int(selected_layer)
+        selected_assy = int(selected_assy)
+        npy, npx, nax, nass = core_shape
+        ncy, ncx = npy + 1, npx + 1
 
-    safe_y = ncy if dataset_type.is_channel() else npy
-    safe_x = ncx if dataset_type.is_channel() else npx
-    
-    selected_j = max(min(selected_j, safe_y - 1), 0)
-    selected_i = max(min(selected_i, safe_x - 1), 0)
+        safe_y = ncy if dataset_type.is_channel() else npy
+        safe_x = ncx if dataset_type.is_channel() else npx
+        
+        selected_j = max(min(selected_j, safe_y - 1), 0)
+        selected_i = max(min(selected_i, safe_x - 1), 0)
+    elif len(core_shape) == 2:
+        nax, nass = core_shape
     selected_layer = max(min(selected_layer, nax - 1), 0)
     selected_assy = max(min(selected_assy, nass - 1), 0)
     

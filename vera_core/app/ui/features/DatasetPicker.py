@@ -29,7 +29,7 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
     }
     state.src_tree_meta = {
         fid: {
-            "shape": str(registry.get(fid).active_state.pin_powers.shape),
+            "shape": str(registry.get(fid).core_shape),
             "states": len(registry.get(fid).states),
         }
         for fid in registry.src_ids()

@@ -144,7 +144,7 @@ def _build_view(server, view_id):
 
     return ctx
 
-def _update_volume(server, registry, view_id):
+def _update_volume(server, registry : VeraDataRegistry, view_id):
     state = server.state
     ctx = _views.get(view_id)
     if ctx is None or not _is_active(state, view_id):
@@ -155,6 +155,8 @@ def _update_volume(server, registry, view_id):
     if vera_out_file is None or not array_name:
         return
     array = vera_out_file.array(array_name)
+    if str(array.dataset_type).upper() not in option_for(0)["allowed_categories"]:
+        return
     core = vera_out_file.core
 
     assembly_shape = array.shape[:2]

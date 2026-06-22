@@ -212,7 +212,7 @@ class VERAinput:
             Path in the HDF5 file to read
         """
         print("Reading HDF5 file")
-        with h5py.File(h5file, "r") as h5f:
+        with h5py.File(h5file, "r", locking=False) as h5f:
             h5_obj = h5f[path]
             if isinstance(h5_obj, h5py.Group):
                 self._data = self._walkGroup(h5_obj)

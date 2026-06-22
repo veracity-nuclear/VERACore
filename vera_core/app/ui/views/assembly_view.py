@@ -78,6 +78,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             vera_source : VeraDataSource = registry.get(selected_src_id)
             array = vera_source.array(selected_array)
             array_dtype : VeraDtype = array.dataset_type
+            if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
+                return
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     image_data = array[:, :, selected_layer, selected_assembly].copy()

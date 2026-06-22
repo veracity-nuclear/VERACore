@@ -82,18 +82,21 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         if is_non_active_view(state, view_id, option):
             return
         selected_array = state[selected_array_key]
+        
         selected_assembly = int(state.selected_assembly)
         selected_pin = int(state[pin_key])
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
+        array = vera_source.array(selected_array)
+        array_dtype = array.dataset_type
+
+        if str(array_dtype).upper() not in option_for(0, "x")["allowed_categories"]:
+            return
 
         if is_x:
             assembly_indices = vera_source.core.row_assembly_indices(selected_assembly)
         else:
             assembly_indices = vera_source.core.col_assembly_indices(selected_assembly)
-
-        array = vera_source.array(selected_array)
-        array_dtype = array.dataset_type
 
         # Clamp indices against the core shape. Slot order is (j-pin, i-pin,
         # axial, assembly); each view clamps the pin slot it actually uses.

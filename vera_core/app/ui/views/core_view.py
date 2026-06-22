@@ -50,6 +50,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
         array = vera_source.array(selected_array)
         array_dtype = array.dataset_type
+        if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
+            return
 
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:

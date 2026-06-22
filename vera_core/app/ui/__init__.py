@@ -3,7 +3,7 @@ import numpy as np
 
 from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
-from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core import VeraDataRegistry, VeraDtype
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
 from .layout import build_layout
@@ -240,9 +240,16 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
         src = registry.default_src
         default_id = registry.default_src_id
-        core_shape = src.core_shape
-        ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
+        default_names = src.default_datasets()
+        default_name = default_names[next(iter(default_names))]
+        if str(VeraDtype.PIN) in default_names:
+            default_name = default_names[str(VeraDtype.PIN)]
 
+        core_shape = src.core_shape
+        if len(core_shape) == 4:
+            ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
+        elif len(core_shape) == 2:
+            ny, nx, nz = 0, 0, core_shape[0]
         # Global State
         # state.selected_layer : state for tracking which axial_plane is selected 
         # state.selected_i : state for tracking the x-index of the selected pin 
@@ -262,9 +269,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.selected_time = 0
         for view_id in all_view_ids:
             state[f"selected_src_id_{view_id}"] = default_id
-            state[f"selected_array_{view_id}"] = "pin_powers"
-            state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
-            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}pin_powers"]  # a seperator must be used instead of a tuple since the trame state needs to serializable
+            state[f"selected_array_{view_id}"] = default_name
+            state[f"selected_label_{view_id}"] = format_label(default_id, default_name)
+            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{default_name}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"
             _recompute_card_range(view_id)
         # Default arrangement of views.

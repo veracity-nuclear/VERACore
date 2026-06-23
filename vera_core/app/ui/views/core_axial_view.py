@@ -14,7 +14,7 @@ def option_for(view_id):
         "label": "Core Axial View",
         "multi_picker": False,
         "icon": "mdi-chart-line-variant",
-        "allowed_categories": ["ASSEMBLY"],
+        "allowed_categories": [VeraDtype.ASSEMBLY.title],
     }
 
 

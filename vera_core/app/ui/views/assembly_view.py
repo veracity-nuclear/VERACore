@@ -14,7 +14,7 @@ def option_for(view_id):
     "label": "Assembly View",
     "multi_picker" : False,
     "icon": "mdi-dots-grid",
-    "allowed_categories": ["PIN", "CHANNEL", "RADIAL"],
+    "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.RADIAL.title]
 }
 
 

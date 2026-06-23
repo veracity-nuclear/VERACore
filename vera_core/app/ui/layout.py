@@ -26,6 +26,15 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     vuetify.VSpacer()
 
+    vuetify.VSwitch(
+        v_model="$vuetify.theme.dark",
+        hide_details=True,
+        dense=True,
+        inset=True,
+        prepend_icon="mdi-white-balance-sunny",
+        append_icon="mdi-moon-waning-crescent",
+        classes="mt-0",)
+
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
     

@@ -25,7 +25,7 @@ def option_for(view_id, axis):
         "label": cfg["label"],
         "multi_picker": False,
         "icon": cfg["icon"],
-        "allowed_categories": ["PIN", "CHANNEL", "ASSEMBLY"],
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.ASSEMBLY.title]
     }
 
 

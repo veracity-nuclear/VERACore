@@ -220,9 +220,27 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     for view_id in all_view_ids:
         _make_array_watcher(view_id)
 
-    def place(module, x, y, w, h):
+    def place(module, x, y, w, h, default_datasets_names : dict, default_id):
         """helper function for intializing UI"""
+
+        if "allowed_categories" in module.option_for(0):
+            module_allowed_categories = module.option_for(0)["allowed_categories"]
+            available_categories = set(default_datasets_names).intersection(module_allowed_categories)
+        else:
+            available_categories = set(default_datasets_names)
+        if not available_categories:
+            return
+        default_dataset_name = default_datasets_names.get(next(iter(available_categories)))
+        if VeraDtype.PIN.title in available_categories:
+            default_dataset_name = default_datasets_names[VeraDtype.PIN.title]
+
         view_id = available_view_ids.pop(0)
+        state[f"selected_src_id_{view_id}"] = default_id
+        state[f"selected_array_{view_id}"] = default_dataset_name
+        state[f"selected_label_{view_id}"] = format_label(default_id, default_dataset_name)
+        state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{default_dataset_name}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
+        state[f"multi_label_{view_id}"] = "1 Selected"
+        _recompute_card_range(view_id)
         state.grid_layout.append(dict(x=x, y=y, w=w, h=h, i=view_id))
         state[f"grid_view_{view_id}"] = module.option_for(view_id)
 
@@ -242,7 +260,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         default_id = registry.default_src_id
         default_names = src.default_datasets()
         default_name = default_names[next(iter(default_names))]
-        if str(VeraDtype.PIN) in default_names:
+        if VeraDtype.PIN.title in default_names:
             default_name = default_names[str(VeraDtype.PIN)]
 
         core_shape = src.core_shape
@@ -275,13 +293,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
             state[f"multi_label_{view_id}"] = "1 Selected"
             _recompute_card_range(view_id)
         # Default arrangement of views.
-        place(x_axial_view,   0,  0, 3, 17)
-        place(core_view,      6,  0, 3,  9)
-        place(assembly_view,  9,  0, 3,  9)
-        place(axial_plot,     6,  9, 3,  8)
-        place(time_plot,      9,  9, 3,  8)
-        place(volume_view,    3,  0, 3, 17)
-        place(table_view,     0, 17, 6, 10)
+        place(x_axial_view,   0,  0, 3, 17, default_names, default_id)
+        place(core_view,      6,  0, 3,  9, default_names, default_id)
+        place(assembly_view,  9,  0, 3,  9, default_names, default_id)
+        place(axial_plot,     6,  9, 3,  8, default_names, default_id)
+        place(time_plot,      9,  9, 3,  8, default_names, default_id)
+        place(volume_view,    3,  0, 3, 17, default_names, default_id)
+        place(table_view,     0, 17, 6, 10, default_names, default_id)
         state.dirty("grid_layout")
         state.has_data = True
         # for view_id in all_view_ids:

@@ -17,7 +17,7 @@ import vtk.util.numpy_support as np_s
 from trame.ui.html import DivLayout
 from trame.widgets import vtk, vuetify, html
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core import VeraDataRegistry, VeraDtype
 from vera_core.widgets import vera
 from ..helpers import is_view_locked
 
@@ -48,7 +48,7 @@ def option_for(view_id):
         "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
-        "allowed_categories": ["PIN", "CHANNEL", "ASSEMBLY"],
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.ASSEMBLY.title]
     }
 
 

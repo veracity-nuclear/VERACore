@@ -38,7 +38,6 @@ class VeraOutFile(VeraDataSource):
         ):
             raise ValueError("[ERROR] Core shape and pin powers mismatch. Unable to determine core dimensions.")
         
-        
     def _determine_core_shape(self):
         if self.vera_calculator is not None:
             num_pin = self.vera_calculator.num_pins
@@ -82,12 +81,16 @@ class VeraOutFile(VeraDataSource):
 
     def default_datasets(self):
         dataset_categories = self.active_state.dataset_categories
-        default_names = {dtype : next(iter(dataset_categories[dtype])) for dtype in dataset_categories if len(dataset_categories[dtype]) > 0}
+        default_names = {dtype.upper() : next(iter(dataset_categories[dtype])) for dtype in dataset_categories if len(dataset_categories[dtype]) > 0}
         if not default_names:
             return None
-        if default_names and str(VeraDtype.PIN) in dataset_categories and "pin_powers" in dataset_categories[str(VeraDtype.PIN)]:
-            default_names[str(VeraDtype.PIN)] = "pin_powers"
+        if "pin_powers" in dataset_categories.get(VeraDtype.PIN.str, "none"):
+            default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
+
+    # def time_axes(self):
+    #     if ("exposure, core_exposure", "exposure_efpd"), 
+    #         np.all(np.diff(arr) >= 0)
 
     @property
     def states(self):

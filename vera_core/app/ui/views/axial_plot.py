@@ -16,7 +16,7 @@ def option_for(view_id):
         "label": "Axial Plot",
         "multi_picker" : True,
         "icon": "mdi-align-horizontal-center",
-        "allowed_categories": ["PIN", "CHANNEL", "AXIAL", "ASSEMBLY"],
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title]
     }
 
 

@@ -15,7 +15,9 @@ def option_for(view_id):
         "label": "Core View",
         "multi_picker" : False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": ["PIN", "CHANNEL", "ASSEMBLY", "RADIAL", "RADIAL_ASSEMBLY"],
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
+                               VeraDtype.ASSEMBLY.title, VeraDtype.RADIAL.title, 
+                               VeraDtype.RADIAL_ASSEMBLY.title]
     }
 
 

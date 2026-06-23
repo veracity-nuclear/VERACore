@@ -22,6 +22,14 @@ class VeraDtype(Enum):
     def __str__(self):
         return self.name
     
+    @property
+    def str(self):
+        return self.name
+    
+    @property
+    def title(self):
+        return str(self).upper()
+    
     def is_channel(self):
         return self in (VeraDtype.CHANNEL, VeraDtype.CHANNEL_RADIAL)
 

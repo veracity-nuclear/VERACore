@@ -1,4 +1,5 @@
 import tempfile, os
+import numpy as np
 from .vera_data import VeraDataSource
 from .vera_out_file import VeraOutFile
 
@@ -61,6 +62,15 @@ class VeraDataRegistry:
         full_core_keys = {src_id : self._srcs[src_id].active_state_full_core_keys for src_id in self._srcs.keys()}
         return full_core_keys
     
+    def shared_time_axes(self):
+        if not self._srcs:
+            return
+        srcs = iter(self._srcs.values())
+        shared_axes = set(next(srcs).time_axes())
+        for src in srcs:
+            shared_axes &= set(src.time_axes())
+        return sorted(shared_axes)
+
     def remove_src(self, src_id: str) -> None:
         """Remove a source, close its file handles, and reassigns the default. Raises ValueError if src_id isn't registered."""
         if src_id not in self._srcs:

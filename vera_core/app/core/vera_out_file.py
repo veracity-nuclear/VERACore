@@ -17,27 +17,27 @@ class VeraOutFile(VeraDataSource):
         try:
             self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
         except Exception as e:
-            print(str(e))
             self.vera_calculator = None
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
         self._states = []
         self._determine_core_shape()
-        self._create_states()
-        self.active_state_index = 0
         if (
             hasattr(self.core, "pin_volumes") 
             and self.core.pin_volumes is not None 
             and self.core.pin_volumes.shape != self.core_shape
         ):
             raise ValueError("[ERROR] Core shape and pin volumes mismatch. Unable to determine core dimensions.")
+        self._create_states()
+        self.active_state_index = 0
         if (
             hasattr(self.active_state, "pin_powers") 
             and self.active_state.pin_powers is not None
             and self.active_state.pin_powers.shape != self.core_shape
         ):
             raise ValueError("[ERROR] Core shape and pin powers mismatch. Unable to determine core dimensions.")
-        
+        self._determine_time_axes()
+    
     def _determine_core_shape(self):
         if self.vera_calculator is not None:
             num_pin = self.vera_calculator.num_pins
@@ -48,9 +48,17 @@ class VeraOutFile(VeraDataSource):
             cm = self._core.core_map
             nass = np.count_nonzero(np.unique(cm[~np.isnan(cm)]))
             nax = len(self._core.axial_mesh) - 1
-            print(nass, nax)
             self._core_shape = {"npiny" : None, "npinx" : None, "nax" : nax, "nass" : nass}
         self.dataset_shape_to_category_lookup = dataset_shape_category_dict(**self._core_shape)
+    
+    def _determine_time_axes(self):
+        self._time_axes = {}
+        for time_data_point in ("exposure", "core_exposure", "exposure_efpd"):
+            time_axis = [getattr(state, time_data_point).item() for state in self.states if state.has_dataset(time_data_point)]
+            if np.shape(time_axis) != np.shape(self.states) or not np.all(np.asarray(time_axis) >= 0) or not np.all(np.diff(time_axis) >= 0):
+                continue
+            self._time_axes[time_data_point] = time_axis
+        self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
 
     @property
     def core_shape(self):
@@ -88,9 +96,8 @@ class VeraOutFile(VeraDataSource):
             default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
 
-    # def time_axes(self):
-    #     if ("exposure, core_exposure", "exposure_efpd"), 
-    #         np.all(np.diff(arr) >= 0)
+    def time_axes(self):
+        return self._time_axes
 
     @property
     def states(self):

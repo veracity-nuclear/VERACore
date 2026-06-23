@@ -2,7 +2,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from trame.ui.html import DivLayout
-from trame.widgets import plotly
+from trame.widgets import plotly, vuetify, html
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
 from ..helpers import is_non_active_view, make_safe_index
@@ -23,6 +23,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
+    time_axis_key = f"selected_time_axis_{view_id}"
+    time_axes_options_key = f"time_axes_{view_id}"
+    state[time_axis_key] = "state_count"
+    state[time_axes_options_key] = ["state_count"]
 
     selected_set_key = f"multi_selected_{view_id}"
 
@@ -35,7 +39,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             identifier = ""
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
-            exposures = [np.asarray(x.exposure).item() for x in src.states]
+            time_axis = src.time_axes()[state[time_axis_key]]
             array_dtype = src.array_dtype(array_name)
             ny, nx, nax, nass = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core_shape)
             assembly_label = src.core.reduced_core_map_label(nass)
@@ -63,7 +67,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             values = [getattr(x, array_name)[indices] for x in src.states]
             figure.add_trace(
                 go.Scatter(
-                    x=exposures,
+                    x=time_axis,
                     y=values,
                     mode="lines",
                     name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier}",
@@ -72,9 +76,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # add_vline only spans y in [0, 1], so draw the marker manually.
         float_info = np.finfo(np.float64)
+        time_axis = state[time_axis_key]
+        if time_axis == "state_count":
+            x = [state["selected_time"]] * 2
+        else:
+            x=[np.asarray(getattr(registry.default_src.active_state, state[time_axis_key]).item())] * 2
         figure.add_trace(
             go.Scatter(
-                x=[np.asarray(registry.default_src.active_state.exposure).item()] * 2,
+                x=x,
                 y=[float_info.min, float_info.max],
                 mode="lines",
                 line=go.scatter.Line(color="red", dash="dash"),
@@ -91,6 +100,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ,)
         return figure
 
+    @state.change("src_tree_meta")
+    def update_time_axes_options(**kwargs):
+        state[time_axes_options_key] = registry.shared_time_axes()
+
     @state.change(
         selected_set_key,
         "max_time",
@@ -100,6 +113,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        time_axis_key
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
@@ -116,15 +130,32 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             update_fn(create_line(indices))
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%; width: 100%;"
+        layout.root.style = (
+            "height: 100%; width: 100%;"
+            "display: flex; flex-direction: column;"
+        )
         style = "; ".join([
             "width: 100%",
             "height: 100%",
             "user-select: none",
         ])
-        figure = plotly.Figure(
-            display_logo=False,
-            display_mode_bar=False,
-            style=style,
-        )
-        setattr(ctrl, update_fn_name, figure.update)
+        with html.Div(style="flex: 1; min-height: 0; width: 100%;"):
+            figure = plotly.Figure(
+                display_logo=False,
+                display_mode_bar=False,
+                style=style,
+            )
+            setattr(ctrl, update_fn_name, figure.update)
+        with html.Div(style=(
+            "flex: 0 0 auto; display: flex; align-items: center;"
+            "justify-content: center; gap: 6px; padding: 4px 0;"
+        )):
+            html.Span("X-Axis:", classes="text-caption text--secondary")
+            vuetify.VSelect(
+                v_model=(time_axis_key,),
+                items=(time_axes_options_key,),
+                hide_details=True,
+                dense=True,
+                prepend_outer_icon="mdi-axis-x-arrow",
+                style="max-width: 220px;",
+            )

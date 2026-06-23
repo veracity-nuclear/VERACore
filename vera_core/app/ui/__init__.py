@@ -127,6 +127,12 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         new_ij = {"i": i, "j": j}
         if state.selected_assembly_ij != new_ij:
             state.selected_assembly_ij = new_ij
+    
+    @state.change("src_tree_meta")
+    def refresh_max_state(**kwargs):
+        max_state = registry.max_state
+        if max_state > state["max_time"]:
+            state["max_time"] = max_state
 
     # initialize state for each each view template. Each view_id has a full set of the templates initiliazed with that specific view_id
     for view_id in all_view_ids:

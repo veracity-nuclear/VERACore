@@ -41,13 +41,21 @@ export default {
     },
     imgSrc() {
       // samples ordered high -> low so the rendered image reads top=max, bottom=min
-      const samples = [];
-      const delta = (this.value[1] - this.value[0]) / 512;
-      let v = this.value[1];
-      while (v > this.value[0]) {
-        samples.push(v);
-        v -= delta;
+      const min = Number(this.value?.[0]);
+      const max = Number(this.value?.[1]);
+      const fallback = Number.isFinite(max) ? max : (Number.isFinite(min) ? min : 0);
+
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+        return toImageURL(this.colorMap, [fallback], 1, 1);
       }
+
+      const steps = 512;
+      const delta = (max - min) / steps;
+      const samples = new Array(steps + 1);
+      for (let k = 0; k <= steps; k++) {
+        samples[k] = max - k * delta;
+      }
+
       // width=1, height=samples.length: a tall 1-pixel-wide strip
       return toImageURL(this.colorMap, samples, 1, samples.length);
     },

@@ -97,10 +97,7 @@ export default {
       for (let j = 0; j < array.length; j++) {
         const line = array[j];
         // Flatten this row's cells into a single pixel array.
-        let rowPixels = [];
-        for (let i = 0; i < line.length; i++) {
-          rowPixels = rowPixels.concat(line[i]);
-        }
+        const rowPixels = line.flat();
         const rowWidth = rowPixels.length;
         urls.push(toImageURL(lut, rowPixels, rowWidth, 1, this.xScale, 1));
       }

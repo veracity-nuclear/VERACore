@@ -1,9 +1,16 @@
 .DS_Store
 node_modules
+pyvera_lite
 .venv
 venv
 build
 .ipynb_checkpoints
+dist
+dist_pylauncher
+vera_out_inspector.py
+temp.txt
+*.dmg
+VeraCore.zip
 
 # local env files
 .env.local

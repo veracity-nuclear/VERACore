@@ -9,3 +9,16 @@ html {
 .busy {
   cursor: wait !important;
 }
+
+.assembly-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+  font-weight: 600;
+  color: black;
+  pointer-events: none;
+  text-shadow: 0 0 2px white, 0 0 2px white;
+  white-space: nowrap;
+}

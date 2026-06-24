@@ -47,6 +47,14 @@ export default {
       type: Boolean,
       default: false,
     },
+    labels: {
+      type: Array,
+      default: () => [],
+    },
+    aspectRatio: {
+      type: Number,
+      default: 1,
+    },
   },
   watch: {
     selectedI(i) {
@@ -54,6 +62,9 @@ export default {
     },
     selectedJ(j) {
       this.activeJ = j;
+    },
+    aspectRatio() {
+      this.resize();
     },
   },
   data() {
@@ -111,14 +122,11 @@ export default {
   methods: {
     resize() {
       const { width, height } = this.$el.getBoundingClientRect();
-      const neededSize = (this.coreWidth + 1) * 32;
-      const availableSpace = Math.min(width, height);
-      const scale = availableSpace / neededSize;
-      this.scaleStyle = { scale };
-      this.sizeStyle = {
-        width: `${neededSize + 10}px`,
-        height: `${neededSize + 10}px`,
-      };
+      const needed = (this.coreWidth + 1) * 32;
+      const ar = this.aspectRatio || 1;            // guard against 0
+      const t = Math.min(width / (needed * ar), height / needed);
+      this.scaleStyle = { scale: `${ar * t} ${t}` };
+      this.sizeStyle = { width: `${needed + 10}px`, height: `${needed + 10}px` };
     },
     hover(i, j) {
       this.activeI = i;
@@ -137,6 +145,13 @@ export default {
     },
     toUrl(i, j) {
       return this.images?.[j]?.[i];
+    },
+    toLabel(i, j) {
+      const v = this.labels?.[j]?.[i];
+      if (v === undefined || v === null || Number.isNaN(v)) {
+        return '';
+      }
+      return Number(v).toFixed(2);
     },
   },
 };

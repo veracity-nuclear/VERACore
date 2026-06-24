@@ -262,7 +262,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
             state[f"selected_src_id_{view_id}"] = default_id
             state[f"selected_array_{view_id}"] = "pin_powers"
             state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
-            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{"pin_powers"}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
+            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}pin_powers"]  # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"
             _recompute_card_range(view_id)
         # Default arrangement of views.

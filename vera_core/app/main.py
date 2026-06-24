@@ -72,7 +72,7 @@ def main(server : Server | None | str = None, **kwargs):
         vera_out_file = VeraOutFile(data_file)
         registry.add_src(src=vera_out_file, src_id=file_path.stem)
 
-    f = partial(_reload, registry=registry)
+    f = partial(_reload, registry=registry, state_queue=state_queue)
 
     # Make UI auto reload
     server.controller.on_server_reload.add(f)

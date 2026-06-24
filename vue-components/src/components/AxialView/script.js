@@ -1,4 +1,4 @@
- import { LookupTable } from '../../utils/Colors';
+import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
 export default {

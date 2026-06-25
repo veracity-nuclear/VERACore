@@ -3,7 +3,7 @@ import numpy as np
 import os
 from scipy.interpolate import make_interp_spline
 from .vera_tools.VERAout import VERAout
-from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, dataset_shape_category_dict, VeraOutCore, VeraOutState
+from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, build_core_dtypes, VeraOutCore, VeraOutState
 class VeraOutFile(VeraDataSource):
     
     def __init__(self, filename):
@@ -18,39 +18,13 @@ class VeraOutFile(VeraDataSource):
             self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
         except Exception as e:
             self.vera_calculator = None
+        self._states = []
         self._core = VeraOutCore(self.f)
         self._core._cache_all()
-        self._states = []
-        self._determine_core_shape()
-        if (
-            hasattr(self.core, "pin_volumes") 
-            and self.core.pin_volumes is not None 
-            and self.core.pin_volumes.shape != self.core_shape
-        ):
-            raise ValueError("[ERROR] Core shape and pin volumes mismatch. Unable to determine core dimensions.")
         self._create_states()
         self.active_state_index = 0
-        if (
-            hasattr(self.active_state, "pin_powers") 
-            and self.active_state.pin_powers is not None
-            and self.active_state.pin_powers.shape != self.core_shape
-        ):
-            raise ValueError("[ERROR] Core shape and pin powers mismatch. Unable to determine core dimensions.")
         self._determine_time_axes()
-    
-    def _determine_core_shape(self):
-        if self.vera_calculator is not None:
-            num_pin = self.vera_calculator.num_pins
-            nax = self.vera_calculator.num_axials
-            nass = self.vera_calculator.num_assys
-            self._core_shape = {"npiny" : num_pin, "npinx" : num_pin, "nax" : nax, "nass" : nass}
-        else:
-            cm = self._core.core_map
-            nass = np.count_nonzero(np.unique(cm[~np.isnan(cm)]))
-            nax = len(self._core.axial_mesh) - 1
-            self._core_shape = {"npiny" : None, "npinx" : None, "nax" : nax, "nass" : nass}
-        self.dataset_shape_to_category_lookup = dataset_shape_category_dict(**self._core_shape)
-    
+
     def _determine_time_axes(self):
         self._time_axes = {}
         for time_data_point in ("exposure", "core_exposure", "exposure_efpd"):
@@ -59,22 +33,10 @@ class VeraOutFile(VeraDataSource):
                 continue
             self._time_axes[time_data_point] = time_axis
         self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
-
+    
     @property
-    def core_shape(self):
-        if (self._core_shape["npiny"] is not None 
-            and self._core_shape["npinx"] is not None
-            and self._core_shape["nax"] is not None
-            and self._core_shape["nass"] is not None):
-
-            return (self._core_shape["npiny"], self._core_shape["npinx"], self._core_shape["nax"], self._core_shape["nass"])
-        elif self._core_shape["nax"] is not None and self._core_shape["nass"] is not None:
-            return (self._core_shape["nax"], self._core_shape["nass"])
-        else:
-            raise RuntimeError("Could not determine core shape")
-
-    @property
-    def core(self):
+    def core(self) -> VeraOutCore:
+        """Reference to this h5 files core data"""
         return self._core
 
     def close(self):
@@ -85,14 +47,14 @@ class VeraOutFile(VeraDataSource):
         """Build a VeraOutState for every STATE_ group found in the file."""
         state_keys = [key for key in self.f if key.startswith("STATE_")]
         indices = [int(key.split("_")[1]) for key in state_keys]
-        self._states = [VeraOutState(self.f, idx, core_shape=self._core_shape) for idx in indices]
+        self._states = [VeraOutState(self.f, idx, self.core) for idx in indices]
 
     def default_datasets(self):
-        dataset_categories = self.active_state.dataset_categories
-        default_names = {dtype.upper() : next(iter(dataset_categories[dtype])) for dtype in dataset_categories if len(dataset_categories[dtype]) > 0}
+        categorized_ds_names = self.active_state.categorized_ds_names
+        default_names = {category.title : sorted(categorized_ds_names[category])[0] for category in categorized_ds_names if len(categorized_ds_names[category]) > 0}
         if not default_names:
             return None
-        if "pin_powers" in dataset_categories.get(VeraDtype.PIN.str, "none"):
+        if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, "none"):
             default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
 

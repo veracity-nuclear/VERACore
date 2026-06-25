@@ -115,6 +115,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     def selected_assembly_ij_changed(selected_assembly_ij, **kwargs):
         """Keep selected_assembly and selected_assembly_ij in sync."""
         i, j = selected_assembly_ij["i"], selected_assembly_ij["j"]
+        print(i,j)
         new_assembly = registry.default_src.core.reduced_core_map_assembly(i, j)
         if state.selected_assembly != new_assembly:
             state.selected_assembly = new_assembly
@@ -269,11 +270,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         if VeraDtype.PIN.title in default_names:
             default_name = default_names[str(VeraDtype.PIN)]
 
-        core_shape = src.core_shape
-        if len(core_shape) == 4:
-            ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
-        elif len(core_shape) == 2:
-            ny, nx, nz = 0, 0, core_shape[0]
+        core_shape = src.core.core_shape
+        ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
+
         # Global State
         # state.selected_layer : state for tracking which axial_plane is selected 
         # state.selected_i : state for tracking the x-index of the selected pin 

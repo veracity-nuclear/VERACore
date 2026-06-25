@@ -41,7 +41,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
             array_dtype = src.array_dtype(array_name)
-            ny, nx, nax, nass = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core_shape)
+            ny, nx, nax, nass = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core)
             assembly_label = src.core.reduced_core_map_label(nass)
             axial_label = src.core.axial_mesh_means[nax]
             match array_dtype:

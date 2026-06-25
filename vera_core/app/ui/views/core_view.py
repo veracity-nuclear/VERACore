@@ -5,7 +5,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label, is_non_active_view, set_info
 
@@ -17,7 +17,7 @@ def option_for(view_id):
         "icon": "mdi-chart-pie",
         "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
                                VeraDtype.ASSEMBLY.title, VeraDtype.RADIAL.title, 
-                               VeraDtype.RADIAL_ASSEMBLY.title]
+                               VeraDtype.RADIAL_ASSEMBLY.title, VeraDtype.COMP_NODAL.title]
     }
 
 
@@ -37,6 +37,58 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(core_assemblies_key, [])
     state.setdefault(aspect_ratio_key, 1)
     
+
+    def _vis_pin_level_data(src, dataset):
+        reduced_core_map = src.core.reduced_core_map
+        core_width = reduced_core_map.shape[0]
+        result = []
+        for i in range(core_width):
+            line = []
+            result.append(line)
+            for j in range(core_width):
+                index = reduced_core_map[i, j] - 1
+                if index == -1:
+                    continue   
+                line.append(np.ravel(dataset[index]).tolist())               
+        state[core_assemblies_key] = result
+        state[f"core_labels_{view_id}"] = []
+    
+    def _vis_assembly_level_data(src, dataset):
+        reduced_core_map = src.core.reduced_core_map
+        core_width = reduced_core_map.shape[0]
+        result = []
+        labels = []
+        for i in range(core_width):
+            line = []
+            labels_line = []
+            labels.append(labels_line)
+            result.append(line)
+            for j in range(core_width):
+                index = reduced_core_map[i, j] - 1
+                if index == -1:
+                    continue   
+                line.append([float(dataset[index])])
+                labels_line.append(np.round(dataset[index], 2))
+        state[core_assemblies_key] = result
+        state[f"core_labels_{view_id}"] = labels
+    
+    NUM_NODES = 4
+    def _vis_nodal_level_data(src : VeraDataSource, dataset : VeraDataset):
+        cm = src.comp_cm if dataset.dataset_type.is_computational() else src.core.reduced_core_map
+        core_width = cm.shape[0]
+        result = []
+        for i in range(core_width):
+            line = []
+            result.append(line)
+            for j in range(core_width):
+                index = cm[i, j] - 1
+                if index == -1:
+                    continue   
+                line.append(list(dataset[:, index]))
+        state[core_assemblies_key] = result
+        state[f"core_labels_{view_id}"] = []
+    
+
 
     @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
@@ -64,6 +116,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 layer_array = array.swapaxes(0, 2).swapaxes(1, 2).copy()
             case VeraDtype.RADIAL_ASSEMBLY:
                 layer_array = array
+            case VeraDtype.COMP_NODAL:
+                layer_array = array[:, selected_layer, :]
+                _vis_nodal_level_data(vera_source, layer_array)
+                return
             case _:
                 raise RuntimeError(f"Core View cannot visualize a dataset of type {str(array_dtype)} ")
         

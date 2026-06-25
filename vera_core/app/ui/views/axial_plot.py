@@ -39,7 +39,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             full_array = src.array(array_name)
             assembly_label = src.core.reduced_core_map_label(selected_assembly)
             array_dtype : VeraDtype = full_array.dataset_type
-            j, i, layer, assy = make_safe_index(selected_j, selected_i, selected_layer, selected_assembly, array_dtype, src.core_shape)
+            j, i, layer, assy = make_safe_index(selected_j, selected_i, selected_layer, selected_assembly, array_dtype, src.core)
             identifier : str = ""
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:

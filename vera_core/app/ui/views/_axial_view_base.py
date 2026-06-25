@@ -103,12 +103,12 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         if is_x:
             selected_pin, _, _, selected_assembly = make_safe_index(
                 selected_pin, 0, 0, selected_assembly,
-                array_dtype, vera_source.core_shape,
+                array_dtype, vera_source.core,
             )
         else:
             _, selected_pin, _, selected_assembly = make_safe_index(
                 0, selected_pin, 0, selected_assembly,
-                array_dtype, vera_source.core_shape,
+                array_dtype, vera_source.core,
             )
 
         match array_dtype:

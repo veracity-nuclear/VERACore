@@ -18,6 +18,13 @@ class VeraDtype(Enum):
     CHANNEL_RADIAL = 9
     RADIAL_NODE = 10
     UNKNOWN = 11
+    # all below use computational core map for shape
+    COMP_NODAL = 12
+    COMP_NODAL_ENERGY = 13
+    COMP_NODAL_ADF = 14
+    COMP_ASSY = 15
+    COMP_ASSY_ENERGY = 16
+    COMP_ASSY_ADF = 17
 
     def __str__(self):
         return self.name
@@ -32,6 +39,12 @@ class VeraDtype(Enum):
     
     def is_channel(self):
         return self in (VeraDtype.CHANNEL, VeraDtype.CHANNEL_RADIAL)
+
+    def is_computational(self):
+        return self in (VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_ADF, VeraDtype.COMP_ASSY_ENERGY,
+                        VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
+    def is_nodal(self):
+        return self in (VeraDtype.NODE, VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
 
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -61,7 +74,7 @@ class VeraDataset(np.ndarray):
 
 def nan_out_reflected(reduced_core_map, core_sym, array):
     """Nans out reflected region if dataset has quarter core symmetry"""
-    ax, ay = reduced_core_map.shape        
+    ax, ay = reduced_core_map.shape      
     has_reflected_pins = array.dataset_type in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
     if has_reflected_pins and core_sym == 4:
         array = array.copy()
@@ -76,44 +89,46 @@ def nan_out_reflected(reduced_core_map, core_sym, array):
                 array[:, :hpx, reduced_core_map[:, 0] - 1] = np.nan
     return array
 
-def dataset_shape_category_dict(npiny = None, npinx = None, nax = None, nass = None) -> dict[tuple[int, ...], VeraDtype]:
+NUM_ENERGY_GROUPS = 2
+NUM_DF = 6
+NUM_NODES = 4
+
+def build_core_dtypes(npiny = None, 
+                                npinx = None, 
+                                nax = None, 
+                                nass = None,
+                                comp_nax = None,
+                                comp_nass = None,
+) -> dict[tuple[int, ...], VeraDtype]:
     """Creates and retuns a dict mapping dataset shapes to dataset identifier (enums)"""
+    shape_to_dtype = {}
+    if nax and nass:
+        shape_to_dtype |= {
+            (nax, nass) : VeraDtype.ASSEMBLY,
+            (nax,) : VeraDtype.AXIAL,
+            (nass,) : VeraDtype.RADIAL_ASSEMBLY,
+            (1,) : VeraDtype.SCALAR,
+            () : VeraDtype.SCALAR
+        }
     if npiny and npinx and nax and nass:
-        core_shape = (npiny, npinx, nax, nass)
-        channel_shape = (npiny + 1, npinx + 1, nax, nass)
-        assembly_shape = (nax, nass)
-        axial_shape = (nax,)
-        radial_shape = (npiny, npinx, nass)
-        node_shape = (4, nax, nass)
-        radial_node_shape = (4, nass)
-        radial_assembly_shape = (nass,)
-        chan_radial_shape = (npiny + 1, npinx + 1, nass)
-        return {
-            core_shape : VeraDtype.PIN,
-            channel_shape : VeraDtype.CHANNEL,
-            assembly_shape : VeraDtype.ASSEMBLY,
-            axial_shape : VeraDtype.AXIAL,
-            radial_shape : VeraDtype.RADIAL,
-            node_shape : VeraDtype.NODE,
-            radial_assembly_shape : VeraDtype.RADIAL_ASSEMBLY,
-            radial_node_shape : VeraDtype.RADIAL_NODE,
-            chan_radial_shape : VeraDtype.CHANNEL_RADIAL,
-            (1,) : VeraDtype.SCALAR,
-            () : VeraDtype.SCALAR
+        shape_to_dtype |= {
+            (npiny, npinx, nax, nass) : VeraDtype.PIN,
+            (npiny + 1, npinx + 1, nax, nass) : VeraDtype.CHANNEL,
+            (npiny, npinx, nass) : VeraDtype.RADIAL,
+            (NUM_NODES, nax, nass) : VeraDtype.NODE,
+            (NUM_NODES, nass) : VeraDtype.RADIAL_NODE,
+            (npiny + 1, npinx + 1, nass) : VeraDtype.CHANNEL_RADIAL,
         }
-    elif nax and nass:
-        assembly_shape = (nax, nass)
-        axial_shape = (nax,)
-        radial_assembly_shape = (nass,)
-        return {
-            assembly_shape : VeraDtype.ASSEMBLY,
-            axial_shape : VeraDtype.AXIAL,
-            radial_assembly_shape : VeraDtype.RADIAL_ASSEMBLY,
-            (1,) : VeraDtype.SCALAR,
-            () : VeraDtype.SCALAR
+    if comp_nax and comp_nass:
+        shape_to_dtype |= {
+            (NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL,
+            (NUM_DF, NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ADF,
+            (NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ENERGY,
+            (1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY,
+            (NUM_DF, NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ADF,
+            (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ENERGY
         }
-    else:
-        raise RuntimeError("Could not determine dataset category shapes.")
+    return shape_to_dtype
 
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
 
@@ -130,7 +145,7 @@ class LazyHDF5Loader:
         f: "h5py.File",
         path: str,
         dataset_names: list[str],
-        dataset_shapes: dict[tuple, "VeraDtype"] | None = None,
+        dataset_dtypes: dict[tuple, "VeraDtype"] | None = None,
     ):
         """Store the file handle and dataset names, start lazy.
 
@@ -138,12 +153,12 @@ class LazyHDF5Loader:
             f: an open h5py.File handle
             path: the group path the datasets live under (e.g. "/CORE")
             dataset_names: names of the datasets this loader manages, these are cache and uncached
-            dataset_shapes: optional, shape -> VeraDtype map for typing datasets
+            dataset_dtypes: optional, shape -> VeraDtype map for typing datasets
         """
         self._f = f
         self._path = path
         self._dataset_names = dataset_names
-        self._dataset_shapes = dataset_shapes
+        self._dataset_dtypes = dataset_dtypes
 
         self._uncache_all()  # start lazy
     
@@ -165,8 +180,8 @@ class LazyHDF5Loader:
         raw = self._load_dataset(name)[()]
         shape = np.shape(raw)
         dtype = VeraDtype.UNKNOWN
-        if self._dataset_shapes and self._dataset_shapes.get(shape) is not None:
-            dtype = self._dataset_shapes.get(shape)
+        if self._dataset_dtypes and self._dataset_dtypes.get(shape) is not None:
+            dtype = self._dataset_dtypes.get(shape)
         arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
         return VeraDataset(arr, dtype)
 
@@ -254,6 +269,7 @@ class VeraOutCore(LazyHDF5Loader):
             aspect_ratio: dx / dy of a pin cell
         """
         if f is not None:
+            self.f = f
             super().__init__(f, "/CORE", list(self.__annotations__))
             self.aspect_ratio = f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1 # dx / dy
             self._cache_all()
@@ -271,6 +287,14 @@ class VeraOutCore(LazyHDF5Loader):
             self.aspect_ratio = aspect_ratio
         else:
             raise ValueError("Either a filename or raw data must be provided")
+        if not hasattr(self, "core_map") or self.core_map is None:
+            raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
+        if not hasattr(self, "axial_mesh") or self.axial_mesh is None:
+            raise RuntimeError("[ERROR} axial_mesh not found in h5 file, unable to visualize data")
+        self._determine_core_shape()
+        self._determine_computational_core_shape()
+        self._shape_to_dtype = build_core_dtypes(npiny=self.npy, npinx=self.npx, nax=self.nax, nass=self.nass,
+                                                 comp_nax=self.comp_nax, comp_nass=self.comp_nass)
         self.compute_reduced_core_map()
         self.compute_axial_mesh_pixels()
         self.compute_control_rod_positions()
@@ -293,6 +317,58 @@ class VeraOutCore(LazyHDF5Loader):
         """Build a core from in-memory arrays instead of a file."""
         return cls(axial_mesh=axial_mesh, core_map=core_map, core_sym=core_sym, pin_volumes=pin_volumes, aspect_ratio=aspect_ratio)
 
+    def _determine_core_shape(self):
+        cm = self.core_map
+        self.nass = np.count_nonzero(np.unique(cm[~np.isnan(cm)]))
+        self.nax = len(self.axial_mesh) - 1
+        self.npy = 0 # if the core only contains assembly and axial data, then npy and npx will be zero
+        self.npx = 0
+        if hasattr(self, "pin_volumes") and self.pin_volumes is not None:
+            self.npy, self.npx, nax, nass = np.shape(self.pin_volumes)
+            if nax != self.nax or nass != self.nass:
+                raise RuntimeError("core shape mismatch between core_map, axial_mesh and pin_volumes")
+        elif "STATE_0001/pin_powers" in self.f:
+            # if no pin_volumes see if state contains pin_powers as a source for core_shape
+            self.npy, self.npx, nax, nass = np.shape(self.f["STATE_0001/pin_powers"])
+            if nax != self.nax or nass != self.nass:
+                raise RuntimeError("core shape mismatch between core_map, axial_mesh and pin_powers")
+        
+    def _determine_computational_core_shape(self):
+        self.comp_nass = None
+        self.comp_nax = None
+        if "computational_core_map" not in self.f["CORE"]:
+            print("Could not find computational_core_map, unable to determine computational core shape")
+            return
+        # FIXME vvvv, looks for computational axial mesh under NODAL_XS, this will need to be changed
+        # when computational axial mesh moved to core
+        if "STATE_0001/NODAL_XS/AXIALMESH" not in self.f:
+            print("Could not find computational axial_mesh, unable to determine computational core shape")
+            return
+        self.comp_core_map = self.f["CORE/computational_core_map"][()]
+        self.comp_nass = np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
+        self.comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"][()]
+        self.comp_nax = len(self.comp_axial_mesh) - 1
+        
+    @property
+    def core_shape(self) -> tuple[int, ...]:
+        """Shape of core (num_piny, num_pinx, num_axial_levels, num_assemblys)"""
+        return (self.npy, self.npx, self.nax, self.nass)
+    
+    @property
+    def comp_core_shape(self) -> tuple[int, ...]:
+        """Shape of computational core (num_piny, num_pinx, num_computational_axial_levels, num_computational_assemblys)"""
+        return (self.npy, self.npx, self.comp_nax, self.comp_nass)
+    
+    def core_dtypes(self, dataset_shape : tuple[int, ...]) -> VeraDtype:
+        """Get VeraDtype associated with dataset_shape
+        
+        args:
+            dataset_shape: the shape of the dataset
+
+        Return VeraDtype.UKNOWN if shape is not known.
+        """
+        return self._shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
+    
     def compute_reduced_core_map(self) -> None:
         """Compute the reduced core map based upon the core_sym"""
         sym = self.core_sym[()] 
@@ -409,7 +485,10 @@ class VeraOutState(LazyHDF5Loader):
     through LazyHDF5Loader. Diff and derived datasets added after
     construction live on the instance but are never written back to the file.
     """
-    def __init__(self, f : "h5py.File | None" = None, idx : int | None = None, data : dict[str, np.ndarray] | None = None, core_shape = None):
+    def __init__(self, f : "h5py.File", 
+                 idx : int,
+                 core : VeraOutCore  
+    ):
         """Build a state either from an open h5 file or from raw Python data.
 
         Pass either (f, idx) to read from a file, or
@@ -418,54 +497,32 @@ class VeraOutState(LazyHDF5Loader):
         args:
             f: an open h5py.File handle (not a path), kept open by the owner
             idx: the state number, formatted into the /STATE_{idx:04} group
-            data: name -> vera dataset array map
+            core: reference to VeraOutCore object that contains core data for this state
         """
         # These are the attributes that will be read from the HDF5 file
-        self.dataset_shapes = None
-        self.dataset_categories = { str(dataset_type) : set() for dataset_type in VeraDtype}
-        if f is not None:
-            self.__annotations__ = dict()
-            if core_shape:
-                self.dataset_shapes = dataset_shape_category_dict(**core_shape)
-            self._search_for_datasets_in_file(f, idx)
-            self.all_datasets = [dataset for category in self.dataset_categories.values() for dataset in category]
-            super().__init__(f, f"/STATE_{idx:04}", self.all_datasets, dataset_shapes=self.dataset_shapes)
-            self._index = idx
-        elif data is not None:
-            self._search_for_datasets(data, raw=True)
-            self.all_datasets = [dataset for category in self.dataset_categories.values() for dataset in category]
-            self._f = None
-            self._path = None
-            self._dataset_names = self.all_datasets
-            self._dataset_shapes = self.dataset_shapes
-        else:
-            raise ValueError("Must pass in filename or data parameters")
+        self.categorized_ds_names = {dataset_type : set() for dataset_type in VeraDtype}
+        self.dataset_dtypes = {}
+        self._core = core
+        self._index = idx
+
+        self.__annotations__ = dict()
+        state = f[f"/STATE_{idx:04}"]
+        self._search_for_datasets(state)
+        self.all_datasets = [dataset for category in self.categorized_ds_names.values() for dataset in category]
+
+        super().__init__(f, f"/STATE_{idx:04}", self.all_datasets, dataset_dtypes=self.dataset_dtypes)
         self.diff_datasets = dict()
         self.derived_datasets = dict()
-
-    @classmethod
-    def from_data(cls, data) -> "VeraOutState":
-        """Construct a state from in-memory data instead of a file."""
-        return cls(data=data)
     
     @property
-    def scalar_datasets(self) -> set[str]:
-        """The set of dataset names categorized as SCALAR."""
-        return self.dataset_categories[str(VeraDtype.SCALAR)]
-    
-    _CATEGORY_ORDER = [
-        VeraDtype.PIN,
-        VeraDtype.CHANNEL,
-        VeraDtype.CHANNEL_RADIAL,
-        VeraDtype.ASSEMBLY,
-        VeraDtype.RADIAL,
-        VeraDtype.RADIAL_ASSEMBLY,
-        VeraDtype.AXIAL,
-        VeraDtype.NODE,
-        VeraDtype.RADIAL_NODE,
-        VeraDtype.SCALAR,
-        VeraDtype.UNKNOWN,
-    ]
+    def core(self) -> VeraOutCore:
+        """Reference to this state's core data"""
+        return self._core
+
+    @property
+    def scalar_datasets(self) -> list[str]:
+        """List of dataset names categorized as SCALAR."""
+        return sorted(self.categorized_ds_names[VeraDtype.SCALAR])
 
     @property
     def grouped_full_core_keys(self) -> list[tuple[str, list[str]]]:
@@ -476,8 +533,8 @@ class VeraOutState(LazyHDF5Loader):
         are skipped.
         """
         groups = []
-        for dtype in self._CATEGORY_ORDER:
-            names = sorted(self.dataset_categories[str(dtype)])
+        for dtype in VeraDtype:
+            names = sorted(self.categorized_ds_names[dtype])
             if names:
                 groups.append((str(dtype), names))
         return groups
@@ -487,33 +544,25 @@ class VeraOutState(LazyHDF5Loader):
         """Flat, category-ordered list of all dataset names."""
         return [name for _, names in self.grouped_full_core_keys for name in names]
     
-    def _search_for_datasets(self, data, raw = False):
-        """Populate dataset_shapes and dataset_categories for one state.
-
-        Uses pin_powers as the reference full-core shape, builds the
-        shape -> category map from it, then bins every dataset in the state
-        group whose shape matches a known category.
-        """
-        if "pin_powers" in data:
-            core_shape = np.shape(data["pin_powers"])
-            self.dataset_shapes = dataset_shape_category_dict(*core_shape)
-        if self.dataset_shapes is None:
-            return
-        for dataset_name in data.keys():
-            dataset = data[dataset_name]
-            dataset_shape = np.shape(dataset)
-            if dataset_shape not in self.dataset_shapes:
-                continue
-            dtype = self.dataset_shapes[dataset_shape]
-            self.dataset_categories[str(dtype)].add(dataset_name)
-            if raw:
-                arr = dataset if isinstance(dataset, np.ndarray) else np.array([dataset])
-                setattr(self, dataset_name, VeraDataset(arr, dtype))
-
-    def _search_for_datasets_in_file(self, f, idx) -> None:
-        """Populate dataset_shapes and dataset_categories for one state from a file handle."""
-        state = f[f"/STATE_{idx:04}"]
-        self._search_for_datasets(state)
+    def _search_for_datasets(self, data):
+        """Find all datasets with known shape and categorize them by VeraDdtype for one state."""
+        if "pin_powers" in data and np.shape(data["pin_powers"]) != self.core.core_shape:
+            raise RuntimeError(f"Mismatch between the shape of STATE_{self._index:04}'s data and the core shape")
+        
+        def _loop_through_datasets(h5_group, group_name=""):
+            for ds_name in h5_group.keys():
+                ds = h5_group[ds_name]
+                full_name = "/".join(part for part in (group_name, ds_name) if part)
+                if isinstance(ds, h5py.Group): # recurse on group (subdir)
+                    _loop_through_datasets(ds, group_name=full_name)
+                    continue
+                ds_shape = np.shape(ds)
+                ds_dtype = self.core.core_dtypes(ds_shape)
+                if ds_shape == VeraDtype.UNKNOWN:
+                    continue
+                self.categorized_ds_names[ds_dtype].add(full_name)
+                self.dataset_dtypes[ds_shape] = ds_dtype
+        _loop_through_datasets(data)
     
     def add_diff_dataset(self, dataset_name: str, dataset : VeraDataset)-> None:
         """Attach an in-memory diff dataset to this state.
@@ -523,10 +572,10 @@ class VeraOutState(LazyHDF5Loader):
         """
         setattr(self, dataset_name, dataset)
         self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
-        dataset_shape = np.shape(dataset)
-        if dataset_shape in self.dataset_shapes:
-                dataset_type_str = str(self.dataset_shapes[dataset_shape])
-                self.dataset_categories[dataset_type_str].add(dataset_name)
+        ds_dtype = dataset.dataset_type
+        if ds_dtype == VeraDtype.UNKNOWN:
+            return
+        self.categorized_ds_names[ds_dtype].add(dataset_name)
 
     def add_derived_dataset(self, dataset_name: str, dataset : VeraDataset) -> None:
         """Attach an in-memory derived dataset to this state.
@@ -536,10 +585,10 @@ class VeraOutState(LazyHDF5Loader):
         """
         setattr(self, dataset_name, dataset)
         self.derived_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
-        dataset_shape = np.shape(dataset)
-        if dataset_shape in self.dataset_shapes:
-                dataset_type_str = str(self.dataset_shapes[dataset_shape])
-                self.dataset_categories[dataset_type_str].add(dataset_name)
+        ds_dtype = dataset.dataset_type
+        if ds_dtype == VeraDtype.UNKNOWN:
+            return
+        self.categorized_ds_names[ds_dtype].add(dataset_name)
 class VeraDataSource(ABC):
     """Abstract class representing a valid data source for VeraCore to visualize datasets from
     
@@ -552,12 +601,6 @@ class VeraDataSource(ABC):
     @abstractmethod
     def core(self) -> VeraOutCore:
         """The core-level data shared across all states."""
-        pass
-
-    @property
-    @abstractmethod
-    def core_shape(self) -> tuple:
-        """Full-core array shape, as (npin, npin, naxial, nassembly)."""
         pass
 
     @property

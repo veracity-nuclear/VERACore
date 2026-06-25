@@ -52,7 +52,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src : VeraDataSource = registry.get(selected_src_id)
         array = src.array(selected_array)
         array_dtype = array.dataset_type
-        selected_j, selected_i, selected_layer, selected_assembly = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core_shape)
+        selected_j, selected_i, selected_layer, selected_assembly = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core)
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 indices = (selected_j, selected_i, selected_layer, selected_assembly)

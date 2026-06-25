@@ -14,7 +14,7 @@ def option_for(view_id):
     "label": "Assembly View",
     "multi_picker" : False,
     "icon": "mdi-dots-grid",
-    "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.RADIAL.title]
+    "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.RADIAL.title, VeraDtype.COMP_NODAL.title]
 }
 
 
@@ -85,6 +85,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     image_data = array[:, :, selected_layer, selected_assembly].copy()
                 case VeraDtype.RADIAL:
                     image_data = array[:, :, selected_assembly].copy()
+                case VeraDtype.COMP_NODAL:
+                    image_data = array[:, selected_layer, selected_assembly]
                 case _:
                     raise RuntimeError(f"Assembly View cannot visualize datasets of type {str(array_dtype)}")
             if thres.get(thres_key):

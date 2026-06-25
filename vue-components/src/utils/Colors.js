@@ -16,9 +16,23 @@ export class LookupTable {
   update(presetName, colorRange) {
     const preset = vtkColorMaps.getPresetByName(presetName);
     this.lookupTable.applyColorMap(preset);
-    this.lookupTable.setMappingRange(colorRange[0], colorRange[1]);
+    const [lo, hi] = this.safeRange(colorRange);
+    this.lookupTable.setMappingRange(lo, hi);
     this.lookupTable.updateRange();
     return this;
+  }
+
+  safeRange(colorRange) {
+    const lo = Number(colorRange[0]);
+    const hi = Number(colorRange[1]);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+      return [0, 1];
+    }
+    if (hi - lo > 0) {
+      return [lo, hi];
+    }
+    const pad = Math.abs(lo) * 1e-6 || 1e-6;
+    return [lo - pad, lo + pad];
   }
 
   applyRGBA(value, offset, array) {

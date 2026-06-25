@@ -63,7 +63,7 @@ export default {
 
       // width=1, height=samples.length: a tall 1-pixel-wide strip
       return toImageURL(this.colorMap, samples, 1, samples.length);
-    },
+    }
   },
   created() {
     this.lookupTable = new LookupTable(this.colorPreset, this.value);

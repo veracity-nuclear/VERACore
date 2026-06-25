@@ -109,8 +109,15 @@ export default {
     },
     toValue(i, j) {
       const v = this.value[this.toIdx(i, j)];
-      if (Number.isNaN(v) || v === undefined) {
+      if (v === undefined || Number.isNaN(v)) {
         return '';
+      }
+      if (v === 0) {
+        return '0';
+      }
+      const abs = Math.abs(v);
+      if (abs < 1e-2 || abs >= 1e5) {
+        return v.toExponential(2).replace(/\.?0+e/, 'e');
       }
       return v.toFixed(2);
     },

@@ -74,7 +74,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     
     NUM_NODES = 4
     def _vis_nodal_level_data(src : VeraDataSource, dataset : VeraDataset):
-        cm = src.comp_cm if dataset.dataset_type.is_computational() else src.core.reduced_core_map
+        cm = src.core.comp_core_map if dataset.dataset_type.is_computational() else src.core.reduced_core_map
         core_width = cm.shape[0]
         result = []
         for i in range(core_width):
@@ -106,7 +106,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         array_dtype = array.dataset_type
         if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
             return
-
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2).copy()
@@ -122,7 +121,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 return
             case _:
                 raise RuntimeError(f"Core View cannot visualize a dataset of type {str(array_dtype)} ")
-        
         # nan out control rods for dataset with pin level data
         if array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
             control_rod_positions = vera_source.core.control_rod_positions
@@ -130,7 +128,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             layer_array[:, rod_rows, rod_cols] = np.nan
         # set labels if array_dtype is assembly valued dtype
         is_assembly_avg = array_dtype in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY)
-
         thres = state["thresholds"]
         if thres.get(thres_key):
             layer_array = apply_thresholds(layer_array, thres[thres_key])

@@ -232,6 +232,13 @@ class LazyHDF5Loader:
             return self._make_dataset(name)  # transient: not stored
         raise AttributeError(name)
 
+
+def _make_ji_safe(j : int, i : int, array : np.ndarray):
+    """Return j,i clipped to arra"""
+    max_row, max_col = np.shape(array)
+    j = np.clip(j, 0, max_row - 1)
+    i = np.clip(i, 0, max_col - 1)
+    return j, i
 class VeraOutCore(LazyHDF5Loader):
     """Holds the core-level data for a VERA output file (the /CORE group).
 
@@ -245,48 +252,19 @@ class VeraOutCore(LazyHDF5Loader):
     core_sym: H5_ARRAY_TYPE = None
     pin_volumes: H5_ARRAY_TYPE = None
 
-    def __init__(
-        self,
-        f: "h5py.File | None" = None,
-        axial_mesh: np.ndarray | None = None,
-        core_map: np.ndarray | None = None,
-        core_sym: np.ndarray | None = None,
-        pin_volumes: np.ndarray | None = None,
-        aspect_ratio: float | None = None,
-    ):
-        """Build the core from an open h5 file or from raw data.
+    def __init__(self, f: "h5py.File", aspect_ratio: float | None = None,):
+        """Build the core from an open h5 file.
 
-        Pass f to read the /CORE datasets from the file, or pass all of
-        axial_mesh, core_map, core_sym, pin_volumes, and aspect_ratio to
-        construct in memory.
+        Pass f to read the /CORE datasets from the file
 
         args:
             f: an open h5py.File handle (not a path)
-            axial_mesh: axial mesh boundaries
-            core_map: assembly layout, 1-based ids with 0 for empty positions
-            core_sym: core symmetry flag (1 = full, 4 = quarter)
-            pin_volumes: per-pin volumes, used to locate control-rod positions
             aspect_ratio: dx / dy of a pin cell
         """
-        if f is not None:
-            self.f = f
-            super().__init__(f, "/CORE", list(self.__annotations__))
-            self.aspect_ratio = f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1 # dx / dy
-            self._cache_all()
-        elif (
-            axial_mesh is not None 
-            and core_map is not None 
-            and core_sym is not None 
-            and pin_volumes is not None 
-            and aspect_ratio is not None
-        ):
-            self.axial_mesh = axial_mesh
-            self.core_map = core_map
-            self.core_sym = core_sym
-            self.pin_volumes = pin_volumes
-            self.aspect_ratio = aspect_ratio
-        else:
-            raise ValueError("Either a filename or raw data must be provided")
+        self.f = f
+        super().__init__(f, "/CORE", list(self.__annotations__))
+        self.aspect_ratio = f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1 # dx / dy
+        self._cache_all()
         if not hasattr(self, "core_map") or self.core_map is None:
             raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
         if not hasattr(self, "axial_mesh") or self.axial_mesh is None:
@@ -299,23 +277,6 @@ class VeraOutCore(LazyHDF5Loader):
         self.compute_axial_mesh_pixels()
         self.compute_control_rod_positions()
         self.compute_axial_mesh_means()
-
-    @classmethod
-    def from_h5(cls, f: "h5py.File") -> "VeraOutCore":
-        """Build a core from an open h5 file handle."""
-        return cls(f=f)
-
-    @classmethod
-    def from_data(
-        cls,
-        axial_mesh: np.ndarray,
-        core_map: np.ndarray,
-        core_sym: np.ndarray,
-        pin_volumes: np.ndarray,
-        aspect_ratio: float,
-    ) -> "VeraOutCore":
-        """Build a core from in-memory arrays instead of a file."""
-        return cls(axial_mesh=axial_mesh, core_map=core_map, core_sym=core_sym, pin_volumes=pin_volumes, aspect_ratio=aspect_ratio)
 
     def _determine_core_shape(self):
         cm = self.core_map
@@ -348,7 +309,13 @@ class VeraOutCore(LazyHDF5Loader):
         self.comp_nass = np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
         self.comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"][()]
         self.comp_nax = len(self.comp_axial_mesh) - 1
-        
+    
+    def has_comp_core(self) -> bool:
+        return hasattr(self, "comp_core_map") and self.comp_core_map is not None
+    
+    def has_comp_axial_mesh(self) -> bool:
+        return hasattr(self, "comp_axial_mesh") and self.comp_axial_mesh is not None
+
     @property
     def core_shape(self) -> tuple[int, ...]:
         """Shape of core (num_piny, num_pinx, num_axial_levels, num_assemblys)"""
@@ -401,6 +368,12 @@ class VeraOutCore(LazyHDF5Loader):
         pixel_height_array = diff_array / pixel_height
         self.axial_mesh_pixels = np.round(pixel_height_array).astype(np.int64)
 
+        if self.has_comp_axial_mesh():
+            comp_diff_array = np.diff(self.comp_axial_mesh)
+            comp_pixel_height = np.min(comp_diff_array) / MIN_DIFF_PIXELS_HEIGHT
+            comp_pixel_height_array = comp_diff_array / comp_pixel_height
+            self.comp_axial_mesh_pixels = np.round(comp_pixel_height_array).astype(np.int64)
+
     def compute_control_rod_positions(self) ->None:
         """Locate control-rod positions as the pins with zero volume.
         Assumes the rod layout is identical in every axial volume.
@@ -422,6 +395,14 @@ class VeraOutCore(LazyHDF5Loader):
 
         self.axial_mesh_means = np.mean(reshaped, axis=1)
 
+        if self.has_comp_axial_mesh():
+            comp_repeats = [2] * len(self.comp_axial_mesh)
+            comp_repeats[0] = 1
+            comp_repeats[-1] = 1
+            repeated_mesh = np.repeat(self.comp_axial_mesh, comp_repeats)
+            reshaped = repeated_mesh.reshape((repeated_mesh.shape[0] // 2, 2))
+            self.comp_axial_mesh_means = np.mean(reshaped, axis=1)
+
     def row_assembly_indices(self, assembly_idx) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""
         # The core map and reduced core map use 1-based indexing
@@ -441,8 +422,16 @@ class VeraOutCore(LazyHDF5Loader):
 
     def reduced_core_map_assembly(self, i, j) -> int:
         """Get the index of the assembly at reduced core map position i, j"""
-        return int(self.reduced_core_map[j, i] - 1)
-
+        j, i =_make_ji_safe(j, i, self.reduced_core_map)
+        return int(self.reduced_core_map[j, i] - 1)    
+    
+    def comp_core_map_assembly(self, i, j) -> int:
+        """Get the index of the assembly at comp core map position i, j"""
+        if not self.has_comp_core():
+            raise RuntimeError("This core does not have a computational core map")
+        j, i = _make_ji_safe(j, i, self.comp_core_map)
+        return int(self.comp_core_map[j, i] - 1)  
+    
     def reduced_core_map_ij(self, assembly_idx) -> tuple[int, int]:
         """Return the (column, row) position of an assembly in the reduced map."""
         target = assembly_idx + 1
@@ -454,6 +443,23 @@ class VeraOutCore(LazyHDF5Loader):
         if len(rows) > 1:
             raise ValueError(
                 f"Assembly index {assembly_idx} appears multiple times in reduced_core_map. \n Looked for value {target}; found {len(rows)} matches."
+            )
+        j = int(rows[0])
+        i = int(cols[0])
+        return i, j
+    
+    def comp_core_map_ij(self, comp_asssembly_idx) -> tuple[int, int]:
+        if not self.has_comp_core():
+            raise RuntimeError("This core does not have a computational core map")
+        target = comp_asssembly_idx + 1
+        rows, cols = np.where(self.comp_core_map == target)
+        if len(rows) == 0:
+            raise ValueError(
+                f"Assembly index {comp_asssembly_idx} was not found in comp_core_map. \nLooked for value {target}."
+            )
+        if len(rows) > 1:
+            raise ValueError(
+                f"Assembly index {comp_asssembly_idx} appears multiple times in comp_core_map. \n Looked for value {target}; found {len(rows)} matches."
             )
         j = int(rows[0])
         i = int(cols[0])
@@ -476,7 +482,22 @@ class VeraOutCore(LazyHDF5Loader):
         """Return the column-letter label for an assembly."""
         i, j = self.reduced_core_map_ij(assembly_idx)
         return self.reduced_core_map_column_labels[i]
-
+    
+    def assy_to_comp_assy(self, assembly_id) -> int:
+        if not self.has_comp_core():
+            raise RuntimeError("This core does not have a computational core map")
+        i, j = self.reduced_core_map_ij(assembly_id)
+        j, i = _make_ji_safe(j, i, self.comp_core_map)
+        return int(self.comp_core_map[j][i] - 1)
+    
+    def comp_assy_to_assy(self, comp_assembly_idx) -> int:
+        if not self.has_comp_core():
+            raise RuntimeError("This core does not have a computational core map")
+        i, j = self.comp_core_map_ij(comp_assembly_idx)
+        max_row, max_col = np.shape(self.reduced_core_map)
+        j, i = _make_ji_safe(j, i, self.reduced_core_map)
+        return int(self.reduced_core_map[j][i] - 1)
+        
 
 class VeraOutState(LazyHDF5Loader):
     """Stores the datasets for a single VERA STATE_NNNN point.

@@ -5,7 +5,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label, is_non_active_view, make_safe_index, set_info
+from ..helpers import format_label, is_non_active_view, make_safe_index, set_info, get_assy_idx
 
 
 def option_for(view_id):
@@ -41,6 +41,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_array_key,
         selected_src_key,
         "selected_assembly",
+        "selected_comp_assembly"
         "selected_layer",
         "color_range",
         "thresholds",
@@ -54,8 +55,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_src_id = state[selected_src_key]
         selected_time = state["selected_time"]
         selected_layer = int(state["selected_layer"])
-        selected_assembly = int(state["selected_assembly"])
         selected_array = state[selected_array_key]
+        vera_source : VeraDataSource = registry.get(selected_src_id)
+        selected_assembly = get_assy_idx(vera_source.array_dtype(selected_array), state)
+
         thres_key = format_label(selected_src_id, selected_array)
 
         thres = state["thresholds"]
@@ -75,7 +78,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # Extract data from H5 + add to cache
         if image_data is None:
-            vera_source : VeraDataSource = registry.get(selected_src_id)
             array = vera_source.array(selected_array)
             array_dtype : VeraDtype = array.dataset_type
             if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:

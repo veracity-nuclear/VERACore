@@ -115,20 +115,34 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     def selected_assembly_ij_changed(selected_assembly_ij, **kwargs):
         """Keep selected_assembly and selected_assembly_ij in sync."""
         i, j = selected_assembly_ij["i"], selected_assembly_ij["j"]
-        print(i,j)
-        new_assembly = registry.default_src.core.reduced_core_map_assembly(i, j)
+        core = registry.default_src.core
+        new_assembly = core.reduced_core_map_assembly(i, j)
         if state.selected_assembly != new_assembly:
             state.selected_assembly = new_assembly
+        if not core.has_comp_core() or not hasattr(state, "selected_comp_assembly"):
+            return
+        new_comp_assembly = core.assy_to_comp_assy(new_assembly)
+        if new_comp_assembly != state.selected_comp_assembly:
+            state.selected_comp_assembly = new_comp_assembly
+        
 
-    @state.change("selected_assembly")
+    @ctrl.set("sync_ij_with_core_assembly")
     @requires_src
-    def selected_assembly_changed(selected_assembly, **kwargs):
-        """Keep selected_assembly and selected_assembly_ij in sync."""
-        i, j = registry.default_src.core.reduced_core_map_ij(int(selected_assembly))
-        new_ij = {"i": i, "j": j}
-        if state.selected_assembly_ij != new_ij:
-            state.selected_assembly_ij = new_ij
+    def sync_core_assembly(core_assembly_idx):
+        core = registry.default_src.core
+        i, j = core.reduced_core_map_ij(core_assembly_idx)
+        state.selected_assembly_ij = {"i":i, "j":j}
+        assert core.reduced_core_map_assembly(i,j) == core_assembly_idx
     
+    @ctrl.set("sync_ij_with_comp_assembly")
+    @requires_src
+    def sync_comp_assembly(comp_assembly_idx):
+        core = registry.default_src.core
+        i, j = core.reduced_core_map_ij(comp_assembly_idx)
+        state.selected_assembly_ij = {"i":i, "j":j}
+        assert core.comp_core_map_assembly(i,j) == comp_assembly_idx
+
+        
     @state.change("src_tree_meta")
     def refresh_max_state(**kwargs):
         max_state = registry.max_state
@@ -286,6 +300,10 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
         state.selected_j = (ny // 2) - (1 if ny // 2 >= 1 else 0)
         state.selected_assembly = _center_assembly(src.core.reduced_core_map)
+        if src.core.has_comp_core():
+            state.selected_comp_assembly = src.core.assy_to_comp_assy(state.selected_assembly)
+            print(state.selected_comp_assembly,  state.selected_assembly, src.core.comp_assy_to_assy(state.selected_comp_assembly))
+            assert src.core.comp_assy_to_assy(state.selected_comp_assembly) == state.selected_assembly
         assembly_i, assembly_j = src.core.reduced_core_map_ij(state.selected_assembly)
         state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}
         state.max_time = registry.max_state
@@ -299,7 +317,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
             _recompute_card_range(view_id)
         # Default arrangement of views.
         place(x_axial_view,   0,  0, 3, 17, default_names, default_id)
-        place(core_view,      6,  0, 3,  9, default_names, default_id)
+        place(core_view,      6,  0, 4,  10, default_names, default_id)
         place(assembly_view,  9,  0, 3,  9, default_names, default_id)
         place(axial_plot,     6,  9, 3,  8, default_names, default_id)
         place(time_plot,      9,  9, 3,  8, default_names, default_id)

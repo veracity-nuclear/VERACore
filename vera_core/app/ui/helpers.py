@@ -39,13 +39,17 @@ def set_info(state : State, vera_source : VeraDataSource, view_id : int):
             "Pin_y" : int(state.selected_j),
         }
 
-def make_safe_index(selected_j, 
-                    selected_i, 
-                    selected_layer, 
-                    selected_assy, 
-                    dataset_type : VeraDtype, 
-                    core : VeraOutCore):
-    core_shape = core.core_shape
+def get_assy_idx(ds_dtype : VeraDtype, state : State):
+    is_comp = ds_dtype.is_computational()
+    if is_comp and hasattr(state, "selected_comp_assembly"):
+        return int(state["selected_comp_assembly"])
+    elif not is_comp and hasattr(state, "selected_assembly"):
+        return int(state["selected_assembly"])
+    else:
+        raise RuntimeError("Unable to determine which assembly idx to use")
+    
+def make_safe_index(selected_j, selected_i, selected_layer, selected_assy, dataset_type : VeraDtype, core : VeraOutCore):
+    core_shape = core.comp_core_shape if core.has_comp_core() and dataset_type.is_computational() else core.core_shape
     if len(core_shape) != 4:
         raise ValueError("core_shape must have 4 dim: npy, npx, nax, nass")
     selected_j = int(selected_j)
@@ -57,10 +61,8 @@ def make_safe_index(selected_j,
 
     safe_y = ncy if dataset_type.is_channel() else npy
     safe_x = ncx if dataset_type.is_channel() else npx
-    
-    selected_j = max(min(selected_j, safe_y - 1), 0)
-    selected_i = max(min(selected_i, safe_x - 1), 0)
-    selected_layer = max(min(selected_layer, nax - 1), 0)
-    selected_assy = max(min(selected_assy, nass - 1), 0)
-    
-    return selected_j, selected_i, selected_layer, selected_assy
+    j = int(np.clip(selected_j, 0, safe_y - 1))
+    i = int(np.clip(selected_i, 0, safe_x - 1))
+    layer = int(np.clip(selected_layer, 0, nax - 1))
+    assy_idx = int(np.clip(selected_assy, 0, nass - 1))
+    return j, i, layer, assy_idx

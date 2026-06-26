@@ -4,7 +4,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index, set_info
+from ..helpers import is_non_active_view, get_safe_idxs, set_info
 
 _AXIS_OPTIONS = {
     "x": {
@@ -55,18 +55,15 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     state.setdefault(label_y_key, [])
     if not is_x:
         state.setdefault(label_x_key, [])
-
+    
     def axial_cell_selected(layer, clicked_idx):
-        src = registry.get(state[selected_src_key])
         if is_x:
             assembly_i = clicked_idx
             assembly_j = state.selected_assembly_ij["j"]
         else:
             assembly_i = state.selected_assembly_ij["i"]
             assembly_j = clicked_idx
-        state.selected_assembly = src.core.reduced_core_map_assembly(
-            assembly_i, assembly_j
-        )
+        state.selected_assembly_ij = {"i":assembly_i, "j":assembly_j}
         state.selected_layer = layer
 
     @state.change(
@@ -82,35 +79,26 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         if is_non_active_view(state, view_id, option):
             return
         selected_array = state[selected_array_key]
-        
-        selected_assembly = int(state.selected_assembly)
-        selected_pin = int(state[pin_key])
-
+        if is_x:
+            selected_pin, _, _, selected_assembly, _, _ = get_safe_idxs(view_id, state, registry)
+        else:
+            _, selected_pin, _, selected_assembly, _, _ = get_safe_idxs(view_id, state, registry)
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
         array = vera_source.array(selected_array)
-        array_dtype = array.dataset_type
+        array_dtype : VeraDtype = array.dataset_type
+        is_comp = array_dtype.is_computational()
 
         if str(array_dtype).upper() not in option_for(0, "x")["allowed_categories"]:
             return
 
         if is_x:
-            assembly_indices = vera_source.core.row_assembly_indices(selected_assembly)
+            assembly_indices = vera_source.core.row_assembly_indices(selected_assembly, is_comp)
         else:
-            assembly_indices = vera_source.core.col_assembly_indices(selected_assembly)
+            assembly_indices = vera_source.core.col_assembly_indices(selected_assembly, is_comp)
 
         # Clamp indices against the core shape. Slot order is (j-pin, i-pin,
         # axial, assembly); each view clamps the pin slot it actually uses.
-        if is_x:
-            selected_pin, _, _, selected_assembly = make_safe_index(
-                selected_pin, 0, 0, selected_assembly,
-                array_dtype, vera_source.core,
-            )
-        else:
-            _, selected_pin, _, selected_assembly = make_safe_index(
-                0, selected_pin, 0, selected_assembly,
-                array_dtype, vera_source.core,
-            )
-
+        
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 assembly_size = array.shape[0]
@@ -164,7 +152,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                     ]
                     line.append(np.ravel(assembly).tolist())
         state[core_key] = core
-        set_info(state, vera_source, view_id)
+        set_info(state, vera_source, view_id, array_dtype.is_computational())
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"

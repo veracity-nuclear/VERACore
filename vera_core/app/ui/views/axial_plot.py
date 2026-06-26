@@ -6,7 +6,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from ..helpers import is_non_active_view, get_safe_idxs
 
 SEP = "\x1f"
 
@@ -30,16 +30,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     update_fn_name = f"update_axial_plot_{view_id}"
 
-    def create_line(indices=(0, 0, 0, 0)):
-        selected_j, selected_i, selected_layer, selected_assembly = indices
+    def create_line():
         figure = go.Figure()
         for token in state[selected_set_key]:
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             full_array = src.array(array_name)
-            assembly_label = src.core.reduced_core_map_label(selected_assembly)
             array_dtype : VeraDtype = full_array.dataset_type
-            j, i, layer, assy = make_safe_index(selected_j, selected_i, selected_layer, selected_assembly, array_dtype, src.core)
+            j, i, layer, assy, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            assembly_label = src.core.reduced_core_map_label(assy, is_comp=array_dtype.is_computational())
             identifier : str = ""
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
@@ -66,7 +65,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         figure.add_trace(
             go.Scatter(
                 x=[float_info.min, float_info.max],
-                y=[registry.default_src.core.axial_mesh_means[selected_layer]] * 2,
+                y=[registry.default_src.core.axial_mesh_means[state.selected_layer]] * 2,
                 mode="lines",
                 line=go.scatter.Line(color="red", dash="dash"),
                 showlegend=False,
@@ -95,15 +94,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def on_cell_change(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        indices = (
-            int(state.selected_j),
-            int(state.selected_i),
-            int(state.selected_layer),
-            int(state.selected_assembly),
-        )
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:
-            update_fn(create_line(indices))
+            update_fn(create_line())
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; width: 100%;"

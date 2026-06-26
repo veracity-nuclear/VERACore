@@ -72,9 +72,9 @@ class VeraDataset(np.ndarray):
             return
         self.dataset_type = getattr(obj, "dataset_type", None)
 
-def nan_out_reflected(reduced_core_map, core_sym, array):
+def nan_out_reflected(cm, core_sym, array):
     """Nans out reflected region if dataset has quarter core symmetry"""
-    ax, ay = reduced_core_map.shape      
+    ax, ay = cm.shape      
     has_reflected_pins = array.dataset_type in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
     if has_reflected_pins and core_sym == 4:
         array = array.copy()
@@ -83,10 +83,15 @@ def nan_out_reflected(reduced_core_map, core_sym, array):
         match array.dataset_type:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 array[:hpy, :, :, :ax] = np.nan
-                array[:, :hpx, :, reduced_core_map[:, 0] - 1] = np.nan
+                array[:, :hpx, :, cm[:, 0] - 1] = np.nan
             case VeraDtype.RADIAL:
                 array[:hpy, :, :ax] = np.nan
-                array[:, :hpx, reduced_core_map[:, 0] - 1] = np.nan
+                array[:, :hpx, cm[:, 0] - 1] = np.nan
+    elif array.dataset_type == VeraDtype.COMP_NODAL and core_sym == 4:
+        NUM_NODES = 4
+        array[:int(NUM_NODES/2), :, :ax] = np.nan
+        array[0, :, cm[:, 0] - 1] = np.nan
+        array[2, :, cm[:, 0] - 1] = np.nan
     return array
 
 NUM_ENERGY_GROUPS = 2
@@ -234,7 +239,7 @@ class LazyHDF5Loader:
 
 
 def _make_ji_safe(j : int, i : int, array : np.ndarray):
-    """Return j,i clipped to arra"""
+    """Return j,i clipped to array"""
     max_row, max_col = np.shape(array)
     j = np.clip(j, 0, max_row - 1)
     i = np.clip(i, 0, max_col - 1)
@@ -309,6 +314,8 @@ class VeraOutCore(LazyHDF5Loader):
         self.comp_nass = np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
         self.comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"][()]
         self.comp_nax = len(self.comp_axial_mesh) - 1
+        self.comp_core_map[np.isnan(self.comp_core_map)] = 0
+        self._is_comp_rolled = np.count_nonzero(self.comp_core_map) == np.count_nonzero(np.unique(self.comp_core_map))
     
     def has_comp_core(self) -> bool:
         return hasattr(self, "comp_core_map") and self.comp_core_map is not None
@@ -339,21 +346,34 @@ class VeraOutCore(LazyHDF5Loader):
     def compute_reduced_core_map(self) -> None:
         """Compute the reduced core map based upon the core_sym"""
         sym = self.core_sym[()] 
+        has_comp_core = self.has_comp_core()
+        is_comp_rolled = self._is_comp_rolled
         if sym == 1:
             self.reduced_core_map = self.core_map[:].copy()
-            self.reduced_core_map_start_index = 0
+            self.reduced_core_map_start_index = 0   
+            self.comp_map_start_index = 0             
         elif sym == 4:
             w, h = self.core_map[:].shape
             start_w = w // 2
             start_h = h // 2
             self.reduced_core_map = self.core_map[start_w:, start_h:]
             self.reduced_core_map_start_index = start_w
+            if has_comp_core and not is_comp_rolled:
+                print("comp not rolled")
+                cw, ch = self.comp_core_map[:].shape
+                cstart_w = cw // 2
+                cstart_h = ch // 2
+                self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
+                self.comp_map_start_index = cstart_w
         else:
             raise Exception(f"Unhandled symmetry: {sym}")
 
         num_cols = self.reduced_core_map.shape[1]
         alphabet = [*string.ascii_uppercase]
         self.reduced_core_map_column_labels = list(reversed(alphabet[:num_cols]))
+        if self.has_comp_core():
+            comp_num_cols = self.comp_core_map.shape[1]
+            self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
 
     def compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -403,39 +423,36 @@ class VeraOutCore(LazyHDF5Loader):
             reshaped = repeated_mesh.reshape((repeated_mesh.shape[0] // 2, 2))
             self.comp_axial_mesh_means = np.mean(reshaped, axis=1)
 
-    def row_assembly_indices(self, assembly_idx) -> np.ndarray:
+    def row_assembly_indices(self, assembly_idx, is_comp=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""
         # The core map and reduced core map use 1-based indexing
-        row = np.where(self.reduced_core_map == assembly_idx + 1)[0][0]
-        ids = self.reduced_core_map[row]
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        row = np.where(cm == assembly_idx + 1)[0][0]
+        ids = cm[row]
         # Remove any zeros
         ids = ids[ids > 0]
         return ids - 1
 
-    def col_assembly_indices(self, assembly_idx) -> np.ndarray:
+    def col_assembly_indices(self, assembly_idx, is_comp=False) -> np.ndarray:
         """Get indices of all assemblies in the same column as this assembly"""
-        col = np.where(self.reduced_core_map == assembly_idx + 1)[1][0]
-        ids = self.reduced_core_map[:, col]
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        col = np.where(cm == assembly_idx + 1)[1][0]
+        ids = cm[:, col]
         # Remove any zeros
         ids = ids[ids > 0]
         return ids - 1
 
-    def reduced_core_map_assembly(self, i, j) -> int:
+    def reduced_core_map_assembly(self, i, j, is_comp=False) -> int:
         """Get the index of the assembly at reduced core map position i, j"""
-        j, i =_make_ji_safe(j, i, self.reduced_core_map)
-        return int(self.reduced_core_map[j, i] - 1)    
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        j, i =_make_ji_safe(j, i, cm)
+        return int(cm[j, i] - 1)    
     
-    def comp_core_map_assembly(self, i, j) -> int:
-        """Get the index of the assembly at comp core map position i, j"""
-        if not self.has_comp_core():
-            raise RuntimeError("This core does not have a computational core map")
-        j, i = _make_ji_safe(j, i, self.comp_core_map)
-        return int(self.comp_core_map[j, i] - 1)  
-    
-    def reduced_core_map_ij(self, assembly_idx) -> tuple[int, int]:
+    def reduced_core_map_ij(self, assembly_idx, is_comp=False) -> tuple[int, int]:
         """Return the (column, row) position of an assembly in the reduced map."""
         target = assembly_idx + 1
-        rows, cols = np.where(self.reduced_core_map == target)
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        rows, cols = np.where(cm == target)
         if len(rows) == 0:
             raise ValueError(
                 f"Assembly index {assembly_idx} was not found in reduced_core_map. \nLooked for value {target}."
@@ -447,54 +464,38 @@ class VeraOutCore(LazyHDF5Loader):
         j = int(rows[0])
         i = int(cols[0])
         return i, j
-    
-    def comp_core_map_ij(self, comp_asssembly_idx) -> tuple[int, int]:
-        if not self.has_comp_core():
-            raise RuntimeError("This core does not have a computational core map")
-        target = comp_asssembly_idx + 1
-        rows, cols = np.where(self.comp_core_map == target)
-        if len(rows) == 0:
-            raise ValueError(
-                f"Assembly index {comp_asssembly_idx} was not found in comp_core_map. \nLooked for value {target}."
-            )
-        if len(rows) > 1:
-            raise ValueError(
-                f"Assembly index {comp_asssembly_idx} appears multiple times in comp_core_map. \n Looked for value {target}; found {len(rows)} matches."
-            )
-        j = int(rows[0])
-        i = int(cols[0])
-        return i, j
 
-    def reduced_core_map_label(self, assembly_idx) -> str:
+    def reduced_core_map_label(self, assembly_idx, is_comp=False) -> str:
         """Return the combined column-row label for an assembly (e.g. C-9)."""
-        row_label = self.reduced_core_map_row_label(assembly_idx)
-        col_label = self.reduced_core_map_column_label(assembly_idx)
+        row_label = self.reduced_core_map_row_label(assembly_idx, is_comp)
+        col_label = self.reduced_core_map_column_label(assembly_idx, is_comp)
         return f"{col_label}-{row_label}"
 
-    def reduced_core_map_row_label(self, assembly_idx) -> str:
+    def reduced_core_map_row_label(self, assembly_idx, is_comp=False) -> str:
         """Return the row-number label for an assembly."""
-        i, j = self.reduced_core_map_ij(assembly_idx)
-        start_index = self.reduced_core_map_start_index
-        rows = list(range(start_index + 1, len(self.core_map) + 1))
+        i, j = self.reduced_core_map_ij(assembly_idx, is_comp)
+        start_index = self.comp_map_start_index if is_comp and self.has_comp_core() else self.reduced_core_map_start_index
+        row_len = len(self.core_map) + 1 if not is_comp else len(self.comp_core_map) + start_index + 1
+        rows = list(range(start_index + 1, row_len))
         return str(rows[j])
 
-    def reduced_core_map_column_label(self, assembly_idx) -> str:
+    def reduced_core_map_column_label(self, assembly_idx, is_comp=False) -> str:
         """Return the column-letter label for an assembly."""
-        i, j = self.reduced_core_map_ij(assembly_idx)
-        return self.reduced_core_map_column_labels[i]
+        i, j = self.reduced_core_map_ij(assembly_idx, is_comp)
+        labels = self.reduced_core_map_column_labels[i] if not is_comp else self.comp_core_map_column_labels[i]
+        return labels
     
     def assy_to_comp_assy(self, assembly_id) -> int:
         if not self.has_comp_core():
             raise RuntimeError("This core does not have a computational core map")
-        i, j = self.reduced_core_map_ij(assembly_id)
+        i, j = self.reduced_core_map_ij(assembly_id, is_comp=False)
         j, i = _make_ji_safe(j, i, self.comp_core_map)
         return int(self.comp_core_map[j][i] - 1)
     
     def comp_assy_to_assy(self, comp_assembly_idx) -> int:
         if not self.has_comp_core():
             raise RuntimeError("This core does not have a computational core map")
-        i, j = self.comp_core_map_ij(comp_assembly_idx)
-        max_row, max_col = np.shape(self.reduced_core_map)
+        i, j = self.reduced_core_map_ij(comp_assembly_idx, is_comp=True)
         j, i = _make_ji_safe(j, i, self.reduced_core_map)
         return int(self.reduced_core_map[j][i] - 1)
         
@@ -679,9 +680,10 @@ class VeraDataSource(ABC):
         if array_name in arrays_on_core:
             # This one is on the core
             return getattr(self.core, array_name)
-        array = getattr(self.active_state, array_name)
+        array : VeraDataset = getattr(self.active_state, array_name)
+        cm = self.core.reduced_core_map if not array.dataset_type.is_computational() else self.core.comp_core_map
         if mask_reflected:
-            array = nan_out_reflected(self.core.reduced_core_map, self.core.core_sym, array)
+            array = nan_out_reflected(cm, self.core.core_sym, array)
         return array
     
     def array_dtype(self, array_name : str) -> VeraDtype:

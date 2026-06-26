@@ -4,7 +4,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from ..helpers import is_non_active_view, get_safe_idxs
 
 def option_for(view_id):
     return {
@@ -42,17 +42,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_table(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_src_id = state[selected_src_key]
-        selected_array = state[selected_array_key]
-        selected_assy = int(state.selected_assembly)
-        selected_layer = int(state.selected_layer)
-        selected_i = int(state.selected_i)
-        selected_j = int(state.selected_j)
+        (selected_j, selected_i, selected_layer, 
+         selected_assembly, selected_src_id, selected_array) = get_safe_idxs(view_id, state, registry)
 
         src : VeraDataSource = registry.get(selected_src_id)
         array = src.array(selected_array)
         array_dtype = array.dataset_type
-        selected_j, selected_i, selected_layer, selected_assembly = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core)
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 indices = (selected_j, selected_i, selected_layer, selected_assembly)

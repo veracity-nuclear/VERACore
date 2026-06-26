@@ -5,7 +5,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label, is_non_active_view, make_safe_index, set_info, get_assy_idx
+from ..helpers import format_label, is_non_active_view, get_safe_idxs, set_info
 
 
 def option_for(view_id):
@@ -35,15 +35,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(assembly_array, [])
     info = f"label_info_{view_id}"
 
-
     @state.change(
         "assembly_view_size",
         selected_array_key,
         selected_src_key,
         "selected_assembly",
-        "selected_comp_assembly"
+        "selected_comp_assembly",
         "selected_layer",
-        "color_range",
         "thresholds",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
@@ -52,15 +50,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_assembly_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_src_id = state[selected_src_key]
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = get_safe_idxs(view_id, state, registry)
         selected_time = state["selected_time"]
-        selected_layer = int(state["selected_layer"])
-        selected_array = state[selected_array_key]
         vera_source : VeraDataSource = registry.get(selected_src_id)
-        selected_assembly = get_assy_idx(vera_source.array_dtype(selected_array), state)
-
         thres_key = format_label(selected_src_id, selected_array)
-
         thres = state["thresholds"]
         thres_hash = 0
         if thres.get(thres_key):
@@ -68,7 +61,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 thres_hash += hash(condition["op"]) + hash(condition["value"])
         image_data = None
         
-
         # Extract from cache if possible
         cache_key = (selected_time, selected_array, selected_assembly, selected_layer, thres_hash, selected_src_id)
         if cache_key in cached_assembly_images:
@@ -105,7 +97,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 cached_assembly_images.pop(next(iter(cached_assembly_images)))
 
             cached_assembly_images[cache_key] = image_data
-            set_info(state, vera_source, view_id)
+            set_info(state, vera_source, view_id, array_dtype.is_computational())
 
         # Update the client
         state[assembly_array] = np.ravel(image_data).tolist()

@@ -117,11 +117,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         i, j = selected_assembly_ij["i"], selected_assembly_ij["j"]
         core = registry.default_src.core
         new_assembly = core.reduced_core_map_assembly(i, j)
-        if state.selected_assembly != new_assembly:
+        if new_assembly >= 0 and state.selected_assembly != new_assembly:
             state.selected_assembly = new_assembly
         if not core.has_comp_core() or not hasattr(state, "selected_comp_assembly"):
             return
-        new_comp_assembly = core.assy_to_comp_assy(new_assembly)
+        new_comp_assembly = core.reduced_core_map_assembly(i, j, is_comp=True)
         if new_comp_assembly != state.selected_comp_assembly:
             state.selected_comp_assembly = new_comp_assembly
         

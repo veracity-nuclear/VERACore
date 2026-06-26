@@ -66,6 +66,9 @@ export default {
     aspectRatio() {
       this.resize();
     },
+    value() { 
+      this.resize(); 
+    },
   },
   data() {
     return {

@@ -7,7 +7,7 @@ from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset
 from vera_core.app.core.thresholds import apply_thresholds
-from ..helpers import format_label, is_non_active_view, set_info
+from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
 
 def option_for(view_id):
     return {
@@ -87,19 +87,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 line.append(list(dataset[:, index]))
         state[core_assemblies_key] = result
         state[f"core_labels_{view_id}"] = []
-    
-
 
     @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_src_id = state[selected_src_key]
-        selected_array = state[selected_array_key]
+        _, _, selected_layer, _, selected_src_id, selected_array = get_safe_idxs(view_id, state, registry)
         thres_key = format_label(selected_src_id, selected_array)
-        selected_layer = int(state.selected_layer)
-
         vera_source : VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
         array = vera_source.array(selected_array)
@@ -152,7 +147,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     line.append(np.ravel(layer_array[index]).tolist())               
         state[core_assemblies_key] = result
         state[f"core_labels_{view_id}"] = labels
-        set_info(state, vera_source, view_id)
+        set_info(state, vera_source, view_id, array_dtype.is_computational())
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"

@@ -1,7 +1,7 @@
 import numpy as np
 
 from trame_server.core import State
-from vera_core.app.core import VeraDataSource, VeraDtype, VeraOutCore
+from vera_core.app.core import VeraDataSource, VeraDtype, VeraOutCore, VeraDataRegistry
 
 def format_label(file : str, key : str):
     return f"{file} | {key.replace('_', ' ').upper()}"
@@ -30,7 +30,7 @@ def is_view_locked(state, view_id):
 def is_non_active_view(state : State, view_id : int, option : dict[str, str]) -> bool:
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
 
-def set_info(state : State, vera_source : VeraDataSource, view_id : int):
+def set_info(state : State, vera_source : VeraDataSource, view_id : int, is_comp : bool):
     state[f"label_info_{view_id}"] = {
             "Exposure": np.round(vera_source.active_state.exposure[0], decimals=3),
             "Assembly": vera_source.core.reduced_core_map_label(state.selected_assembly),
@@ -39,7 +39,7 @@ def set_info(state : State, vera_source : VeraDataSource, view_id : int):
             "Pin_y" : int(state.selected_j),
         }
 
-def get_assy_idx(ds_dtype : VeraDtype, state : State):
+def _get_assy_idx(ds_dtype : VeraDtype, state : State):
     is_comp = ds_dtype.is_computational()
     if is_comp and hasattr(state, "selected_comp_assembly"):
         return int(state["selected_comp_assembly"])
@@ -47,22 +47,36 @@ def get_assy_idx(ds_dtype : VeraDtype, state : State):
         return int(state["selected_assembly"])
     else:
         raise RuntimeError("Unable to determine which assembly idx to use")
-    
-def make_safe_index(selected_j, selected_i, selected_layer, selected_assy, dataset_type : VeraDtype, core : VeraOutCore):
-    core_shape = core.comp_core_shape if core.has_comp_core() and dataset_type.is_computational() else core.core_shape
+
+def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel_src_id : str | None = None, sel_dataset_name : str | None = None):
+    """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name)"""
+    dataset_name = state[f"selected_array_{view_id}"] if not sel_dataset_name else sel_dataset_name
+    src_id = state[f"selected_src_id_{view_id}"] if not sel_src_id else sel_src_id
+    vera_source = registry.get(src_id)
+    if vera_source is None:
+        raise RuntimeError("Invalid source id")
+    core = vera_source.core
+    vdtype = vera_source.array_dtype(dataset_name)
+    if vdtype == VeraDtype.UNKNOWN:
+        raise RuntimeError("Unknown dtype of selected dataset")
+
+    sel_j = int(state.selected_j)
+    sel_i = int(state.selected_i)
+    sel_assy = _get_assy_idx(vdtype, state)
+    sel_layer = int(state.selected_layer)
+
+    core_shape = core.comp_core_shape if core.has_comp_core() and vdtype.is_computational() else core.core_shape
     if len(core_shape) != 4:
         raise ValueError("core_shape must have 4 dim: npy, npx, nax, nass")
-    selected_j = int(selected_j)
-    selected_i = int(selected_i)
-    selected_layer = int(selected_layer)
-    selected_assy = int(selected_assy)
     npy, npx, nax, nass = core_shape
     ncy, ncx = npy + 1, npx + 1
 
-    safe_y = ncy if dataset_type.is_channel() else npy
-    safe_x = ncx if dataset_type.is_channel() else npx
-    j = int(np.clip(selected_j, 0, safe_y - 1))
-    i = int(np.clip(selected_i, 0, safe_x - 1))
-    layer = int(np.clip(selected_layer, 0, nax - 1))
-    assy_idx = int(np.clip(selected_assy, 0, nass - 1))
-    return j, i, layer, assy_idx
+    safe_y = ncy if vdtype.is_channel() else npy
+    safe_x = ncx if vdtype.is_channel() else npx
+    
+    safe_j = int(np.clip(sel_j, 0, safe_y - 1))
+    safe_i = int(np.clip(sel_i, 0, safe_x - 1))
+    safe_layer = int(np.clip(sel_layer, 0, nax - 1))
+    safe_assy_idx = int(np.clip(sel_assy, 0, nass - 1))
+
+    return safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name

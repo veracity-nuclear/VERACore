@@ -5,7 +5,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import plotly, vuetify, html
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from ..helpers import is_non_active_view, get_safe_idxs
 
 SEP = "\x1f"
 
@@ -32,8 +32,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     update_fn_name = f"update_time_plot_{view_id}"
 
-    def create_line(indices=(0, 0, 0, 0)):
-        selected_j, selected_i, selected_layer, selected_assy = indices
+    def create_line():
         figure = go.Figure()
         for token in state[selected_set_key]:
             identifier = ""
@@ -41,8 +40,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
             array_dtype = src.array_dtype(array_name)
-            ny, nx, nax, nass = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core)
-            assembly_label = src.core.reduced_core_map_label(nass)
+            ny, nx, nax, nass, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            assembly_label = src.core.reduced_core_map_label(nass, is_comp=array_dtype.is_computational())
             axial_label = src.core.axial_mesh_means[nax]
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
@@ -119,15 +118,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def on_cell_change(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        indices = (
-            int(state.selected_j),
-            int(state.selected_i),
-            int(state.selected_layer),
-            int(state.selected_assembly),
-        )
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:
-            update_fn(create_line(indices))
+            update_fn(create_line())
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = (

@@ -9,6 +9,8 @@ from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, Vera
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
 
+MAX_VIS_GROUPS = 4
+
 def option_for(view_id):
     return {
         "name": f"core_view_{view_id}",
@@ -17,8 +19,15 @@ def option_for(view_id):
         "icon": "mdi-chart-pie",
         "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
                                VeraDtype.ASSEMBLY.title, VeraDtype.RADIAL.title, 
-                               VeraDtype.RADIAL_ASSEMBLY.title, VeraDtype.COMP_NODAL.title]
+                               VeraDtype.RADIAL_ASSEMBLY.title, VeraDtype.COMP_NODAL.title,
+                               VeraDtype.COMP_NODAL_ENERGY.title]
     }
+
+def _nan_out_control_rods(array : np.ndarray, control_rod_positions):
+    rod_rows, rod_cols = control_rod_positions
+    new_array = array.copy()
+    new_array[:, rod_rows, rod_cols] = np.nan
+    return new_array
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -29,64 +38,44 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
-    core_assemblies_key = f"core_assemblies_{view_id}"
+
+    n_groups_key = f"n_groups_{view_id}"
+    state.setdefault(n_groups_key, 0)
+    group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(4)]
+    label_keys = [f"core_labels_{view_id}_{g}" for g in range(4)]
+    for gk in group_keys:
+        state.setdefault(gk, [])
+    for lk in label_keys:
+        state.setdefault(lk, [])
+
     aspect_ratio_key = f"aspect_ratio_{view_id}"
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
 
-    state.setdefault(core_assemblies_key, [])
     state.setdefault(aspect_ratio_key, 1)
-    
 
-    def _vis_pin_level_data(src, dataset):
-        reduced_core_map = src.core.reduced_core_map
-        core_width = reduced_core_map.shape[0]
-        result = []
-        for i in range(core_width):
-            line = []
-            result.append(line)
-            for j in range(core_width):
-                index = reduced_core_map[i, j] - 1
-                if index == -1:
-                    continue   
-                line.append(np.ravel(dataset[index]).tolist())               
-        state[core_assemblies_key] = result
-        state[f"core_labels_{view_id}"] = []
-    
-    def _vis_assembly_level_data(src, dataset):
-        reduced_core_map = src.core.reduced_core_map
-        core_width = reduced_core_map.shape[0]
+    def _vis_pin_level_data(src : VeraDataSource, dataset : VeraDataset):
+        cm = src.core.comp_core_map if dataset.is_computational() else src.core.reduced_core_map
+        is_assembly_avg = dataset.is_assembly()
+        core_width = cm.shape[0]
         result = []
         labels = []
         for i in range(core_width):
             line = []
-            labels_line = []
-            labels.append(labels_line)
-            result.append(line)
-            for j in range(core_width):
-                index = reduced_core_map[i, j] - 1
-                if index == -1:
-                    continue   
-                line.append([float(dataset[index])])
-                labels_line.append(np.round(dataset[index], 2))
-        state[core_assemblies_key] = result
-        state[f"core_labels_{view_id}"] = labels
-    
-    NUM_NODES = 4
-    def _vis_nodal_level_data(src : VeraDataSource, dataset : VeraDataset):
-        cm = src.core.comp_core_map if dataset.dataset_type.is_computational() else src.core.reduced_core_map
-        core_width = cm.shape[0]
-        result = []
-        for i in range(core_width):
-            line = []
+            if is_assembly_avg:
+                labels_line = []
+                labels.append(labels_line)
             result.append(line)
             for j in range(core_width):
                 index = cm[i, j] - 1
                 if index == -1:
                     continue   
-                line.append(list(dataset[:, index]))
-        state[core_assemblies_key] = result
-        state[f"core_labels_{view_id}"] = []
+                if is_assembly_avg:
+                    line.append([float(dataset[index])])
+                    labels_line.append(np.round(dataset[index], 2))
+                else:
+                    line.append(np.ravel(dataset[index]).tolist())    
+        return result, labels               
 
     @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
@@ -97,57 +86,43 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         thres_key = format_label(selected_src_id, selected_array)
         vera_source : VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
-        array = vera_source.array(selected_array)
-        array_dtype = array.dataset_type
-        if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
+        raw_array = vera_source.array(selected_array)
+        raw_array_dtype = raw_array.dataset_type
+        if raw_array_dtype.title not in option_for(0)["allowed_categories"]:
             return
-        match array_dtype:
+        layer_arrays = []
+        match raw_array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
-                layer_array = array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2).copy()
+                layer_arrays.append(raw_array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2))
             case VeraDtype.ASSEMBLY:
-                layer_array = array[selected_layer, :]
+                layer_arrays.append(raw_array[selected_layer, :])
             case VeraDtype.RADIAL:
-                layer_array = array.swapaxes(0, 2).swapaxes(1, 2).copy()
+                layer_arrays.append(raw_array.swapaxes(0, 2).swapaxes(1, 2))
             case VeraDtype.RADIAL_ASSEMBLY:
-                layer_array = array
+                layer_arrays.append(raw_array)
             case VeraDtype.COMP_NODAL:
-                layer_array = array[:, selected_layer, :]
-                _vis_nodal_level_data(vera_source, layer_array)
-                return
+                layer_arrays.append(raw_array[:, selected_layer, :].swapaxes(0, 1))
+            case VeraDtype.COMP_NODAL_ENERGY:
+                num_energy_groups = np.shape(raw_array)[0]
+                for energy_group in range(num_energy_groups):
+                    layer_arrays.append(raw_array[energy_group, :, selected_layer, :].swapaxes(0, 1))
             case _:
-                raise RuntimeError(f"Core View cannot visualize a dataset of type {str(array_dtype)} ")
-        # nan out control rods for dataset with pin level data
-        if array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
-            control_rod_positions = vera_source.core.control_rod_positions
-            rod_rows, rod_cols = control_rod_positions
-            layer_array[:, rod_rows, rod_cols] = np.nan
-        # set labels if array_dtype is assembly valued dtype
-        is_assembly_avg = array_dtype in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY)
-        thres = state["thresholds"]
-        if thres.get(thres_key):
-            layer_array = apply_thresholds(layer_array, thres[thres_key])
-        reduced_core_map = vera_source.core.reduced_core_map
-        core_width = reduced_core_map.shape[0]
-        result = []
-        labels = []
-        for i in range(core_width):
-            line = []
-            if is_assembly_avg:
-                labels_line = []
-                labels.append(labels_line)
-            result.append(line)
-            for j in range(core_width):
-                index = reduced_core_map[i, j] - 1
-                if index == -1:
-                    continue   
-                if is_assembly_avg:
-                    line.append([float(layer_array[index])])
-                    labels_line.append(np.round(layer_array[index], 2))
-                else:
-                    line.append(np.ravel(layer_array[index]).tolist())               
-        state[core_assemblies_key] = result
-        state[f"core_labels_{view_id}"] = labels
-        set_info(state, vera_source, view_id, array_dtype.is_computational())
+                raise RuntimeError(f"Core View cannot visualize a dataset of type {str(raw_array_dtype)} ")
+        for idx, layer_array in enumerate(layer_arrays):
+            if raw_array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
+                layer_array = _nan_out_control_rods(layer_array, vera_source.core.control_rod_positions)
+            thres = state["thresholds"]
+            if thres.get(thres_key):
+                layer_array = apply_thresholds(layer_array, thres[thres_key])        
+            result, labels = _vis_pin_level_data(src=vera_source, dataset=layer_array)
+            state[f"core_assemblies_{view_id}_{idx}"] = result
+            state[f"core_labels_{view_id}_{idx}"] = labels
+        num_groups = len(layer_arrays)
+        for idx in range(num_groups, MAX_VIS_GROUPS):
+            state[f"core_assemblies_{view_id}_{idx}"] = []
+            state[f"core_labels_{view_id}_{idx}"] = []
+        state[n_groups_key] = num_groups
+        set_info(state, vera_source, view_id, raw_array_dtype.is_computational())
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -155,19 +130,33 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             "flex: 1; min-width: 0;"
             "display: flex; flex-direction: column;"
         )):
-            with html.Div(style="flex: 1; min-height: 0; position: relative;"):
-                vera.CoreView(
-                    v_if=(f"{core_assemblies_key} && {core_assemblies_key}.length",),
-                    value=(core_assemblies_key, []),
-                    labels=(f"core_labels_{view_id}", []),
-                    selected_i=("selected_assembly_ij.i",),
-                    selected_j=("selected_assembly_ij.j",),
-                    aspect_ratio=(aspect_ratio_key, 1),
-                    color_preset="jet",
-                    color_range=(f"color_range_{view_id}", [0, 3]),
-                    click="selected_assembly_ij = $event",
-                    busy=("trame__busy",),
-                )
+            # Row of up to 4 group views; wraps to a 2x2 grid when >2 groups.
+            with html.Div(style=(
+                "flex: 1; min-height: 0;"
+                "display: flex; flex-direction: row; flex-wrap: wrap;"
+            )):
+                for g in range(MAX_VIS_GROUPS):
+                    with html.Div(
+                        v_if=(f"{n_groups_key} > {g}",),
+                        style="flex: 1 1 45%; min-width: 0; min-height: 0; position: relative;",
+                    ):
+                        html.Div(
+                            f"Group {g + 1}",
+                            v_if=(f"{n_groups_key} > 1",),
+                            classes="text-caption text-center font-weight-medium",
+                            style="flex: 0 0 auto;",
+                        )
+                        vera.CoreView(
+                            value=(group_keys[g], []),
+                            labels=(label_keys[g], []),
+                            selected_i=("selected_assembly_ij.i",),
+                            selected_j=("selected_assembly_ij.j",),
+                            aspect_ratio=(aspect_ratio_key, 1),
+                            color_preset="jet",
+                            color_range=(f"color_range_{view_id}", [0, 3]),
+                            click="selected_assembly_ij = $event",
+                            busy=("trame__busy",),
+                        )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})"

@@ -45,6 +45,9 @@ class VeraDtype(Enum):
                         VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
     def is_nodal(self):
         return self in (VeraDtype.NODE, VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
+    
+    def is_assembly(self):
+        return self in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY)
 
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -70,12 +73,23 @@ class VeraDataset(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        self.dataset_type = getattr(obj, "dataset_type", None)
+        self.dataset_type : VeraDtype = getattr(obj, "dataset_type", VeraDtype.UNKNOWN)
+    
+    def is_computational(self) -> bool:
+        return self.dataset_type.is_computational()
+    
+    def is_assembly(self) -> bool:
+        return self.dataset_type.is_assembly()
+
+NUM_ENERGY_GROUPS = 2
+NUM_DF = 6
+NUM_NODES = 4
 
 def nan_out_reflected(cm, core_sym, array):
     """Nans out reflected region if dataset has quarter core symmetry"""
-    ax, ay = cm.shape      
-    has_reflected_pins = array.dataset_type in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
+    ax, ay = cm.shape
+    dtype = array.dataset_type
+    has_reflected_pins = dtype in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
     if has_reflected_pins and core_sym == 4:
         array = array.copy()
         hpy = array.shape[0] // 2
@@ -87,16 +101,15 @@ def nan_out_reflected(cm, core_sym, array):
             case VeraDtype.RADIAL:
                 array[:hpy, :, :ax] = np.nan
                 array[:, :hpx, cm[:, 0] - 1] = np.nan
-    elif array.dataset_type == VeraDtype.COMP_NODAL and core_sym == 4:
-        NUM_NODES = 4
+    elif dtype == VeraDtype.COMP_NODAL and core_sym == 4:
         array[:int(NUM_NODES/2), :, :ax] = np.nan
         array[0, :, cm[:, 0] - 1] = np.nan
         array[2, :, cm[:, 0] - 1] = np.nan
+    elif dtype == VeraDtype.COMP_NODAL_ENERGY and core_sym == 4:
+        array[:, :int(NUM_NODES/2), :, :ax] = np.nan
+        array[:, 0, :, cm[:, 0] - 1] = np.nan
+        array[:, 2, :, cm[:, 0] - 1] = np.nan
     return array
-
-NUM_ENERGY_GROUPS = 2
-NUM_DF = 6
-NUM_NODES = 4
 
 def build_core_dtypes(npiny = None, 
                                 npinx = None, 

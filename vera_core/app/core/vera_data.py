@@ -378,6 +378,8 @@ class VeraOutCore(LazyHDF5Loader):
                 cstart_h = ch // 2
                 self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
                 self.comp_map_start_index = cstart_w
+            elif self.has_comp_core:
+                self.comp_map_start_index = start_w
         else:
             raise Exception(f"Unhandled symmetry: {sym}")
 
@@ -386,7 +388,13 @@ class VeraOutCore(LazyHDF5Loader):
         self.reduced_core_map_column_labels = list(reversed(alphabet[:num_cols]))
         if self.has_comp_core():
             comp_num_cols = self.comp_core_map.shape[1]
-            self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
+            cols_dif = comp_num_cols - num_cols
+            if cols_dif > 0:
+                self.comp_core_map_column_labels = (
+                    self.reduced_core_map_column_labels + list(reversed(alphabet[num_cols:comp_num_cols]))
+                )
+            else:
+                self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
 
     def compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -418,23 +426,18 @@ class VeraOutCore(LazyHDF5Loader):
             self.control_rod_positions = None
 
     def compute_axial_mesh_means(self):
-        """Compute the mean between each neighbor"""
-        repeats = [2] * len(self.axial_mesh)
-        repeats[0] = 1
-        repeats[-1] = 1
-
-        repeated_mesh = np.repeat(self.axial_mesh, repeats)
-        reshaped = repeated_mesh.reshape((repeated_mesh.shape[0] // 2, 2))
-
-        self.axial_mesh_means = np.mean(reshaped, axis=1)
-
+        """Midpoint between each pair of neighboring mesh boundaries."""
+        self.axial_mesh_means = self._midpoints(self.axial_mesh)
         if self.has_comp_axial_mesh():
-            comp_repeats = [2] * len(self.comp_axial_mesh)
-            comp_repeats[0] = 1
-            comp_repeats[-1] = 1
-            repeated_mesh = np.repeat(self.comp_axial_mesh, comp_repeats)
-            reshaped = repeated_mesh.reshape((repeated_mesh.shape[0] // 2, 2))
-            self.comp_axial_mesh_means = np.mean(reshaped, axis=1)
+            self.comp_axial_mesh_means = self._midpoints(self.comp_axial_mesh)
+            self.gross_axial_mesh = np.union1d(self.axial_mesh_means, self.comp_axial_mesh_means)
+        else:
+            self.gross_axial_mesh = self.axial_mesh_means
+
+    @staticmethod
+    def _midpoints(mesh, decimals=4):
+        mesh = np.asarray(mesh, dtype=np.float64)
+        return np.round((mesh[:-1] + mesh[1:]) / 2.0, decimals)
 
     def row_assembly_indices(self, assembly_idx, is_comp=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""

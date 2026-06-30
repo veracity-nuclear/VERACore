@@ -5,8 +5,8 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, get_safe_idxs
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES
+from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 SEP = "\x1f"
 
@@ -16,7 +16,9 @@ def option_for(view_id):
         "label": "Axial Plot",
         "multi_picker" : True,
         "icon": "mdi-align-horizontal-center",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title]
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
+                               VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title,
+                               VeraDtype.COMP_NODAL.title, VeraDtype.COMP_NODAL_ENERGY.title]
     }
 
 
@@ -38,34 +40,48 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             full_array = src.array(array_name)
             array_dtype : VeraDtype = full_array.dataset_type
             j, i, layer, assy, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
-            assembly_label = src.core.reduced_core_map_label(assy, is_comp=array_dtype.is_computational())
+            assembly_label = src.core.reduced_core_map_label(assy, )
             identifier : str = ""
+            axial_arrays = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    axial_array = full_array[j, i, :, assy]
+                    axial_arrays.append(full_array[j, i, :, assy])
                     identifier = f" | {assembly_label} @({i + 1},{j + 1})"
-                case VeraDtype.ASSEMBLY:
-                    axial_array = full_array[:, assy]
+                case VeraDtype.ASSEMBLY: 
+                    axial_arrays.append(full_array[:, assy])
                     identifier = f" | {assembly_label}"
                 case VeraDtype.AXIAL:
-                    axial_array = full_array
+                    axial_arrays.append(full_array)
+                case VeraDtype.COMP_NODAL:
+                    node_idx = convert_ji_to_node(j, i)
+                    axial_arrays.append(full_array[node_idx, :, assy])
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
+                case VeraDtype.COMP_NODAL_ENERGY:
+                    node_idx = convert_ji_to_node(j, i)
+                    num_energy_groups = full_array.shape[0]
+                    for n_group in range(num_energy_groups):
+                        axial_arrays.append(full_array[n_group, node_idx, :, assy])
+                    identifier = f" | {assembly_label} @(NODE {node_idx})"
                 case _:
                     raise RuntimeError(f"Axial Plot cannot visualize datasets of type {str(array_dtype)}")
-            figure.add_trace(
-                go.Scatter(
-                    x=axial_array,
-                    y=src.core.axial_mesh_means,
-                    mode="lines",
-                    name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier}",
+            axial_mesh_means = src.core.axial_mesh_means if not array_dtype.is_computational() else src.core.comp_axial_mesh_means
+            for idx, axial_array in enumerate(axial_arrays):
+                group_label = "" if len(axial_arrays) <= 1 else f" GROUP {idx + 1}"
+                figure.add_trace(
+                    go.Scatter(
+                        x=axial_array,
+                        y=axial_mesh_means,
+                        mode="lines",
+                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier + group_label}",
+                    )
                 )
-            )
 
         # add_hline only spans x in [0, 1], so draw the layer marker manually.
         float_info = np.finfo(np.float64)
         figure.add_trace(
             go.Scatter(
                 x=[float_info.min, float_info.max],
-                y=[registry.default_src.core.axial_mesh_means[state.selected_layer]] * 2,
+                y=[registry.global_axial_mesh[state.selected_layer]] * 2,
                 mode="lines",
                 line=go.scatter.Line(color="red", dash="dash"),
                 showlegend=False,

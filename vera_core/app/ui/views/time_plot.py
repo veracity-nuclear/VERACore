@@ -5,7 +5,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import plotly, vuetify, html
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, get_safe_idxs
+from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 SEP = "\x1f"
 
@@ -40,38 +40,52 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
             array_dtype = src.array_dtype(array_name)
+            is_comp = array_dtype.is_computational()
             ny, nx, nax, nass, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
-            assembly_label = src.core.reduced_core_map_label(nass, is_comp=array_dtype.is_computational())
-            axial_label = src.core.axial_mesh_means[nax]
+            assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
+            axial_label = src.core.axial_mesh_means[nax] if not is_comp else src.core.comp_axial_mesh_means[nax]
+            indices_list = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    indices = (ny, nx, nax, nass)
+                    indices_list.append((ny, nx, nax, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
                 case VeraDtype.ASSEMBLY:
-                    indices = (nax, nass)
+                    indices_list.append((nax, nass))
                     identifier = f" | {assembly_label} z = {axial_label}"
                 case VeraDtype.AXIAL:
-                    indices = (nax)
+                    indices_list.append((nax))
                     identifier = f" | z = {axial_label}"
                 case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
-                    indices = (ny, nx, nass)
+                    indices_list.append((ny, nx, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1})"
                 case VeraDtype.RADIAL_ASSEMBLY:
-                    indices = (nass)
+                    indices_list.append((nass))
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:
-                    indices = (0)
+                    indices_list.append((0))
+                case VeraDtype.COMP_NODAL:
+                    node_idx = convert_ji_to_node(ny, nx)
+                    indices_list.append((node_idx, nax, nass))
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
+                case VeraDtype.COMP_NODAL_ENERGY:
+                    node_idx = convert_ji_to_node(ny, nx)
+                    num_energy_groups = 2
+                    for n_group in range(num_energy_groups):
+                        indices_list.append((n_group, node_idx, nax, nass))
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
                 case _:
                     raise RuntimeError(f"Time plot cannot visualize datasets of type {str(array_dtype)}")
-            values = [getattr(x, array_name)[indices] for x in src.states]
-            figure.add_trace(
-                go.Scatter(
-                    x=time_axis,
-                    y=values,
-                    mode="lines",
-                    name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier}",
+            for idx_n, indices in enumerate(indices_list):
+                group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
+                values = [getattr(x, array_name)[indices] for x in src.states]
+                figure.add_trace(
+                    go.Scatter(
+                        x=time_axis,
+                        y=values,
+                        mode="lines",
+                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{group_label + identifier}",
+                    )
                 )
-            )
 
         # add_vline only spans y in [0, 1], so draw the marker manually.
         float_info = np.finfo(np.float64)

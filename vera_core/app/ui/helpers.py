@@ -1,7 +1,7 @@
 import numpy as np
 
 from trame_server.core import State
-from vera_core.app.core import VeraDataSource, VeraDtype, VeraOutCore, VeraDataRegistry
+from vera_core.app.core import VeraDataSource, VeraDtype, VeraOutCore, VeraDataRegistry, NUM_NODES
 
 def format_label(file : str, key : str):
     return f"{file} | {key.replace('_', ' ').upper()}"
@@ -30,13 +30,18 @@ def is_view_locked(state, view_id):
 def is_non_active_view(state : State, view_id : int, option : dict[str, str]) -> bool:
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
 
-def set_info(state : State, vera_source : VeraDataSource, view_id : int, is_comp : bool):
+def set_info(view_id : int, state : State, registry : VeraDataRegistry):
+    j, i, layer, assy, src_id, ds_name = get_safe_idxs(view_id, state, registry)
+    vera_source = registry.get(src_id)
+    dtype = vera_source.array_dtype(ds_name)
+    is_comp = dtype.is_computational()
+    axial_mesh = vera_source.core.axial_mesh_means if not is_comp else vera_source.core.comp_axial_mesh_means
     state[f"label_info_{view_id}"] = {
             "Exposure": np.round(vera_source.active_state.exposure[0], decimals=3),
-            "Assembly": vera_source.core.reduced_core_map_label(state.selected_assembly),
-            "Layer": vera_source.core.axial_mesh_means[state.selected_layer],
-            "Pin_x" : int(state.selected_i),
-            "Pin_y" : int(state.selected_j),
+            "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
+            "Layer": np.round(axial_mesh[layer], decimals=2),
+            "Pin_x" : int(i),
+            "Pin_y" : int(j),
         }
 
 def _get_assy_idx(ds_dtype : VeraDtype, state : State):
@@ -63,7 +68,7 @@ def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel
     sel_j = int(state.selected_j)
     sel_i = int(state.selected_i)
     sel_assy = _get_assy_idx(vdtype, state)
-    sel_layer = int(state.selected_layer)
+    sel_layer = registry.global_axial_idx_to_src_idx(src_id, vdtype, int(state.selected_layer))
 
     core_shape = core.comp_core_shape if core.has_comp_core() and vdtype.is_computational() else core.core_shape
     if len(core_shape) != 4:
@@ -80,3 +85,6 @@ def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel
     safe_assy_idx = int(np.clip(sel_assy, 0, nass - 1))
 
     return safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name
+
+def convert_ji_to_node(selected_j, selected_i):
+    return np.clip((selected_i + selected_j * int(NUM_NODES / 2)), 0, NUM_NODES - 1)

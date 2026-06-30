@@ -296,13 +296,12 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         # state.max_time : state for tracking the maximum state number of all sources in the registry
         # state.selected_time : state for tracking the STATE_n being visualized, i.e. if state.selected_time == 2, STATE_0002 in the vera source is being visualized
         state.selected_layer = nz // 2
-        state.max_layer = nz - 1
+        state.max_layer = len(registry.global_axial_mesh) - 1
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
         state.selected_j = (ny // 2) - (1 if ny // 2 >= 1 else 0)
         state.selected_assembly = _center_assembly(src.core.reduced_core_map)
         if src.core.has_comp_core():
             state.selected_comp_assembly = src.core.assy_to_comp_assy(state.selected_assembly)
-            print(state.selected_comp_assembly,  state.selected_assembly, src.core.comp_assy_to_assy(state.selected_comp_assembly))
             assert src.core.comp_assy_to_assy(state.selected_comp_assembly) == state.selected_assembly
         assembly_i, assembly_j = src.core.reduced_core_map_ij(state.selected_assembly)
         state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}

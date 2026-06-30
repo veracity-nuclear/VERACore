@@ -106,7 +106,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 cached_assembly_images.pop(next(iter(cached_assembly_images)))
 
             cached_assembly_images[cache_key] = images_dataset
-            set_info(state, vera_source, view_id, array_dtype.is_computational())
+            set_info(view_id, state, registry)
 
         # Update the client
         for idx, image in enumerate(images_dataset):

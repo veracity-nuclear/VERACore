@@ -43,6 +43,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(n_groups_key, 0)
     group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(4)]
     label_keys = [f"core_labels_{view_id}_{g}" for g in range(4)]
+    x_label_key = f"core_view_x_labels_{view_id}"
+    y_label_key = f"core_view_y_labels_{view_id}"
+    
     for gk in group_keys:
         state.setdefault(gk, [])
     for lk in label_keys:
@@ -53,6 +56,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     info = f"label_info_{view_id}"
 
     state.setdefault(aspect_ratio_key, 1)
+    state.setdefault(x_label_key, [])
+    state.setdefault(y_label_key, [])
 
     def _vis_pin_level_data(src : VeraDataSource, dataset : VeraDataset):
         cm = src.core.comp_core_map if dataset.is_computational() else src.core.reduced_core_map
@@ -76,6 +81,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 else:
                     line.append(np.ravel(dataset[index]).tolist())    
         return result, labels               
+    
+    @state.change("selected_assembly", "selected_comp_assembly")
+    def update_info(**kwargs):
+        set_info(view_id, state, registry)
 
     @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
@@ -85,6 +94,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         _, _, selected_layer, _, selected_src_id, selected_array = get_safe_idxs(view_id, state, registry)
         thres_key = format_label(selected_src_id, selected_array)
         vera_source : VeraDataSource = registry.get(selected_src_id)
+        core = vera_source.core
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
         raw_array = vera_source.array(selected_array)
         raw_array_dtype = raw_array.dataset_type
@@ -108,6 +118,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     layer_arrays.append(raw_array[energy_group, :, selected_layer, :].swapaxes(0, 1))
             case _:
                 raise RuntimeError(f"Core View cannot visualize a dataset of type {str(raw_array_dtype)} ")
+        state[x_label_key] = (core.comp_core_map_column_labels if raw_array_dtype.is_computational() else
+            core.reduced_core_map_column_labels)
+        start_idx = (core.comp_map_start_index if raw_array_dtype.is_computational() else
+            vera_source.core.reduced_core_map_start_index)
+        
+        num_rows = 0
         for idx, layer_array in enumerate(layer_arrays):
             if raw_array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
                 layer_array = _nan_out_control_rods(layer_array, vera_source.core.control_rod_positions)
@@ -115,14 +131,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             if thres.get(thres_key):
                 layer_array = apply_thresholds(layer_array, thres[thres_key])        
             result, labels = _vis_pin_level_data(src=vera_source, dataset=layer_array)
+            num_rows = len(result) 
             state[f"core_assemblies_{view_id}_{idx}"] = result
             state[f"core_labels_{view_id}_{idx}"] = labels
+        state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
         num_groups = len(layer_arrays)
         for idx in range(num_groups, MAX_VIS_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = []
             state[f"core_labels_{view_id}_{idx}"] = []
         state[n_groups_key] = num_groups
-        set_info(state, vera_source, view_id, raw_array_dtype.is_computational())
+        set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -152,6 +170,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             selected_i=("selected_assembly_ij.i",),
                             selected_j=("selected_assembly_ij.j",),
                             aspect_ratio=(aspect_ratio_key, 1),
+                            x_labels=(f"{x_label_key}",),
+                            y_labels=(f"{y_label_key}",),
                             color_preset="jet",
                             color_range=(f"color_range_{view_id}", [0, 3]),
                             click="selected_assembly_ij = $event",

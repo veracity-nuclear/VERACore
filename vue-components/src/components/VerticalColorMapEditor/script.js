@@ -2,14 +2,14 @@ import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
 function simplifyNumber(v, targetSize = 6) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) {
-    return n;
+  if (!Number.isFinite(v)) return v;
+  const abs = Math.abs(v);
+  if (v !== 0 && (abs < 1e-3 || abs >= 1e5)) {
+    return v;
   }
-
-  let strValue = `${n}`;
-  let precision = Math.max(0, targetSize);
-  while (strValue.length > targetSize && precision > 0) {
+  let strValue = `${v}`;
+  let precision = targetSize;
+  while (strValue.length > 6 && precision > 0) {
     precision -= 1;
     strValue = n.toFixed(precision);
   }

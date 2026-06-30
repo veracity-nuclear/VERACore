@@ -6,6 +6,8 @@ from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
 from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node
 
+MAX_VIS_GROUPS = 4
+
 _AXIS_OPTIONS = {
     "x": {
         "label": "X Axial View",
@@ -30,6 +32,7 @@ def option_for(view_id, axis):
             VeraDtype.CHANNEL.title,
             VeraDtype.ASSEMBLY.title,
             VeraDtype.COMP_NODAL.title,
+            VeraDtype.COMP_NODAL_ENERGY.title,
         ],
     }
 
@@ -45,22 +48,27 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     selected_src_key = f"selected_src_id_{view_id}"
 
     prefix = f"{axis}_axial_core"
-    core_key = f"{prefix}_{view_id}"
-    size_x_key = f"{prefix}_size_x_{view_id}"
+    # Per-group state keys (one set of grid/sizes per energy group).
+    core_keys = [f"{prefix}_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
+    size_x_keys = [f"{prefix}_size_x_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     size_y_key = f"{prefix}_size_y_{view_id}"
     label_x_key = f"{prefix}_label_x_{view_id}"
     label_y_key = f"{prefix}_label_y_{view_id}"
     selected_layer_key = f"selected_layer_{view_id}"
+    n_groups_key = f"n_groups_{view_id}"
     info = f"label_info_{view_id}"
 
     pin_key = "selected_j" if is_x else "selected_i"
 
-    state.setdefault(core_key, [])
-    state.setdefault(size_x_key, [])
+    for ck in core_keys:
+        state.setdefault(ck, [])
+    for sk in size_x_keys:
+        state.setdefault(sk, [])
     state.setdefault(size_y_key, [])
     state.setdefault(label_y_key, [])
-    state.setdefault(selected_layer_key, 0)
     state.setdefault(label_x_key, [])
+    state.setdefault(selected_layer_key, 0)
+    state.setdefault(n_groups_key, 0)
 
     def axial_cell_selected(layer, clicked_idx):
         if is_x:
@@ -81,6 +89,68 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         state[selected_layer_key] = registry.global_axial_idx_to_src_idx(
             src_id, array_dtype, state.selected_layer
         )
+
+    def _nodal_node_pair(selected_pin):
+        """Pick the two nodes along the cut direction for this view's axis."""
+        if is_x:
+            node = int(convert_ji_to_node(selected_pin, 0))   # j picks the row
+            return (0, 1) if node in (0, 1) else (2, 3)
+        node = int(convert_ji_to_node(0, selected_pin))       # i picks the col
+        return (0, 2) if node in (0, 2) else (1, 3)
+
+    def _build_group_grid(array_2d_or_nodal, array_dtype, core, selected_pin, assembly_indices):
+        """Return (grid, data_width, display_width, nb_cols) for one energy group's
+        array slice."""
+        is_assembly = array_dtype == VeraDtype.ASSEMBLY
+        arr = array_2d_or_nodal
+
+        if array_dtype in (VeraDtype.PIN, VeraDtype.CHANNEL):
+            cell_width = arr.shape[0]
+            if is_x:
+                image_data = arr[selected_pin, :, :, assembly_indices]
+            else:
+                image_data = arr[:, selected_pin, :, assembly_indices]
+            image_data = np.vstack(image_data).T
+            data_width = display_width = cell_width
+
+        elif is_assembly:
+            cell_width = core.pin_volumes.shape[0]
+            image_data = np.vstack(arr[:, assembly_indices])
+            data_width = display_width = cell_width
+
+        elif array_dtype in (VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ENERGY):
+            nodal = arr[:, :, assembly_indices]   # (nodes, nax, ncols)
+            n_nodes = nodal.shape[0]
+            if n_nodes == 1:
+                data_width = display_width = core.pin_volumes.shape[0]
+                image_data = np.vstack(nodal[0])
+            else:
+                node_pair = _nodal_node_pair(selected_pin)
+                data_width = len(node_pair)
+                display_width = core.pin_volumes.shape[0]  # render at full visual width
+                sel = nodal[list(node_pair)]               # (2, nax, ncols)
+                sel = np.transpose(sel, (1, 2, 0))         # (nax, ncols, 2)
+                image_data = sel.reshape(sel.shape[0], -1) # (nax, ncols*2)
+        else:
+            raise RuntimeError(
+                f"Axial view cannot visualize datasets of type {str(array_dtype)}"
+            )
+
+        image_data = image_data[::-1, :]   # axial level 0 at the bottom
+        nb_lines = image_data.shape[0]
+        nb_cols = image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
+
+        grid = []
+        for j in range(nb_lines):
+            line = []
+            grid.append(line)
+            for i in range(nb_cols):
+                if is_assembly:
+                    line.append(np.full(data_width, image_data[j, i]).tolist())
+                else:
+                    cell = image_data[j, i * data_width:(i + 1) * data_width]
+                    line.append(np.ravel(cell).tolist())
+        return grid, display_width, nb_cols
 
     @state.change(
         selected_array_key,
@@ -115,91 +185,39 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         else:
             assembly_indices = core.col_assembly_indices(selected_assembly, is_comp)
 
-        # Build image_data as (axial_levels, columns). `cell_width` is how many
-        # values span one assembly cell: pins for PIN/CHANNEL, 1 for ASSEMBLY,
-        # 2 nodes for COMP_NODAL.
-        is_assembly = array_dtype == VeraDtype.ASSEMBLY
-        is_nodal = array_dtype == VeraDtype.COMP_NODAL
-
-        match array_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
-                cell_width = array.shape[0]
-                if is_x:
-                    image_data = array[selected_pin, :, :, assembly_indices]
-                else:
-                    image_data = array[:, selected_pin, :, assembly_indices]
-                image_data = np.vstack(image_data).T
-
-            case VeraDtype.ASSEMBLY:
-                cell_width = core.pin_volumes.shape[0]  # full-width uniform cell
-                image_data = np.vstack(array[:, assembly_indices])
-
-            case VeraDtype.COMP_NODAL:
-                nodal = array[:, :, assembly_indices]  # (nodes, nax, ncols)
-                n_nodes = nodal.shape[0]
-
-                if n_nodes == 1:
-                    cell_width = core.pin_volumes.shape[0]
-                    image_data = np.vstack(nodal[0])
-                else:
-                    if is_x:
-                        node = int(convert_ji_to_node(selected_pin, 0))  # j picks the row
-                        node_pair = (0, 1) if node in (0, 1) else (2, 3)
-                    else:
-                        node = int(convert_ji_to_node(0, selected_pin))  # i picks the col
-                        node_pair = (0, 2) if node in (0, 2) else (1, 3)
-                    cell_width = len(node_pair)
-                    sel = nodal[list(node_pair)]
-                    sel = np.transpose(sel, (1, 2, 0))
-                    image_data = sel.reshape(sel.shape[0], -1)
-
-            case _:
-                raise RuntimeError(
-                    f"Axial view cannot visualize datasets of type {str(array_dtype)}"
-                )
-
-        # Reverse axial axis so level 0 renders at the bottom.
-        image_data = image_data[::-1, :]
-        nb_lines = image_data.shape[0]
-        if is_assembly:
-            nb_cols = image_data.shape[1]
+        if array_dtype == VeraDtype.COMP_NODAL_ENERGY:
+            num_groups = array.shape[0]
+            group_arrays = [array[g] for g in range(num_groups)]
         else:
-            nb_cols = image_data.shape[1] // cell_width
+            num_groups = 1
+            group_arrays = [array]
 
-        # Axial sizing/labels follow the computational mesh for comp datasets.
         mesh_pixels = core.comp_axial_mesh_pixels if is_comp else core.axial_mesh_pixels
         mesh_means = core.comp_axial_mesh_means if is_comp else core.axial_mesh_means
-        label_y = [np.round(m, 1) for m in mesh_means][::-1]
-
         state[size_y_key] = mesh_pixels.tolist()
-        if is_nodal and n_nodes > 1:
-            data_width = cell_width
-            display_width = core.pin_volumes.shape[0]
-        else:
-            data_width = cell_width
-            display_width = cell_width
+        state[label_y_key] = [np.round(m, 1) for m in mesh_means][::-1]
 
-        state[size_x_key] = [display_width for _ in range(nb_cols)]
-        state[label_y_key] = label_y
+        nb_cols = 0
+        for g in range(num_groups):
+            grid, display_width, nb_cols = _build_group_grid(
+                group_arrays[g], array_dtype, core, selected_pin, assembly_indices
+            )
+            state[core_keys[g]] = grid
+            state[size_x_keys[g]] = [display_width for _ in range(nb_cols)]
 
-        grid = []
-        for j in range(nb_lines):
-            row = []
-            grid.append(row)
-            for i in range(nb_cols):
-                if is_assembly:
-                    row.append(np.full(data_width, image_data[j, i]).tolist())
-                else:
-                    cell = image_data[j, i * data_width:(i + 1) * data_width]
-                    row.append(np.ravel(cell).tolist())
-        
+        for g in range(num_groups, MAX_VIS_GROUPS):
+            state[core_keys[g]] = []
+            state[size_x_keys[g]] = []
+
         if is_x:
-            state[label_x_key] = core.reduced_core_map_column_labels if not is_comp else core.comp_core_map_column_labels
+            state[label_x_key] = (
+                core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
+            )
         else:
-            start_x = core.reduced_core_map_start_index + 1 if not is_comp else core.comp_map_start_index + 1
-            stop_x = nb_cols + start_x + 1
-            state[label_x_key] = list(range(start_x, stop_x))
-        state[core_key] = grid
+            start_x = (core.comp_map_start_index if is_comp else core.reduced_core_map_start_index) + 1
+            state[label_x_key] = list(range(start_x, nb_cols + start_x + 1))
+
+        state[n_groups_key] = num_groups
         set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:
@@ -208,26 +226,44 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             "flex: 1; min-width: 0;"
             "display: flex; flex-direction: column;"
         )):
-            with html.Div(style="flex: 1; min-height: 0; position: relative;"):
-                axial_kwargs = dict(
-                    value=(core_key, []),
-                    color_preset="jet",
-                    color_range=(f"color_range_{view_id}", [0, 3]),
-                    x_sizes=(size_x_key, []),
-                    y_sizes=(size_y_key, []),
-                    x_labels=(label_x_key, []),
-                    y_labels=(label_y_key, []),
-                    selected_i=(f"selected_assembly_ij.{'i' if is_x else 'j'}",),
-                    selected_j=(f"{label_y_key}.length - {selected_layer_key} - 1",),
-                    click=(
-                        axial_cell_selected,
-                        f"[{label_y_key}.length - $event.j - 1, $event.i]",
-                    ),
-                    x_scale=("3",),
-                    y_scale=("3",),
-                    busy=("trame__busy",),
-                )
-                vera.AxialView(**axial_kwargs)
+            with html.Div(style=(
+                "flex: 1; min-height: 0;"
+                "display: flex; flex-direction: row; flex-wrap: wrap;"
+            )):
+                for g in range(MAX_VIS_GROUPS):
+                    with html.Div(
+                        v_if=(f"{n_groups_key} > {g}",),
+                        style=(
+                            "flex: 1 1 45%; min-width: 0; min-height: 0;"
+                            "display: flex; flex-direction: column; position: relative;"
+                        ),
+                    ):
+                        html.Div(
+                            f"Group {g + 1}",
+                            v_if=(f"{n_groups_key} > 1",),
+                            classes="text-caption text-center font-weight-medium",
+                            style="flex: 0 0 auto;",
+                        )
+                        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
+                            axial_kwargs = dict(
+                                value=(core_keys[g], []),
+                                color_preset="jet",
+                                color_range=(f"color_range_{view_id}", [0, 3]),
+                                x_sizes=(size_x_keys[g], []),
+                                y_sizes=(size_y_key, []),
+                                x_labels=(label_x_key, []),
+                                y_labels=(label_y_key, []),
+                                selected_i=(f"selected_assembly_ij.{'i' if is_x else 'j'}",),
+                                selected_j=(f"{label_y_key}.length - {selected_layer_key} - 1",),
+                                click=(
+                                    axial_cell_selected,
+                                    f"[{label_y_key}.length - $event.j - 1, $event.i]",
+                                ),
+                                x_scale=("3",),
+                                y_scale=("3",),
+                                busy=("trame__busy",),
+                            )
+                            vera.AxialView(**axial_kwargs)
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})",

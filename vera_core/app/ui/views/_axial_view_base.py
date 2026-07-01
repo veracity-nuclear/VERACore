@@ -262,6 +262,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                 x_scale=("3",),
                                 y_scale=("3",),
                                 busy=("trame__busy",),
+                                dark=("dark_mode",),
                             )
                             vera.AxialView(**axial_kwargs)
             html.Div(

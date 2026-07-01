@@ -55,6 +55,10 @@ export default {
       type: Number,
       default: 1,
     },
+    dark: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedI(i) {
@@ -68,6 +72,10 @@ export default {
     },
     value() { 
       this.resize(); 
+    },
+    dark() {
+      this.updateNanColor();
+      this.imagesReady++;
     },
   },
   data() {
@@ -114,6 +122,7 @@ export default {
   created() {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.lookupTable = new LookupTable(this.colorPreset, this.colorRange);
+    this.updateNanColor();
   },
   mounted() {
     this.resizeObserver.observe(this.$el);
@@ -155,6 +164,13 @@ export default {
         return '';
       }
       return Number(v).toFixed(2);
+    },
+    updateNanColor() {
+      if (this.dark) {
+        this.lookupTable.setNanColor(30 / 255, 30 / 255, 30 / 255, 1);
+      } else {
+        this.lookupTable.setNanColor(1, 1, 1, 1);
+      }
     },
   },
 };

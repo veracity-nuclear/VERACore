@@ -62,7 +62,7 @@ def _is_active(state, view_id):
 def _build_view(server, view_id):
     """Construct one slot's VTK pipeline and template at startup."""
     ren = vtkRenderer()
-    ren.SetBackground(1, 1, 1)
+    ren.SetBackground(0.1176, 0.1176, 0.1176)
     ren_win = vtkRenderWindow()
     ren_win.AddRenderer(ren)
     ren_win.OffScreenRenderingOn()
@@ -221,6 +221,23 @@ def _update_color(server, view_id):
     ctx["ren_win"].Render()
     ctx["view_update"]()
  
+
+DARK_BG = (30 / 255, 30 / 255, 30 / 255)
+LIGHT_BG = (1.0, 1.0, 1.0)
+
+def _bg_for_theme(is_dark):
+    return DARK_BG if is_dark else LIGHT_BG
+
+def _update_background(server, view_id):
+    state = server.state
+    ctx = _views.get(view_id)
+    if ctx is None:
+        return
+    ctx["ren"].SetBackground(*_bg_for_theme(state["dark_mode"]))
+    if _is_active(state, view_id):
+        ctx["ren_win"].Render()
+        ctx["view_update"]()
+
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
@@ -237,6 +254,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         ctx["ren"].ResetCamera()
         ctx["reset_camera"]()
         ctx["view_update"]()
+    
+    @state.change("dark_mode")
+    def _on_theme_changed(**kwargs):
+        _update_background(server, view_id)
 
     @state.change(f"grid_view_{view_id}", f"locked_{view_id}")
     def _on_slot_changed(**kwargs):

@@ -89,6 +89,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
 
         figure.update_layout(margin=dict(t=0, b=0, l=0, r=0), 
+                             template="plotly_dark" if state["dark_mode"] else "plotly",
                              legend=dict(orientation="h",
                                          yanchor="top",
                                          y=-0.1,
@@ -105,6 +106,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        "dark_mode"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):

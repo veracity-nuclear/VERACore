@@ -44,4 +44,7 @@ export class LookupTable {
 
     return offset + 4;
   }
+  setNanColor(r, g, b, a) {
+    this.lookupTable.setNanColor(r, g, b, a);
+  }
 }

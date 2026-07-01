@@ -148,6 +148,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                 color_preset="jet",
                                 color_range=(f"color_range_{view_id}", [0, 3]),
                                 click="setAll({ selected_i: $event.i, selected_j: $event.j})",
+                                dark=("dark_mode",),
                                 busy=("trame__busy",),
                             )
             html.Div(

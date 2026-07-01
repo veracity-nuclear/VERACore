@@ -27,13 +27,15 @@ def build_toolbar(tb, ctrl: Controller, registry):
     vuetify.VSpacer()
 
     vuetify.VSwitch(
-        v_model="$vuetify.theme.dark",
+        v_model=("dark_mode",),
+        change="$vuetify.theme.dark = $event",
         hide_details=True,
         dense=True,
         inset=True,
         prepend_icon="mdi-white-balance-sunny",
         append_icon="mdi-moon-waning-crescent",
-        classes="mt-0",)
+        classes="mt-0",
+    )
 
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
@@ -215,10 +217,15 @@ def build_axial_slider():
         "bottom: 35px",
         "width: 56px",
         "z-index: 4",
-        "background-color: white",
         "border-left: 1px solid #e0e0e0",
     ])
-    with html.Div(style=strip, classes="d-flex flex-column align-center py-1"):
+    with html.Div(style=strip, 
+        v_bind_style=(
+            "dark_mode "
+            "? { backgroundColor: '#1e1e1e', borderLeft: '1px solid #333' } "
+            ": { backgroundColor: 'white', borderLeft: '1px solid #e0e0e0' }"
+        ),
+        classes="d-flex flex-column align-center py-1"):
         html.Div("Axial", classes="text-caption mb-1")
         with html.Div(
             style=(
@@ -267,7 +274,8 @@ def build_axial_slider():
 
 def build_layout(server : Server, state : State, ctrl : Controller, registry : VeraDataRegistry):
     with SinglePageLayout(server) as layout:
-        layout.root.classes = ("{ busy: trame__busy }",)
+        layout.root.classes = ("{ busy: trame__busy }")
+        client.ClientTriggers(mounted="$vuetify.theme.dark = dark_mode")
         with layout.toolbar as tb:
             build_toolbar(tb, ctrl, registry)
         with layout.content:

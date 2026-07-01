@@ -51,7 +51,10 @@
           @mouseenter="hover(i, j)"
           @mouseleave="exit"
         >
-          <div class="text-center text-caption">
+          <div 
+            class="text-center text-caption"
+            style="color: black; text-shadow: 0 0 3px rgba(255,255,255,0.7);"
+          >
             {{ toValue(i, j) }}
           </div>
         </v-sheet>

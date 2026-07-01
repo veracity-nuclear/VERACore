@@ -175,6 +175,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             color_preset="jet",
                             color_range=(f"color_range_{view_id}", [0, 3]),
                             click="selected_assembly_ij = $event",
+                            dark=("dark_mode",),
                             busy=("trame__busy",),
                         )
             html.Div(

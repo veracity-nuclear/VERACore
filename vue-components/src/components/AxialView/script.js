@@ -59,6 +59,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    dark: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedI(i) {
@@ -72,6 +76,9 @@ export default {
     },
     ySizes() {
       this.resize();
+    },
+    dark() {
+      this.updateNanColor();
     },
   },
   data() {
@@ -92,6 +99,7 @@ export default {
     rowImages() {
       const array = this.value;
       const lut = this.colorMap;
+      this.dark;
 
       const urls = [];
       for (let j = 0; j < array.length; j++) {
@@ -155,6 +163,7 @@ export default {
   created() {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.lookupTable = new LookupTable(this.colorPreset, this.colorRange);
+    this.updateNanColor();
   },
   mounted() {
     this.resizeObserver.observe(this.$el);
@@ -164,6 +173,13 @@ export default {
     this.resizeObserver = null;
   },
   methods: {
+    updateNanColor() {
+      if (this.dark) {
+        this.lookupTable.setNanColor(30 / 255, 30 / 255, 30 / 255, 1);
+      } else {
+        this.lookupTable.setNanColor(1, 1, 1, 1);
+      }
+    },
     resize() {
       const { width, height } = this.$el.getBoundingClientRect();
       let neededWidth = 30 + this.rowWidthPx;

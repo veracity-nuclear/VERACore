@@ -22,6 +22,7 @@ class AssemblyView(HtmlElement):
             ("color_preset", "colorPreset"),
             ("color_range", "colorRange"),
             ("active_style", ":activeStyle"),
+            "dark",
             "busy",
         ]
         self._event_names += [
@@ -46,6 +47,7 @@ class CoreView(HtmlElement):
             ("active_style", ":activeStyle"),
             ("x_labels", "xLabels"),
             ("y_labels", "yLabels"),
+            "dark",
             "scaling",
             "busy",
         ]
@@ -94,6 +96,7 @@ class AxialView(HtmlElement):
             ("y_scale", "yScale"),
             ("x_sizes", "xSizes"),
             ("y_sizes", "ySizes"),
+            "dark",
             "busy",
         ]
         self._event_names += [

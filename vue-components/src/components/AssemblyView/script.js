@@ -34,6 +34,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    dark: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedI(i) {
@@ -50,6 +54,10 @@ export default {
       this.updateColors();
     },
     colorRange() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    dark() {
       this.updateLookupTable();
       this.updateColors();
     },
@@ -133,7 +141,11 @@ export default {
       this.lookupTable.applyColorMap(preset);
       this.lookupTable.setMappingRange(this.colorRange[0], this.colorRange[1]);
       this.lookupTable.updateRange();
-      this.lookupTable.setNanColor(1, 1, 1, 1);
+      if (this.dark) {
+        this.lookupTable.setNanColor(30 / 255, 30 / 255, 30 / 255, 1);
+      } else {
+        this.lookupTable.setNanColor(1, 1, 1, 1);
+      }
     },
     updateColors() {
       const colors = [];

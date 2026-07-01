@@ -63,6 +63,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_layer", 0)
     state.setdefault("max_layer", 0)
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
+    state.setdefault("dark_mode", True)
 
     # initialize UI state for each feature
     DatasetPicker.register_dataset_picker_state(state, registry) # the File and Stream menu relies on dataset picker state

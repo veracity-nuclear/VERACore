@@ -21,10 +21,10 @@ class VeraDtype(Enum):
     # all below use computational core map for shape
     COMP_NODAL = 12
     COMP_NODAL_ENERGY = 13
-    COMP_NODAL_ADF = 14
+    COMP_NODAL_SURFACE = 14
     COMP_ASSY = 15
     COMP_ASSY_ENERGY = 16
-    COMP_ASSY_ADF = 17
+    COMP_ASSY_SURFACE = 17
 
     def __str__(self):
         return self.name
@@ -41,13 +41,14 @@ class VeraDtype(Enum):
         return self in (VeraDtype.CHANNEL, VeraDtype.CHANNEL_RADIAL)
 
     def is_computational(self):
-        return self in (VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_ADF, VeraDtype.COMP_ASSY_ENERGY,
-                        VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
+        return self in (VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_ASSY_ENERGY,
+                        VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_SURFACE, VeraDtype.COMP_NODAL_ENERGY)
     def is_nodal(self):
-        return self in (VeraDtype.NODE, VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ADF, VeraDtype.COMP_NODAL_ENERGY)
+        return self in (VeraDtype.NODE, VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_SURFACE, VeraDtype.COMP_NODAL_ENERGY)
     
     def is_assembly(self):
-        return self in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY)
+        return self in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY, 
+                        VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_ASSY_ENERGY,)
 
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -140,10 +141,10 @@ def build_core_dtypes(npiny = None,
     if comp_nax and comp_nass:
         shape_to_dtype |= {
             (NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL,
-            (NUM_DF, NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ADF,
+            (NUM_DF, NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_SURFACE,
             (NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ENERGY,
             (1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY,
-            (NUM_DF, NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ADF,
+            (NUM_DF, NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_SURFACE,
             (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ENERGY
         }
     return shape_to_dtype

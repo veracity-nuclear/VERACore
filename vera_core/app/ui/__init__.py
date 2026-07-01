@@ -9,6 +9,7 @@ from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu,
 from .layout import build_layout
 from .helpers import format_label, get_next_y_from_layout, array_range, is_view_locked
 from .views import (
+    surface_core_view,
     assembly_view,
     axial_plot,
     core_view,
@@ -19,6 +20,7 @@ from .views import (
     y_axial_view,
     volume_view,
     core_axial_view,
+    surface_assembly_view
 )
 
 DEFAULT_NB_ROWS = 8
@@ -36,7 +38,9 @@ VIEW_MODULES = [
     volume_view,
     x_axial_view,
     y_axial_view,
-    core_axial_view
+    core_axial_view,
+    surface_core_view,
+    surface_assembly_view,
 ]
 
 def _center_assembly(reduced_core_map):
@@ -63,6 +67,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_layer", 0)
     state.setdefault("max_layer", 0)
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
+    state.setdefault("selected_surface", -1)
     state.setdefault("dark_mode", True)
 
     # initialize UI state for each feature

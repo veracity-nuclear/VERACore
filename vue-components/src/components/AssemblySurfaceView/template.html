@@ -1,0 +1,93 @@
+<div class="container" style="width: 100%; height: 100%; overflow: hidden;">
+  <div :style="scaleStyle" style="position: relative; width: 100%; height: 100%;">
+    <div :style="sizeStyle" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+      <div class="content">
+        <v-row class="ma-0">
+          <v-sheet height="30" width="30" />
+          <v-sheet
+            v-for="i in sideCount"
+            :key="i"
+            height="30" width="30"
+            class="ml-1 d-flex flex-column justify-center"
+            rounded
+            :dark="i == activeI"
+          >
+            <div class="text-center text-overline">{{ i }}</div>
+          </v-sheet>
+        </v-row>
+        <v-row
+          v-for="j in sideCount"
+          :key="j"
+          class="ma-0"
+        >
+          <v-sheet
+            height="30" width="30"
+            class="mt-1 d-flex flex-column justify-center"
+            rounded
+            :dark="j == activeJ"
+          >
+            <div class="text-center text-overline">{{ j }}</div>
+          </v-sheet>
+          <v-sheet
+            v-for="i in sideCount"
+            :key="i"
+            height="30" width="30"
+            outlined
+            color="transparent"
+            class="ml-1 mt-1"
+            :class="{ busy, pointerCursor: !busy && hasCell(i, j) }"
+            :style="toStyle(i, j)"
+            @click="hasCell(i, j) && onCellClick($event, i, j)"
+            @mousemove="hasCell(i, j) && onCellHover($event, i, j)"
+            @mouseleave="exit"
+          >
+            <div style="position: relative; width: 100%; height: 100%;">
+              <svg
+                v-if="hasCell(i, j)"
+                :viewBox="`0 0 ${cellSize} ${cellSize}`"
+                preserveAspectRatio="none"
+                style="position: absolute; width: 100%; height: 100%; top: 0; left: 0;"
+              >
+                <!-- Fills -->
+                <polygon
+                  v-for="surface in [1, 3, 0, 2]"
+                  :key="'f' + surface"
+                  :points="trianglePoints[surface]"
+                  :fill="triangleFill(i, j, surface)"
+                  stroke="black"
+                  stroke-width="0.5"
+                  vector-effect="non-scaling-stroke"
+                />
+
+                <!-- Value text per triangle -->
+                <text
+                  v-for="surface in [0, 1, 2, 3]"
+                  :key="'t' + surface"
+                  :x="triangleCentroids[surface][0]"
+                  :y="triangleCentroids[surface][1]"
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                  :font-size="cellSize * 0.11"
+                  fill="black"
+                  style="paint-order: stroke; stroke: rgba(255,255,255,0.7); stroke-width: 2px;"
+                >{{ faceText(i, j, surface) }}</text>
+
+                <!-- Selected-triangle highlight (drawn last, on top) -->
+                <polygon
+                  v-for="surface in [0, 1, 2, 3]"
+                  v-if="isSelectedTriangle(i, j, surface)"
+                  :key="'h' + surface"
+                  :points="trianglePoints[surface]"
+                  fill="none"
+                  stroke="white"
+                  stroke-width="2.5"
+                  vector-effect="non-scaling-stroke"
+                />
+              </svg>
+            </div>
+          </v-sheet>
+        </v-row>
+      </div>
+    </div>
+  </div>
+</div>

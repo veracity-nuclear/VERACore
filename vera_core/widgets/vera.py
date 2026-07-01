@@ -29,7 +29,50 @@ class AssemblyView(HtmlElement):
             "click",
         ]
 
-
+class SurfaceView(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-core-surface-view",
+            **kwargs,
+        )
+        self._attr_names += [
+            "value",
+            ("selected_i", "selectedI"),
+            ("selected_j", "selectedJ"),
+            ("color_preset", "colorPreset"),
+            ("color_range", "colorRange"),
+            ("active_style", "activeStyle"),
+            ("x_labels", "xLabels"),
+            ("y_labels", "yLabels"),
+            ("aspect_ratio", "aspectRatio"),
+            ("cell_size", "cellSize"),
+            "dark",
+            "busy",
+        ]
+        self._event_names += [
+            "click",
+        ]
+class AssemblySurfaceView(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-assembly-surface-view",
+            **kwargs,
+        )
+        self._attr_names += [
+            "value",
+            ("selected_i", "selectedI"),
+            ("selected_j", "selectedJ"),
+            ("selected_surface", "selectedSurface"),
+            ("color_preset", "colorPreset"),
+            ("color_range", "colorRange"),
+            ("active_style", "activeStyle"),
+            ("cell_size", "cellSize"),
+            "dark",
+            "busy",
+        ]
+        self._event_names += [
+            "click",
+        ]
 class CoreView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(

@@ -1,3 +1,4 @@
+import functools
 import numpy as np
 
 from trame_server.core import State
@@ -88,3 +89,15 @@ def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel
 
 def convert_ji_to_node(selected_j, selected_i):
     return np.clip((selected_i + selected_j * int(NUM_NODES / 2)), 0, NUM_NODES - 1)
+
+
+def has_src(registry : VeraDataRegistry, *args, **kwargs):
+        return registry.default_src_id is not None
+
+def requires_src(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if not has_src(*args, **kwargs):
+                return
+            return func(*args, **kwargs)
+        return wrapper

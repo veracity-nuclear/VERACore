@@ -4,6 +4,12 @@ from typing import Union
 from enum import Enum, StrEnum
 import numpy as np
 import h5py
+
+NUM_ENERGY_GROUPS = 2
+MAX_NUM_GROUPS = 8
+NUM_DF = 6
+NUM_NODES = 4
+LATERAL_SURACES = slice(0,4)
 class VeraDtype(Enum):
     """Dataset Identifiers"""
     PIN = 1
@@ -82,10 +88,6 @@ class VeraDataset(np.ndarray):
     def is_assembly(self) -> bool:
         return self.dataset_type.is_assembly()
 
-NUM_ENERGY_GROUPS = 2
-NUM_DF = 6
-NUM_NODES = 4
-
 def nan_out_reflected(cm, core_sym, array):
     """Nans out reflected region if dataset has quarter core symmetry"""
     ax, ay = cm.shape
@@ -142,10 +144,14 @@ def build_core_dtypes(npiny = None,
         shape_to_dtype |= {
             (NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL,
             (NUM_DF, NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_SURFACE,
+            (NUM_DF, 8, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_SURFACE,
             (NUM_ENERGY_GROUPS, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ENERGY,
+            (8, NUM_NODES, comp_nax, comp_nass) : VeraDtype.COMP_NODAL_ENERGY,
             (1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY,
             (NUM_DF, NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_SURFACE,
-            (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ENERGY
+            (NUM_DF, 8, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_SURFACE,
+            (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ENERGY,
+            (8, 1, comp_nax, comp_nass) : VeraDtype.COMP_ASSY_ENERGY
         }
     return shape_to_dtype
 
@@ -361,7 +367,6 @@ class VeraOutCore(LazyHDF5Loader):
         """Compute the reduced core map based upon the core_sym"""
         sym = self.core_sym[()] 
         has_comp_core = self.has_comp_core()
-        is_comp_rolled = self._is_comp_rolled
         if sym == 1:
             self.reduced_core_map = self.core_map[:].copy()
             self.reduced_core_map_start_index = 0   
@@ -372,7 +377,7 @@ class VeraOutCore(LazyHDF5Loader):
             start_h = h // 2
             self.reduced_core_map = self.core_map[start_w:, start_h:]
             self.reduced_core_map_start_index = start_w
-            if has_comp_core and not is_comp_rolled:
+            if has_comp_core and not self._is_comp_rolled:
                 print("comp not rolled")
                 cw, ch = self.comp_core_map[:].shape
                 cstart_w = cw // 2

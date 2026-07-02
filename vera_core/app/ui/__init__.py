@@ -3,7 +3,7 @@ import numpy as np
 
 from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
-from vera_core.app.core import VeraDataRegistry, VeraDtype
+from vera_core.app.core import VeraDataRegistry, VeraDtype, MAX_NUM_GROUPS, LATERAL_SURACES
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
 from .layout import build_layout
@@ -100,7 +100,14 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         if src is None:
             return
         array = src.array(state[f"selected_array_{view_id}"])
-        state[f"color_range_{view_id}"] = array_range(array)
+        if array.dataset_type in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.COMP_NODAL_ENERGY):
+            group_arrays = [array[g] for g in range(array.shape[0])]
+        elif array.dataset_type in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE):
+            group_arrays = [array[LATERAL_SURACES, g] for g in range(array.shape[1])]
+        else:
+            group_arrays = [array]
+        for g, group_array in enumerate(group_arrays):
+            state[f"color_range_{view_id}_{g}"] = array_range(group_array)
 
     @state.change("selected_time")
     @requires_src
@@ -179,7 +186,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state[f"grid_options_{view_id}"] = []
         state[f"selected_array_{view_id}"] = ""
         state[f"selected_src_id_{view_id}"] = registry.default_src_id
-        state[f"color_range_{view_id}"] = (0.0, 1.0)
+        for g in range(MAX_NUM_GROUPS):
+            state[f"color_range_{view_id}_{g}"] = (0.0, 1.0)
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         state[f"selected_label_{view_id}"] = format_label(registry.default_src_id, "pin_powers")
         state[f"locked_{view_id}"] = False
@@ -243,9 +251,31 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         def _on_card_array_change(**kwargs):
             _recompute_card_range(view_id)
         return _on_card_array_change
+    
+    def _make_option_watcher(view_id):
+        @state.change(f"grid_view_{view_id}")
+        @requires_src
+        def _on_grid_option_change(**kwargs):
+            # FIXME, need to add this to multi select views 
+            option = state[f"grid_view_{view_id}"]
+            src_id = state[f"selected_src_id_{view_id}"]
+            sel_ds = state[f"selected_array_{view_id}"]
+            dtype = registry.get(src_id).array_dtype(sel_ds)
+            if ("allowed_categories" in option and dtype.title in option["allowed_categories"]) or "allowed_categories" not in option:
+                return
+            default_datasets_names = registry.get(src_id).default_datasets()
+            allowed_categories = option["allowed_categories"]
+            available_categories = sorted(set(default_datasets_names).intersection(allowed_categories))
+            if len(available_categories) == 0:
+                return
+            new_ds_name = default_datasets_names[available_categories[0]]
+            state[f"selected_array_{view_id}"] = new_ds_name
+            state[f"selected_label_{view_id}"] = format_label(src_id, new_ds_name)
+        return _on_grid_option_change
 
     for view_id in all_view_ids:
         _make_array_watcher(view_id)
+        _make_option_watcher(view_id)
 
     def place(module, x, y, w, h, default_datasets_names : dict, default_id):
         """helper function for intializing UI"""

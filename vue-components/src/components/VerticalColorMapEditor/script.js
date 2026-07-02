@@ -3,10 +3,12 @@ import { toImageURL } from '../../utils/ImageGenerator';
 
 function simplifyNumber(v, targetSize = 6) {
   if (!Number.isFinite(v)) return v;
+  if (v === 0) return 0;
   const abs = Math.abs(v);
-  if (v !== 0 && (abs < 1e-3 || abs >= 1e5)) {
-    return v;
+  if (abs < 1e-3 || abs >= 1e5) {
+    return v.toExponential(2).replace(/\.?0+e/, 'e').replace('e+', 'e');
   }
+  // Normal range: trim decimals to fit the field.
   let strValue = `${v}`;
   let precision = targetSize;
   while (strValue.length > 6 && precision > 0) {
@@ -63,7 +65,7 @@ export default {
 
       // width=1, height=samples.length: a tall 1-pixel-wide strip
       return toImageURL(this.colorMap, samples, 1, samples.length);
-    }
+    },
   },
   created() {
     this.lookupTable = new LookupTable(this.colorPreset, this.value);

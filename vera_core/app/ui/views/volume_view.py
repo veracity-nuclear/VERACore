@@ -138,7 +138,7 @@ def _build_view(server, view_id):
             "display: flex; align-self: stretch;"
         )):
             vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
+                v_model=f"color_range_{view_id}_0",
                 color_preset="jet",
             )
 
@@ -210,7 +210,7 @@ def _update_color(server, view_id):
     if ctx is None or not _is_active(state, view_id):
         return
 
-    color_range = state[f"color_range_{view_id}"]
+    color_range = state[f"color_range_{view_id}_0"]
     original_range = (_COLOR_POINTS[0][0], _COLOR_POINTS[-1][0])
     color_fn = ctx["color_fn"]
     color_fn.RemoveAllPoints()
@@ -268,7 +268,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def _on_selection_changed(**kwargs):
         _update_volume(server, registry, view_id)
 
-    @state.change(f"color_range_{view_id}")
+    @state.change(f"color_range_{view_id}_0")
     def _on_color_changed(**kwargs):
         _update_color(server, view_id)
 

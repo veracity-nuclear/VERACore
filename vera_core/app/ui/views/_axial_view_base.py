@@ -4,7 +4,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node
+from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node, requires_src
 
 MAX_VIS_GROUPS = 4
 
@@ -244,37 +244,41 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                             classes="text-caption text-center font-weight-medium",
                             style="flex: 0 0 auto;",
                         )
-                        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
-                            axial_kwargs = dict(
-                                value=(core_keys[g], []),
-                                color_preset="jet",
-                                color_range=(f"color_range_{view_id}", [0, 3]),
-                                x_sizes=(size_x_keys[g], []),
-                                y_sizes=(size_y_key, []),
-                                x_labels=(label_x_key, []),
-                                y_labels=(label_y_key, []),
-                                selected_i=(f"selected_assembly_ij.{'i' if is_x else 'j'}",),
-                                selected_j=(f"{label_y_key}.length - {selected_layer_key} - 1",),
-                                click=(
-                                    axial_cell_selected,
-                                    f"[{label_y_key}.length - $event.j - 1, $event.i]",
-                                ),
-                                x_scale=("3",),
-                                y_scale=("3",),
-                                busy=("trame__busy",),
-                                dark=("dark_mode",),
-                            )
-                            vera.AxialView(**axial_kwargs)
+                        with html.Div(style=(
+                            "flex: 1; min-height: 0;"
+                            "display: flex; flex-direction: row;"
+                        )):
+                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                                axial_kwargs = dict(
+                                    value=(core_keys[g], []),
+                                    color_preset="jet",
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    x_sizes=(size_x_keys[g], []),
+                                    y_sizes=(size_y_key, []),
+                                    x_labels=(label_x_key, []),
+                                    y_labels=(label_y_key, []),
+                                    selected_i=(f"selected_assembly_ij.{'i' if is_x else 'j'}",),
+                                    selected_j=(f"{label_y_key}.length - {selected_layer_key} - 1",),
+                                    click=(
+                                        axial_cell_selected,
+                                        f"[{label_y_key}.length - $event.j - 1, $event.i]",
+                                    ),
+                                    x_scale=("3",),
+                                    y_scale=("3",),
+                                    busy=("trame__busy",),
+                                    dark=("dark_mode",),
+                                )
+                                vera.AxialView(**axial_kwargs)
+                            with html.Div(style=(
+                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                "display: flex; align-self: stretch;"
+                            )):
+                                vera.VerticalColorMapEditor(
+                                    v_model=f"color_range_{view_id}_{g}",
+                                    color_preset="jet",
+                                )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})",
                 classes="text-caption text-center",
-            )
-        with html.Div(style=(
-            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-            "display: flex; align-self: stretch;"
-        )):
-            vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
-                color_preset="jet",
             )

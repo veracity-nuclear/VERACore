@@ -4,10 +4,8 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource
+from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, MAX_NUM_GROUPS
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
-
-MAX_VIS_GROUPS = 4
 
 # Lateral faces are the first four of [W, N, E, S, T, B]
 LATERAL_FACE_SLICE = slice(0, 4)
@@ -36,7 +34,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_src_key = f"selected_src_id_{view_id}"
 
     n_groups_key = f"n_groups_{view_id}"
-    group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
+    group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
 
@@ -87,7 +85,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             cells = _build_cells(radial, n_nodes, side)
             state[group_keys[g]] = cells
 
-        for g in range(n_energy, MAX_VIS_GROUPS):
+        for g in range(n_energy, MAX_NUM_GROUPS):
             state[group_keys[g]] = []
 
         state[n_groups_key] = n_energy
@@ -109,7 +107,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 "flex: 1; min-height: 0;"
                 "display: flex; flex-direction: row; flex-wrap: wrap;"
             )):
-                for g in range(MAX_VIS_GROUPS):
+                for g in range(MAX_NUM_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(
@@ -123,30 +121,35 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             classes="text-caption text-center font-weight-medium",
                             style="flex: 0 0 auto;",
                         )
-                        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
-                            vera.AssemblySurfaceView(
-                                value=(group_keys[g], []),
-                                selected_i=("selected_i", 7),
-                                selected_j=("selected_j", 7),
-                                selected_surface=("selected_surface", -1),
-                                color_preset="jet",
-                                color_range=(f"color_range_{view_id}", [0, 3]),
-                                click=(on_surface_click, "[$event.i, $event.j, $event.surface]"),
-                                dark=("dark_mode",),
-                                busy=("trame__busy",),
-                            )
+                        # Assembly surface view + its own colorbar, side by side.
+                        with html.Div(style=(
+                            "flex: 1; min-height: 0;"
+                            "display: flex; flex-direction: row;"
+                        )):
+                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                                vera.AssemblySurfaceView(
+                                    value=(group_keys[g], []),
+                                    selected_i=("selected_i", 7),
+                                    selected_j=("selected_j", 7),
+                                    selected_surface=("selected_surface", -1),
+                                    color_preset="jet",
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    click=(on_surface_click, "[$event.i, $event.j, $event.surface]"),
+                                    dark=("dark_mode",),
+                                    busy=("trame__busy",),
+                                )
+                            with html.Div(style=(
+                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                "display: flex; align-self: stretch;"
+                            )):
+                                vera.VerticalColorMapEditor(
+                                    v_model=f"color_range_{view_id}_{g}",
+                                    color_preset="jet",
+                                )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})"
                 " · Axial - {{ " + info + ".Layer }}"
                 " · Surface - {{ ['W','N','E','S'][selected_surface] || '-' }}",
                 classes="text-caption text-center",
-            )
-        with html.Div(style=(
-            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-            "display: flex; align-self: stretch;"
-        )):
-            vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
-                color_preset="jet",
             )

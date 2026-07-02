@@ -66,7 +66,8 @@ class VeraDataRegistry:
     
     def global_axial_idx_to_src_idx(self, src_id : str, ds_dtype : VeraDtype, idx : int):
         if src_id not in self._srcs:
-            raise ValueError("src_id not in stored src_ids")
+            # FIXME, should probably not return 0
+            return 0
         core = self._srcs[src_id].core
         physical_layer = self.global_axial_mesh[idx]
         src_axial_mesh = core.axial_mesh_means if not ds_dtype.is_computational() else core.comp_axial_mesh_means

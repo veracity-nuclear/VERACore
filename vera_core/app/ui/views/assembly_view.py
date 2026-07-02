@@ -3,11 +3,9 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, MAX_NUM_GROUPS
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label, is_non_active_view, get_safe_idxs, set_info
-
-MAX_VIS_GROUPS = 4
 
 def option_for(view_id):
     return {
@@ -34,7 +32,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_src_key = f"selected_src_id_{view_id}"
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
-    assembly_keys = [f"assembly_array_{view_id}_{g}" for g in range(4)]
+    assembly_keys = [f"assembly_array_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
     for ak in assembly_keys:
         state.setdefault(ak, [])
     info = f"label_info_{view_id}"
@@ -112,7 +110,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         for idx, image in enumerate(images_dataset):
             state[f"assembly_array_{view_id}_{idx}"] = np.ravel(image).tolist()
         num_groups = len(images_dataset)
-        for idx in range(num_groups, MAX_VIS_GROUPS):
+        for idx in range(num_groups, MAX_NUM_GROUPS):
             state[f"assembly_array_{view_id}_{idx}"] = []
         state[n_groups_key] = num_groups
 
@@ -126,7 +124,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 "flex: 1; min-height: 0;"
                 "display: flex; flex-direction: row; flex-wrap: wrap;"
             )):
-                for g in range(MAX_VIS_GROUPS):
+                for g in range(MAX_NUM_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(
@@ -140,28 +138,33 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             classes="text-caption text-center font-weight-medium",
                             style="flex: 0 0 auto;",
                         )
-                        with html.Div(style="flex: 1; min-height: 0; position: relative;"):
-                            vera.AssemblyView(
-                                value=(assembly_keys[g], []),
-                                selected_i=("selected_i", 7),
-                                selected_j=("selected_j", 7),
-                                color_preset="jet",
-                                color_range=(f"color_range_{view_id}", [0, 3]),
-                                click="setAll({ selected_i: $event.i, selected_j: $event.j})",
-                                dark=("dark_mode",),
-                                busy=("trame__busy",),
-                            )
+                        # Assembly view + its own colorbar, side by side.
+                        with html.Div(style=(
+                            "flex: 1; min-height: 0;"
+                            "display: flex; flex-direction: row;"
+                        )):
+                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                                vera.AssemblyView(
+                                    value=(assembly_keys[g], []),
+                                    selected_i=("selected_i", 7),
+                                    selected_j=("selected_j", 7),
+                                    color_preset="jet",
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    click="setAll({ selected_i: $event.i, selected_j: $event.j})",
+                                    dark=("dark_mode",),
+                                    busy=("trame__busy",),
+                                )
+                            with html.Div(style=(
+                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                "display: flex; align-self: stretch;"
+                            )):
+                                vera.VerticalColorMapEditor(
+                                    v_model=f"color_range_{view_id}_{g}",
+                                    color_preset="jet",
+                                )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})"
                 " · Axial - {{ " + info + ".Layer }}",
                 classes="text-caption text-center",
-            )
-        with html.Div(style=(
-            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-            "display: flex; align-self: stretch;"
-        )):
-            vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
-                color_preset="jet",
             )

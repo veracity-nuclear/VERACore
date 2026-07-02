@@ -5,11 +5,9 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset
+from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
-
-MAX_VIS_GROUPS = 4
 
 def option_for(view_id):
     return {
@@ -41,8 +39,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
-    group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(4)]
-    label_keys = [f"core_labels_{view_id}_{g}" for g in range(4)]
+    group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    label_keys = [f"core_labels_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
     x_label_key = f"core_view_x_labels_{view_id}"
     y_label_key = f"core_view_y_labels_{view_id}"
     
@@ -136,7 +134,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state[f"core_labels_{view_id}_{idx}"] = labels
         state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
         num_groups = len(layer_arrays)
-        for idx in range(num_groups, MAX_VIS_GROUPS):
+        for idx in range(num_groups, MAX_NUM_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = []
             state[f"core_labels_{view_id}_{idx}"] = []
         state[n_groups_key] = num_groups
@@ -153,10 +151,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 "flex: 1; min-height: 0;"
                 "display: flex; flex-direction: row; flex-wrap: wrap;"
             )):
-                for g in range(MAX_VIS_GROUPS):
+                for g in range(MAX_NUM_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
-                        style="flex: 1 1 45%; min-width: 0; min-height: 0; position: relative;",
+                        style=(
+                            "flex: 1 1 45%; min-width: 0; min-height: 0;"
+                            "display: flex; flex-direction: column; position: relative;"
+                        ),
                     ):
                         html.Div(
                             f"Group {g + 1}",
@@ -164,31 +165,37 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             classes="text-caption text-center font-weight-medium",
                             style="flex: 0 0 auto;",
                         )
-                        vera.CoreView(
-                            value=(group_keys[g], []),
-                            labels=(label_keys[g], []),
-                            selected_i=("selected_assembly_ij.i",),
-                            selected_j=("selected_assembly_ij.j",),
-                            aspect_ratio=(aspect_ratio_key, 1),
-                            x_labels=(f"{x_label_key}",),
-                            y_labels=(f"{y_label_key}",),
-                            color_preset="jet",
-                            color_range=(f"color_range_{view_id}", [0, 3]),
-                            click="selected_assembly_ij = $event",
-                            dark=("dark_mode",),
-                            busy=("trame__busy",),
-                        )
+                        # Core + its own colorbar, side by side.
+                        with html.Div(style=(
+                            "flex: 1; min-height: 0;"
+                            "display: flex; flex-direction: row;"
+                        )):
+                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                                vera.CoreView(
+                                    value=(group_keys[g], []),
+                                    labels=(label_keys[g], []),
+                                    selected_i=("selected_assembly_ij.i",),
+                                    selected_j=("selected_assembly_ij.j",),
+                                    aspect_ratio=(aspect_ratio_key, 1),
+                                    x_labels=(f"{x_label_key}",),
+                                    y_labels=(f"{y_label_key}",),
+                                    color_preset="jet",
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    click="selected_assembly_ij = $event",
+                                    dark=("dark_mode",),
+                                    busy=("trame__busy",),
+                                )
+                            with html.Div(style=(
+                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                "display: flex; align-self: stretch;"
+                            )):
+                                vera.VerticalColorMapEditor(
+                                    v_model=f"color_range_{view_id}_{g}",
+                                    color_preset="jet",
+                                )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"
                 " · ({{ " + info + ".Assembly }})"
                 " · Axial - {{ " + info + ".Layer }}",
                 classes="text-caption text-center",
-            )
-        with html.Div(style=(
-            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-            "display: flex; align-self: stretch;"
-        )):
-            vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
-                color_preset="jet",
             )

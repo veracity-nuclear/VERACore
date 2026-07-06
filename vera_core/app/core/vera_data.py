@@ -55,6 +55,8 @@ class VeraDtype(Enum):
     def is_assembly(self):
         return self in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY, 
                         VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_ASSY_ENERGY,)
+    def is_surface(self):
+        return self in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE)
 
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -66,6 +68,17 @@ class VeraAxes(Enum):
     RADIAL_ASSEMBLY = 6
     RADIAL_NODE = 7
 
+class Surface(Enum):
+    WEST = 0
+    NORTH = 1
+    EAST = 2
+    SOUTH = 3
+    TOP = 4
+    BOTTOM = 5
+    
+    @property
+    def str(self):
+        return self.name
 class DerivationMethod(StrEnum):
     AVERAGE = "Average"
     STDDEV = "Standard Deviation"

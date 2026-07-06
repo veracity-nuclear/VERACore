@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly, vuetify, html
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, Surface
 from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 SEP = "\x1f"
@@ -15,6 +15,7 @@ def option_for(view_id):
         "label": "Time Plot",
         "multi_picker": True,
         "icon": "mdi-chart-line",
+        "allowed_categories": [dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN],
     }
 
 
@@ -39,6 +40,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
+            array_shape = np.shape(src.array(array_name, mask_reflected=False))
             array_dtype = src.array_dtype(array_name)
             is_comp = array_dtype.is_computational()
             ny, nx, nax, nass, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
@@ -63,16 +65,24 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:
                     indices_list.append((0))
-                case VeraDtype.COMP_NODAL:
-                    node_idx = convert_ji_to_node(ny, nx)
+                case VeraDtype.COMP_ASSY | VeraDtype.COMP_NODAL:
+                    node_idx = convert_ji_to_node(ny, nx) if array_dtype == VeraDtype.COMP_NODAL else 0 
                     indices_list.append((node_idx, nax, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
-                case VeraDtype.COMP_NODAL_ENERGY:
-                    node_idx = convert_ji_to_node(ny, nx)
-                    num_energy_groups = 2
+                case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:
+                    node_idx = convert_ji_to_node(ny, nx) if array_dtype == VeraDtype.COMP_NODAL_ENERGY else 0
+                    num_energy_groups = array_shape[0]
                     for n_group in range(num_energy_groups):
                         indices_list.append((n_group, node_idx, nax, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
+                case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
+                    selected_surface = state.selected_surface
+                    num_energy_groups = array_shape[1]
+                    nodal_idx = 0 if array_dtype == VeraDtype.COMP_ASSY_SURFACE else convert_ji_to_node(ny, nx)
+                    for group_n in range(num_energy_groups):
+                        indices_list.append((selected_surface, group_n, nodal_idx, nax, nass))
+                    surface_label = f" {Surface(state.selected_surface).str}"
+                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case _:
                     raise RuntimeError(f"Time plot cannot visualize datasets of type {str(array_dtype)}")
             for idx_n, indices in enumerate(indices_list):
@@ -122,6 +132,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_set_key,
         "max_time",
         "selected_assembly",
+        "selected_comp_assembly",
         "selected_layer",
         "selected_i",
         "selected_j",

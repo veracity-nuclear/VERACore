@@ -3,7 +3,7 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES, Surface
 from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 def option_for(view_id):
@@ -12,6 +12,7 @@ def option_for(view_id):
         "label": "Table View",
         "multi_picker" : False,
         "icon": "mdi-table",
+        "allowed_categories": [dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN],
     }
 
 
@@ -32,11 +33,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         selected_array_key,
         selected_src_key,
         "selected_assembly",
+        "selected_comp_assembly",
         "selected_layer",
         "selected_i",
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        "selected_surface"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_table(**kwargs):
@@ -54,6 +57,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
             case VeraDtype.ASSEMBLY:
                 indices_list.append((selected_layer, selected_assembly))
+            case VeraDtype.COMP_ASSY:
+                indices_list.append((0, selected_layer, selected_assembly))
             case VeraDtype.AXIAL:
                 indices_list.append((selected_layer))
             case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
@@ -64,10 +69,17 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 indices_list.append((0))
             case VeraDtype.COMP_NODAL:
                 indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
-            case VeraDtype.COMP_NODAL_ENERGY:
+            case VeraDtype.COMP_NODAL_ENERGY | VeraDtype.COMP_ASSY_ENERGY:
                 num_energy_groups = array.shape[0]
+                idx = convert_ji_to_node(selected_j, selected_i) if array_dtype == VeraDtype.COMP_NODAL_ENERGY else 0
                 for group_n in range(num_energy_groups):
-                    indices_list.append((group_n, convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
+                    indices_list.append((group_n, idx, selected_layer, selected_assembly))
+            case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
+                selected_surface = state.selected_surface
+                num_energy_groups = array.shape[1]
+                nodal_idx = 0 if array_dtype == VeraDtype.COMP_ASSY_SURFACE else convert_ji_to_node(selected_j, selected_i)
+                for group_n in range(num_energy_groups):
+                    indices_list.append((selected_surface, group_n, nodal_idx, selected_layer, selected_assembly))
             case _:
                 raise RuntimeError(f"Table view cannot visualize datasets of type {str(array_dtype)}")
         data_dict = {}
@@ -91,9 +103,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         axial_value = src.core.axial_mesh_means[selected_layer] if not is_comp else src.core.comp_axial_mesh_means[selected_layer]
         assembly_label = src.core.reduced_core_map_label(selected_assembly, is_comp)
+        pin_label = f"Pin ({selected_i + 1}, {selected_j + 1})"
+        surface_label = f" {Surface(state.selected_surface).str}"
+        node_label = f"Node {convert_ji_to_node(selected_j, selected_i) + 1}"
+        is_node = array_dtype.is_nodal()
+        is_surface = array_dtype.is_surface()
+        label = pin_label if not is_node else (node_label + (surface_label if is_surface else ""))
         columns = [
             "Dataset",
-            f"Assembly {assembly_label}; Axial {axial_value:0.6g} cm; Pin ({selected_i + 1}, {selected_j + 1})",
+            f"Assembly {assembly_label}; Axial {axial_value:0.6g} cm; {label}",
         ]
 
         headers = [{"text": x, "value": x} for x in columns]

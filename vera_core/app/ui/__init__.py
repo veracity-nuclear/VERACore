@@ -67,7 +67,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_layer", 0)
     state.setdefault("max_layer", 0)
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
-    state.setdefault("selected_surface", -1)
+    state.setdefault("selected_surface", 0)
     state.setdefault("dark_mode", True)
 
     # initialize UI state for each feature

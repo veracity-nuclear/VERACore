@@ -33,6 +33,8 @@ def option_for(view_id, axis):
             VeraDtype.ASSEMBLY.title,
             VeraDtype.COMP_NODAL.title,
             VeraDtype.COMP_NODAL_ENERGY.title,
+            VeraDtype.COMP_ASSY.title,
+            VeraDtype.COMP_ASSY_ENERGY.title,
         ],
     }
 
@@ -98,10 +100,10 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         node = int(convert_ji_to_node(0, selected_pin))       # i picks the col
         return (0, 2) if node in (0, 2) else (1, 3)
 
-    def _build_group_grid(array_2d_or_nodal, array_dtype, core, selected_pin, assembly_indices):
+    def _build_group_grid(array_2d_or_nodal, array_dtype : VeraDtype, core, selected_pin, assembly_indices):
         """Return (grid, data_width, display_width, nb_cols) for one energy group's
         array slice."""
-        is_assembly = array_dtype == VeraDtype.ASSEMBLY
+        is_assembly = array_dtype.is_assembly()
         arr = array_2d_or_nodal
 
         if array_dtype in (VeraDtype.PIN, VeraDtype.CHANNEL):
@@ -127,10 +129,10 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             else:
                 node_pair = _nodal_node_pair(selected_pin)
                 data_width = len(node_pair)
-                display_width = core.pin_volumes.shape[0]  # render at full visual width
-                sel = nodal[list(node_pair)]               # (2, nax, ncols)
-                sel = np.transpose(sel, (1, 2, 0))         # (nax, ncols, 2)
-                image_data = sel.reshape(sel.shape[0], -1) # (nax, ncols*2)
+                display_width = core.pin_volumes.shape[0]
+                sel = nodal[list(node_pair)]
+                sel = np.transpose(sel, (1, 2, 0))
+                image_data = sel.reshape(sel.shape[0], -1)
         else:
             raise RuntimeError(
                 f"Axial view cannot visualize datasets of type {str(array_dtype)}"
@@ -156,6 +158,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         selected_array_key,
         selected_src_key,
         "selected_assembly",
+        "selected_comp_assembly",
         pin_key,
         f"grid_view_{view_id}",
         f"locked_{view_id}",
@@ -185,12 +188,18 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         else:
             assembly_indices = core.col_assembly_indices(selected_assembly, is_comp)
 
-        if array_dtype == VeraDtype.COMP_NODAL_ENERGY:
+        if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.COMP_ASSY_ENERGY):
             num_groups = array.shape[0]
-            group_arrays = [array[g] for g in range(num_groups)]
+            if array_dtype == VeraDtype.COMP_ASSY_ENERGY:
+                group_arrays = [array[g, 0] for g in range(num_groups)]
+            else:
+                group_arrays = [array[g] for g in range(num_groups)]
         else:
             num_groups = 1
-            group_arrays = [array]
+            if array_dtype == VeraDtype.COMP_ASSY:
+                group_arrays = [array[0]]
+            else:
+                group_arrays = [array]
 
         mesh_pixels = core.comp_axial_mesh_pixels if is_comp else core.axial_mesh_pixels
         mesh_means = core.comp_axial_mesh_means if is_comp else core.axial_mesh_means

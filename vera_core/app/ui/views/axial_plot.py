@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES, Surface
 from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 SEP = "\x1f"
@@ -18,7 +18,9 @@ def option_for(view_id):
         "icon": "mdi-align-horizontal-center",
         "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
                                VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title,
-                               VeraDtype.COMP_NODAL.title, VeraDtype.COMP_NODAL_ENERGY.title]
+                               VeraDtype.COMP_NODAL.title, VeraDtype.COMP_NODAL_ENERGY.title,
+                               VeraDtype.COMP_NODAL_SURFACE.title, VeraDtype.COMP_ASSY_SURFACE.title,
+                               VeraDtype.COMP_ASSY.title, VeraDtype.COMP_ASSY_ENERGY.title]
     }
 
 
@@ -40,15 +42,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             full_array = src.array(array_name)
             array_dtype : VeraDtype = full_array.dataset_type
             j, i, layer, assy, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
-            assembly_label = src.core.reduced_core_map_label(assy, )
+            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
             identifier : str = ""
             axial_arrays = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     axial_arrays.append(full_array[j, i, :, assy])
                     identifier = f" | {assembly_label} @({i + 1},{j + 1})"
-                case VeraDtype.ASSEMBLY: 
-                    axial_arrays.append(full_array[:, assy])
+                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY: 
+                    axial_arrays.append(full_array[:, assy] if array_dtype == VeraDtype.ASSEMBLY else full_array[0, :, assy])
                     identifier = f" | {assembly_label}"
                 case VeraDtype.AXIAL:
                     axial_arrays.append(full_array)
@@ -56,12 +58,20 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     node_idx = convert_ji_to_node(j, i)
                     axial_arrays.append(full_array[node_idx, :, assy])
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
-                case VeraDtype.COMP_NODAL_ENERGY:
-                    node_idx = convert_ji_to_node(j, i)
+                case VeraDtype.COMP_NODAL_ENERGY | VeraDtype.COMP_ASSY_ENERGY:
+                    idx = convert_ji_to_node(j, i) if array_dtype == VeraDtype.COMP_NODAL_ENERGY else 0
                     num_energy_groups = full_array.shape[0]
                     for n_group in range(num_energy_groups):
-                        axial_arrays.append(full_array[n_group, node_idx, :, assy])
-                    identifier = f" | {assembly_label} @(NODE {node_idx})"
+                        axial_arrays.append(full_array[n_group, idx, :, assy])
+                    identifier = f" | {assembly_label} @(NODE {idx + 1})" if array_dtype == VeraDtype.COMP_NODAL_ENERGY else f" | {assembly_label}"
+                case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
+                    selected_surface = state.selected_surface
+                    num_energy_groups = full_array.shape[1]
+                    nodal_idx = 0 if array_dtype == VeraDtype.COMP_ASSY_SURFACE else convert_ji_to_node(j, i)
+                    for group_n in range(num_energy_groups):
+                        axial_arrays.append(full_array[selected_surface, group_n, nodal_idx, :, assy])
+                    surface_label = f" {Surface(state.selected_surface).str}"
+                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case _:
                     raise RuntimeError(f"Axial Plot cannot visualize datasets of type {str(array_dtype)}")
             axial_mesh_means = src.core.axial_mesh_means if not array_dtype.is_computational() else src.core.comp_axial_mesh_means
@@ -101,12 +111,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_set_key,
         "selected_assembly",
+        "selected_comp_assembly",
         "selected_layer",
         "selected_i",
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
-        "dark_mode"
+        "dark_mode",
+        "selected_surface"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):

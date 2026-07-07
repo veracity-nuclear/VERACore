@@ -60,34 +60,31 @@ def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: Ve
             state.thresholds = {k: v for k, v in state.thresholds.items() if k != name}
 
 def build_threshold_dialog(ctrl : Controller):
-    with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=480, persistent=True):
+    with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=580, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Dataset Thresholds", classes="text-subtitle-1")
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
                 with html.Div(classes="d-flex align-center", style="gap: 8px;"):
-                    build_dataset_picker(ctrl, "threshold_label", "set_threshold", "[src, entry.value]")
-                    with vuetify.VCol(cols="auto", classes="pl-2"):
-                        vuetify.VSelect(
-                            v_model=("threshold_operator",),
-                            items=("threshold_operators", [">", ">=", "<", "<=", "==", "!="]),
-                            hide_details=True,
-                            dense=True,
-                            style="width: 80px",
-                        )
-                        
-                    with vuetify.VCol(cols="auto", classes="pl-2"):
-                        vuetify.VTextField(
-                            v_model=("threshold_value",),
-                            label="Value",
-                            type="number",
-                            hide_details=True,
-                            dense=True,
-                            style="width: 110px",
-                        )
-                    with vuetify.VCol(cols="auto", classes="pl-2"):
-                        with vuetify.VBtn(icon=True, click=ctrl.add_threshold):
-                            vuetify.VIcon("mdi-plus")
+                    with html.Div(style="flex: 1 1 auto; min-width: 0;"):
+                        build_dataset_picker(ctrl, "threshold_label", "set_threshold", "[src, entry.value]")
+                    vuetify.VSelect(
+                        v_model=("threshold_operator",),
+                        items=("threshold_operators", [">", ">=", "<", "<=", "==", "!="]),
+                        hide_details=True,
+                        dense=True,
+                        style="flex: 0 0 72px; width: 72px;",
+                    )
+                    vuetify.VTextField(
+                        v_model=("threshold_value",),
+                        label="Value",
+                        type="number",
+                        hide_details=True,
+                        dense=True,
+                        style="flex: 0 0 90px; width: 90px;",
+                    )
+                    with vuetify.VBtn(icon=True, small=True, click=ctrl.add_threshold, style="flex: 0 0 auto;"):
+                        vuetify.VIcon("mdi-plus")
 
                 vuetify.VAlert(
                     "{{ threshold_error }}",

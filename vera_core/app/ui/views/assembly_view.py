@@ -89,8 +89,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case _:
                     raise RuntimeError(f"Assembly View cannot visualize datasets of type {str(array_dtype)}")
             if thres.get(thres_key):
-                for image in images_dataset:
-                    image = apply_thresholds(images_dataset, thres[thres_key])
+                for idx, image in enumerate(images_dataset):
+                    images_dataset[idx] = apply_thresholds(image, thres[thres_key])
                 
             if array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
                 control_rod_positions = vera_source.core.control_rod_positions

@@ -123,3 +123,15 @@ class VeraDataRegistry:
         if self.default_src_id == src_id:
             self.default_src_id = next(iter(self._srcs), None)
         self._compose_global_axial_mesh()
+    
+    def all_sources(self) -> dict[str, str]:
+        src_paths = {}
+        for src_id, src in self._srcs.items():
+            src_paths[src_id] = src.file_path
+        return src_paths
+
+    def clear(self):
+        for src in self._srcs.values():
+            src.close()
+        self._srcs = {}
+        self.default_src_id = None

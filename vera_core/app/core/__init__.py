@@ -4,3 +4,4 @@ from .vera_data import (VeraDataSource, VeraDataset, VeraOutCore, VeraDtype, Ver
 from .vera_data_registry import VeraDataRegistry
 from .vera_out_file import VeraOutFile
 from .vera_data_stream import VeraDataStream, generate_stream_identifier
+from .session import Session, ViewSession, build_session, save_session

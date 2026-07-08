@@ -656,6 +656,12 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
+    def file_path(self) -> str:
+        """Raw path to file on disk"""
+        pass
+
+    @property
+    @abstractmethod
     def core(self) -> VeraOutCore:
         """The core-level data shared across all states."""
         pass

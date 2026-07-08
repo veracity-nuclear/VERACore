@@ -1,11 +1,16 @@
-import functools
+import functools, json
+from pathlib import Path
 import numpy as np
 
 from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
-from vera_core.app.core import VeraDataRegistry, VeraDtype, MAX_NUM_GROUPS, LATERAL_SURACES
+from vera_core.app.core import (VeraDataRegistry, VeraDtype, 
+                                VeraOutFile, MAX_NUM_GROUPS, 
+                                LATERAL_SURACES, Session, 
+                                build_session, save_session, 
+                                ViewSession)
 
-from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu, SaveSession
 from .layout import build_layout
 from .helpers import format_label, get_next_y_from_layout, array_range, is_view_locked
 from .views import (
@@ -69,6 +74,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
     state.setdefault("selected_surface", 0)
     state.setdefault("dark_mode", True)
+    all_view_ids = [f"{v + 1}" for v in range(NUM_VIEW_SLOTS)]
 
     # initialize UI state for each feature
     DatasetPicker.register_dataset_picker_state(state, registry) # the File and Stream menu relies on dataset picker state
@@ -76,10 +82,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     ThresholdMenu.register_threshold_state_ctrl(state, ctrl, registry)
     DeriveMenu.register_derived_state_ctrl(state, ctrl, registry)
     FileMenu.register_file_menu_state_ctrl(state, ctrl, registry)
+    FileMenu.register_session_state_ctrl(state, ctrl, registry)
+    SaveSession.register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids)
     StreamMenu.register_stream_menu_state_ctrl(state, ctrl, registry, state_queue)
     LocateMenu.register_locate_state_ctrl(state, ctrl, registry)
 
-    all_view_ids = [f"{v + 1}" for v in range(NUM_VIEW_SLOTS)]
     available_view_ids = list(all_view_ids)
     """
     A view_id is an id assigned to each card that namespaces its per-view state.
@@ -303,6 +310,45 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
     activation_done = False
 
+    @ctrl.set("load_session")
+    def _load_session(in_path: str):
+        print("here", in_path)
+        data = json.loads(Path(in_path).read_text())
+        session = Session(**{**data, "views": [ViewSession(**v) for v in data["views"]]})
+        for id, path in session.file_paths.items():
+            if not Path(path).is_file():
+                state.file_error = f"Session file not found: {path}"
+                return
+        registry.clear()
+        for src_id, path in session.file_paths.items():
+            src = VeraOutFile(path)
+            registry.add_src(src, src_id=src_id)
+        DatasetPicker.refresh_src_tree(state, registry)
+        used_ids = [v.view_id for v in session.views]
+        # for vid in used_ids:
+        #     if vid in available_view_ids:
+        #         available_view_ids.remove(vid)
+
+        state.grid_layout = [dict(v.layout) for v in session.views if v.layout]
+
+        for v in session.views:
+            vid = v.view_id
+            state[f"selected_src_id_{vid}"] = v.selected_src_id
+            state[f"selected_array_{vid}"] = v.selected_array
+            state[f"selected_label_{vid}"] = v.selected_label
+            state[f"multi_selected_{vid}"] = list(v.multi_selected)
+            state[f"multi_label_{vid}"] = v.multi_label
+            state[f"locked_{vid}"] = v.locked
+            # Set active view LAST so its update handler sees the inputs in place.
+            state[f"grid_view_{vid}"] = v.option
+
+        for k, val in session.globals.items():
+            state[k] = val
+
+        state.grid_rebuild_key += 1
+        state.dirty("grid_layout")
+        state.has_data = True
+    
     def activate_src():
         """Run the data-dependent setup once, when the first src exists.
 
@@ -372,3 +418,6 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     if has_src():
         # automatically run data dependent setup if source was provied from command line
         activate_src()
+
+
+

@@ -5,7 +5,7 @@ from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry
 
 from . import assets
-from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
+from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu, SaveSession
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
@@ -39,6 +39,9 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
+    
+    with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
+        vuetify.VIcon("mdi-content-save")
     
     with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
         vuetify.VIcon("mdi-access-point")
@@ -139,6 +142,7 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
     DiffMenu.build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
+    SaveSession.build_session_menu_dialog(ctrl)
     StreamMenu.build_stream_dialog(ctrl)
     LocateMenu.build_locate_dialog(state, ctrl, registry) 
     build_axial_slider()

@@ -1,0 +1,68 @@
+from dataclasses import dataclass, asdict
+import json
+from pathlib import Path
+from trame_server.core import State
+from . import VeraDataRegistry
+
+
+SESSION_GLOBAL_KEYS = ["selected_assembly_ij", "selected_layer", "selected_i", "selected_j", "selected_surface", "dark_mode",
+                       "selected_assembly", "selected_comp_assembly", "max_layer", "recent_file_paths"
+                       "thresholds", ]
+
+SESSION_VERSION = 1
+
+@dataclass
+class ViewSession:
+    view_id: int
+    option: dict
+    layout: dict | None
+    selected_src_id: str
+    selected_array: str
+    selected_label: str
+    multi_selected: list
+    multi_label: str
+    locked: bool
+
+
+@dataclass
+class Session:
+    version: int
+    file_paths: dict[str, str]
+    globals: dict[str, object]
+    views: list[ViewSession]
+
+def build_session(state : State, registry : VeraDataRegistry, all_view_ids : list) -> Session:
+    for view_id in all_view_ids:
+        pass
+    
+    
+    placed = state.grid_layout or []
+    views = []
+    vid_layouts = {entry["i"] : entry for entry in placed}
+    for vid in all_view_ids:
+        option = state[f"grid_view_{vid}"]
+        views.append(ViewSession(
+            view_id=vid,
+            option=option,
+            layout=vid_layouts.get(vid, None),
+            selected_src_id=state[f"selected_src_id_{vid}"],
+            selected_array=state[f"selected_array_{vid}"],
+            selected_label=state[f"selected_label_{vid}"],
+            multi_selected=list(state[f"multi_selected_{vid}"]),
+            multi_label=state[f"multi_label_{vid}"],
+            locked=bool(state[f"locked_{vid}"]),
+        ))
+
+    file_paths = registry.all_sources()
+    globals_ = {k: state[k] for k in SESSION_GLOBAL_KEYS if state.has(k)}
+    session = Session(
+        version=SESSION_VERSION,
+        file_paths=file_paths,
+        globals=globals_,
+        views=views,
+    )
+    return session
+
+def save_session(state, registry : VeraDataRegistry, all_view_ids : list, out_path: str):
+    session = build_session(state, registry, all_view_ids)
+    Path(out_path).write_text(json.dumps(asdict(session), indent=2))

@@ -13,6 +13,7 @@ class VeraOutFile(VeraDataSource):
         for averaging). 
         It eagerly caches the core, and validates that the core shape agrees with pin_volumes and pin_powers.
         """
+        self._file_path = filename
         self.f = h5py.File(filename, "r", locking=False)
         try:
             self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
@@ -34,6 +35,10 @@ class VeraOutFile(VeraDataSource):
             self._time_axes[time_data_point] = time_axis
         self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
     
+    @property
+    def file_path(self) -> str:
+        return self._file_path
+
     @property
     def core(self) -> VeraOutCore:
         """Reference to this h5 files core data"""

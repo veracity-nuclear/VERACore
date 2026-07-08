@@ -2,8 +2,9 @@ import asyncio, sys
 from pathlib import Path
 from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
-from vera_core.app.core import VeraDataRegistry, VeraOutFile, VeraDataStream
+from vera_core.app.core import VeraDataRegistry, VeraOutFile, VeraDataStream, Session, build_session
 from .DatasetPicker import refresh_src_tree
+from .file_picker_entry import launch_picker
 
 file_menu_state_initialized = False
 
@@ -30,28 +31,18 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     @ctrl.set("pick_file")
     async def pick_file():
         state.file_error = ""
-        # launch file picker process
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable, "--pick-file"] # if frozen the module doesn't exist so pass flag to entry point
-        else:
-            cmd = [sys.executable, "-m", "vera_core.app.file_picker"]
         try:
-            # get file path from subprocess
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+            path = await launch_picker("--mode", "open", "--filter", "h5",
+                                    "--prompt", "Open VERA Output file")
         except asyncio.TimeoutError:
-            proc.kill()
             state.file_error = "File picker timed out."
             return
         except Exception as e:
             state.file_error = f"Picker error: {e}"
             return
-        path = out.decode().strip()
         if not path:
             return
-        state.file_path = path # file path to be loaded
+        state.file_path = path
         load_file()
 
     @ctrl.set("load_recent")
@@ -94,6 +85,33 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     global file_menu_state_initialized
     file_menu_state_initialized = True
 
+import json
+from dataclasses import asdict
+from pathlib import Path
+
+def register_session_state_ctrl(state, ctrl : Controller, registry : VeraDataRegistry):
+    state.session_error = ""
+
+    @ctrl.set("pick_session")
+    async def pick_session():
+        state.session_error = ""
+        try:
+            path = await launch_picker("--mode", "open", "--filter", "json",
+                                    "--prompt", "Open Session")
+        except Exception as e:
+            state.session_error = f"Picker error: {e}"
+            return
+        if not path:
+            return
+        if not Path(path).is_file():
+            state.session_error = f"File not found: {path}"
+            return
+        try:
+            ctrl.load_session(path)
+            state.show_file_dialog = False
+        except Exception as e:
+            state.session_error = f"Could not load session: {e}"
+
 def build_file_menu_dialog(ctrl: Controller):
     """Build the file menu UI"""
     global file_menu_state_initialized
@@ -132,7 +150,6 @@ def build_file_menu_dialog(ctrl: Controller):
                     classes="mb-2",
                 )
 
-                # Recent list sits above the button row so the buttons stay together.
                 html.Div("Recent:", classes="text-caption mt-1 mb-1",
                          v_if="recent_file_paths.length")
                 with vuetify.VList(dense=True, v_if="recent_file_paths.length"):
@@ -142,11 +159,22 @@ def build_file_menu_dialog(ctrl: Controller):
                     ):
                         vuetify.VListItemTitle("{{ p }}")
 
-            # Browse and Close on one level (adjacent, left-aligned).
-            with vuetify.VCardActions(classes="px-4 pb-4 pt-0"):
-                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
-                    vuetify.VIcon("mdi-folder-open", left=True)
-                    html.Span("Browse")
-                with vuetify.VBtn(color="secondary", click="show_file_dialog = false", classes="ml-2"):
-                    html.Span("Close")
+                vuetify.VAlert(
+                    "{{ session_error }}",
+                    v_if="session_error",
+                    type="error",
+                    dense=True,
+                    classes="mb-2 mt-2",
+                )
+
             vuetify.VDivider()
+            with vuetify.VCardActions(classes="px-4 py-3"):
+                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
+                    vuetify.VIcon("mdi-file-upload", left=True)
+                    html.Span("Upload H5 Output File")
+                with vuetify.VBtn(color="secondary", click=ctrl.pick_session, classes="ml-2"):
+                    vuetify.VIcon("mdi-folder-open", left=True)
+                    html.Span("Load Session")
+                vuetify.VSpacer()
+                with vuetify.VBtn(color="secondary", click="show_file_dialog = false"):
+                    html.Span("Close")

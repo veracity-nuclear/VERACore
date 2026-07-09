@@ -1,6 +1,7 @@
+from dataclasses import asdict
 from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
-from vera_core.app.core import VeraDataRegistry, VeraAxes, DerivationMethod
+from vera_core.app.core import VeraDataRegistry, VeraAxes, DerivationMethod, derive_recipe
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
 from ..helpers import format_label
 
@@ -66,12 +67,15 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     
     def _add_derived_dataset_to_source():
         """add a new derived dataset to selected source"""
-        registry.get(state["derivation_src_id"]).add_new_derived_dataset(
-                source_array_name=state["derivation_src_dataset"], 
-                new_dataset_name=state["derived_name"], 
-                der_method=state["derivation_method"], 
-                axes=VeraAxes[state["axes_to_derive"]]
-            )
+        recipe = derive_recipe(
+            src_id=state["derivation_src_id"],
+            source_array=state["derivation_src_dataset"],
+            name=state["derived_name"],
+            method=state["derivation_method"],
+            axes=state["axes_to_derive"],
+        )
+        registry.apply_recipe(recipe)
+        state.recipes = state.recipes + [recipe]
         refresh_src_tree(state, registry)
 
     @ctrl.set("create_derived_dataset")

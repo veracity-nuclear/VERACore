@@ -1,5 +1,5 @@
 from trame.widgets import vuetify, html
-from vera_core.app.core import VeraDataRegistry, VeraDataSource , VeraDtype
+from vera_core.app.core import VeraDataRegistry, VeraDataSource , VeraDtype, derive_recipe, diff_recipe
 from .DatasetPicker import refresh_src_tree, build_dataset_picker
 from ..helpers import format_label
 from scipy.interpolate import make_interp_spline
@@ -39,12 +39,18 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     @ctrl.set("create_diff_dataset")
     def create_diff_dataset():
         ref_src = registry.get(state.ref_src_id)
-        comp_src = registry.get(state.comp_src_id) 
+        comp_src = registry.get(state.comp_src_id)
         if ref_src is None or comp_src is None:
             state.diff_error = "Could not find source"
             return
         try:
-            ref_src.add_new_diff_dataset(state.ref_dataset_name, comp_src, state.comp_dataset_name, state.diff_name, DEGREE[state.diff_interp_kind])
+            recipe = diff_recipe(
+                ref_src_id=state.ref_src_id, ref_array=state.ref_dataset_name,
+                comp_src_id=state.comp_src_id, comp_array=state.comp_dataset_name,
+                name=state.diff_name, interp_degree=DEGREE[state.diff_interp_kind],
+            )
+            registry.apply_recipe(recipe)
+            state.recipes = state.recipes + [recipe]
             refresh_src_tree(state, registry)
             state.show_diff_dialog = False
         except Exception as e:

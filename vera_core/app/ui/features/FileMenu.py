@@ -2,7 +2,7 @@ import asyncio, sys
 from pathlib import Path
 from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
-from vera_core.app.core import VeraDataRegistry, VeraOutFile, VeraDataStream, Session, build_session
+from vera_core.app.core import VeraDataRegistry, VeraOutFile, recipe_sources
 from .DatasetPicker import refresh_src_tree
 from .file_picker_entry import launch_picker
 
@@ -78,6 +78,7 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     def close_file(file_id):
         try:
             registry.remove_src(file_id)
+            state.recipes = [r for r in state.recipes if file_id not in recipe_sources(r)]
             refresh_src_tree(state, registry)
         except Exception as e:
             state.file_error = f"Could not remove file: {file_id}"

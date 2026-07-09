@@ -1,5 +1,6 @@
 import functools, json
 from pathlib import Path
+from dataclasses import asdict
 import numpy as np
 
 from trame_server.core import Server
@@ -7,8 +8,7 @@ from trame.app.asynchronous import StateQueue
 from vera_core.app.core import (VeraDataRegistry, VeraDtype, 
                                 VeraOutFile, MAX_NUM_GROUPS, 
                                 LATERAL_SURACES, Session, 
-                                build_session, save_session, 
-                                ViewSession)
+                                ViewSession, recipe_sources)
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu, SaveSession
 from .layout import build_layout
@@ -74,6 +74,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
     state.setdefault("selected_surface", 0)
     state.setdefault("dark_mode", True)
+    state.setdefault("recipes", [])
+
     all_view_ids = [f"{v + 1}" for v in range(NUM_VIEW_SLOTS)]
 
     # initialize UI state for each feature
@@ -314,21 +316,37 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     def _load_session(in_path: str):
         print("here", in_path)
         data = json.loads(Path(in_path).read_text())
-        session = Session(**{**data, "views": [ViewSession(**v) for v in data["views"]]})
+        session = Session(**{
+            **data,
+            "views": [ViewSession(**v) for v in data["views"]],
+            "recipes": data.get("recipes", []),
+        })
         for id, path in session.file_paths.items():
             if not Path(path).is_file():
                 state.file_error = f"Session file not found: {path}"
                 return
         registry.clear()
         for src_id, path in session.file_paths.items():
-            src = VeraOutFile(path)
-            registry.add_src(src, src_id=src_id)
-        DatasetPicker.refresh_src_tree(state, registry)
-        used_ids = [v.view_id for v in session.views]
-        # for vid in used_ids:
-        #     if vid in available_view_ids:
-        #         available_view_ids.remove(vid)
+            registry.add_src(VeraOutFile(path), src_id=src_id)
 
+        # replay recipes in creation order (= dependency order) before views reference them
+        state.recipes = []
+        present = set(session.file_paths)
+        recipe_errors = []
+        for r in session.recipes:
+            missing = recipe_sources(r) - present
+            if missing:
+                recipe_errors.append(f"{r['name']}: missing source(s) {', '.join(missing)}")
+                continue
+            try:
+                registry.apply_recipe(r)
+                state.recipes = state.recipes + [r]
+            except Exception as e:
+                recipe_errors.append(f"{r['name']}: {e}")
+        if recipe_errors:
+            state.file_error = "Some datasets failed to rebuild: " + "; ".join(recipe_errors)
+
+        DatasetPicker.refresh_src_tree(state, registry)
         state.grid_layout = [dict(v.layout) for v in session.views if v.layout]
 
         for v in session.views:

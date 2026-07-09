@@ -1,7 +1,5 @@
-import tempfile, os
 import numpy as np
-from .vera_data import VeraDataSource, VeraOutCore, VeraDataset, VeraDtype
-from .vera_out_file import VeraOutFile
+from .vera_data import VeraDataSource, VeraDtype, VeraAxes
 
 class VeraDataRegistry:
     """Holds the open data sources keyed by id, with one marked as default.
@@ -135,3 +133,23 @@ class VeraDataRegistry:
             src.close()
         self._srcs = {}
         self.default_src_id = None
+    
+    def apply_recipe(self, recipe: dict):
+        kind = recipe["kind"]
+        if kind == "derive":
+            self.get(recipe["src_id"]).add_new_derived_dataset(
+                source_array_name=recipe["source_array"],
+                new_dataset_name=recipe["name"],
+                der_method=recipe["method"],
+                axes=VeraAxes[recipe["axes"]],
+            )
+        elif kind == "diff":
+            self.get(recipe["ref_src_id"]).add_new_diff_dataset(
+                recipe["ref_array"],
+                self.get(recipe["comp_src_id"]),
+                recipe["comp_array"],
+                recipe["name"],
+                recipe["interp_degree"],
+            )
+        else:
+            raise ValueError(f"Unknown recipe kind: {kind}")

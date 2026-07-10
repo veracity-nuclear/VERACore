@@ -5,9 +5,18 @@ from trame_server.core import State
 from . import VeraDataRegistry
 
 
-SESSION_GLOBAL_KEYS = ["selected_assembly_ij", "selected_layer", "selected_time", "selected_i", "selected_j", "selected_surface", "dark_mode",
-                       "selected_assembly", "selected_comp_assembly", "max_layer", "recent_file_paths",
-                       "thresholds", ]
+SESSION_GLOBAL_KEYS = [
+    "selected_assembly_ij", 
+    "selected_layer", 
+    "selected_time", 
+    "selected_i", 
+    "selected_j", 
+    "selected_surface", 
+    "dark_mode",
+    "max_layer", 
+    "recent_file_paths",
+    "thresholds", 
+    ]
 
 SESSION_VERSION = 1
 
@@ -27,6 +36,7 @@ class ViewSession:
 class Session:
     version: int
     file_paths: dict[str, str]
+    default_src_id: str | None
     globals: dict[str, object]
     views: list[ViewSession]
     recipes: list[dict] = field(default_factory=list)
@@ -72,7 +82,7 @@ def build_session(state : State, registry : "VeraDataRegistry", all_view_ids : l
     all_recipes = state.recipes if state.has("recipes") else []
     recipes = [r for r in all_recipes if recipe_sources(r) <= set(file_paths)]
 
-    session = Session(version=SESSION_VERSION, file_paths=file_paths,
+    session = Session(version=SESSION_VERSION, file_paths=file_paths, default_src_id=registry.default_src_id,
                       globals=globals_, views=views, recipes=recipes)
     return session
 

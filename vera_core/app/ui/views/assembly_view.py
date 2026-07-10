@@ -41,8 +41,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "assembly_view_size",
         selected_array_key,
         selected_src_key,
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         "selected_layer",
         "thresholds",
         f"grid_view_{view_id}",
@@ -52,7 +51,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_assembly_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = get_safe_idxs(view_id, state, registry)
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         selected_time = state["selected_time"]
         vera_source : VeraDataSource = registry.get(selected_src_id)
         thres_key = format_label(selected_src_id, selected_array)

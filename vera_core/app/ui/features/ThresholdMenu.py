@@ -21,36 +21,41 @@ def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: Ve
     """
     state.show_threshold_dialog = False
     state.thresholds = {}
-    state.threshold_dataset = "pin_powers"
-    state.threshold_src_id = registry.default_src_id
-    state.threshold_label = format_label(registry.default_src_id, "pin_powers")
+    state.threshold_dataset = ""
+    state.threshold_src_id = None
+    state.threshold_label = "Select dataset"
     state.threshold_value = None
     state.threshold_error = ""
     state.threshold_operator = ">"
     state.threshold_operators = [">", ">=", "<", "<=", "==", "!="]
-
-    @state.change("has_data")
-    def update_thres_label(has_data, **kwargs):
-        if has_data and state.threshold_src_id is None:
-            state.threshold_dataset = "pin_powers"
-            state.threshold_src_id = registry.default_src_id
-            state.threshold_label = format_label(registry.default_src_id, "pin_powers")
 
     @ctrl.set("set_threshold")
     def set_threshold(file : str, array : str):
         state.threshold_dataset = array
         state.threshold_src_id = file
         state.threshold_label = format_label(file, array)
+        state.threshold_error = ""
 
     @ctrl.set("add_threshold")
     def add_threshold():
-        name = format_label(state.threshold_src_id, state.threshold_dataset) # use src_id and dataset name as key for threshold
-        entry = {"op": state.threshold_operator, "value": float(state.threshold_value)}
-        existing = state.thresholds.get(name, [])
-        state.thresholds = {**state.thresholds, name: [*existing, entry]} # reconstruct to trigger trame state change
-        state.threshold_value = None
-        state.threshold_error = ""
-
+        try:
+            if registry.get(state.threshold_src_id) is None or state.threshold_dataset == "":
+                state.threshold_error = "Please select a dataset to threshold first"
+                return
+            if state.threshold_value is None:
+                state.threshold_error = "Please select a threshold value"
+                return
+            name = format_label(state.threshold_src_id, state.threshold_dataset) # use src_id and dataset name as key for threshold
+            entry = {"op": state.threshold_operator, "value": float(state.threshold_value)}
+            existing = state.thresholds.get(name, [])
+            state.thresholds = {**state.thresholds, name: [*existing, entry]} # reconstruct to trigger trame state change
+            state.threshold_value = None
+            state.threshold_src_id = None
+            state.threshold_label = "Select dataset"
+            state.threshold_dataset = ""
+            state.threshold_error = ""
+        except Exception as e:
+            state.threshold_error = str(e)
     @ctrl.set("remove_threshold")
     def remove_threshold(name : str, index : int):
         remaining = [c for i, c in enumerate(state.thresholds.get(name, [])) if i != index]

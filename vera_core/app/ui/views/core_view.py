@@ -81,7 +81,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     line.append(np.ravel(dataset[index]).tolist())    
         return result, labels               
     
-    @state.change("selected_assembly", "selected_comp_assembly")
+    @state.change("selected_assembly_ij")
     def update_info(**kwargs):
         set_info(view_id, state, registry)
 
@@ -90,7 +90,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_core_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        _, _, selected_layer, _, selected_src_id, selected_array = get_safe_idxs(view_id, state, registry)
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
+        _, _, selected_layer, _, selected_src_id, selected_array = indices
         thres_key = format_label(selected_src_id, selected_array)
         vera_source : VeraDataSource = registry.get(selected_src_id)
         core = vera_source.core

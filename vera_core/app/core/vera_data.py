@@ -1,4 +1,5 @@
 import string
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Union
 from enum import Enum, StrEnum
@@ -10,6 +11,16 @@ MAX_NUM_GROUPS = 8
 NUM_DF = 6
 NUM_NODES = 4
 LATERAL_SURACES = slice(0,4)
+
+@dataclass(frozen=True)
+class _Info:
+    axial_idx: int | None = None   # None = no axial axis
+    computational: bool = False
+    nodal: bool = False
+    assembly: bool = False
+    surface: bool = False
+    channel: bool = False
+
 class VeraDtype(Enum):
     """Dataset Identifiers"""
     PIN = 1
@@ -43,21 +54,43 @@ class VeraDtype(Enum):
     def title(self):
         return str(self).upper()
     
-    def is_channel(self):
-        return self in (VeraDtype.CHANNEL, VeraDtype.CHANNEL_RADIAL)
+    @property
+    def _info(self):
+        return _INFO[self]
 
-    def is_computational(self):
-        return self in (VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_ASSY_ENERGY,
-                        VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_SURFACE, VeraDtype.COMP_NODAL_ENERGY)
-    def is_nodal(self):
-        return self in (VeraDtype.NODE, VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_SURFACE, VeraDtype.COMP_NODAL_ENERGY)
-    
-    def is_assembly(self):
-        return self in (VeraDtype.ASSEMBLY, VeraDtype.RADIAL_ASSEMBLY, 
-                        VeraDtype.COMP_ASSY, VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_ASSY_ENERGY,)
-    def is_surface(self):
-        return self in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE)
+    @property
+    def axial_dim_idx(self):
+        idx = self._info.axial_idx
+        if idx is None:
+            raise ValueError(f"{self} has no axial dimension")
+        return idx
 
+    def is_computational(self): return self._info.computational
+    def is_nodal(self):         return self._info.nodal
+    def is_assembly(self):      return self._info.assembly
+    def is_surface(self):       return self._info.surface
+    def is_channel(self):       return self._info.channel
+
+# the single place per-dtype facts are declared
+_INFO = {
+    VeraDtype.PIN:                _Info(axial_idx=2),
+    VeraDtype.ASSEMBLY:           _Info(axial_idx=0, assembly=True),
+    VeraDtype.AXIAL:              _Info(axial_idx=0),
+    VeraDtype.NODE:               _Info(axial_idx=1, nodal=True),
+    VeraDtype.RADIAL:             _Info(),
+    VeraDtype.SCALAR:             _Info(),                       # == CORE
+    VeraDtype.RADIAL_ASSEMBLY:    _Info(assembly=True),
+    VeraDtype.CHANNEL:            _Info(axial_idx=2, channel=True),
+    VeraDtype.CHANNEL_RADIAL:     _Info(channel=True),
+    VeraDtype.RADIAL_NODE:        _Info(nodal=True),
+    VeraDtype.UNKNOWN:            _Info(),
+    VeraDtype.COMP_NODAL:         _Info(axial_idx=1, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL_ENERGY:  _Info(axial_idx=2, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL_SURFACE: _Info(axial_idx=3, computational=True, nodal=True, surface=True),
+    VeraDtype.COMP_ASSY:          _Info(axial_idx=1, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY_ENERGY:   _Info(axial_idx=2, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY_SURFACE:  _Info(axial_idx=3, computational=True, assembly=True, surface=True),
+}
 class VeraAxes(Enum):
     """Derivation Axes"""
     ASSEMBLY = 1
@@ -277,6 +310,17 @@ def _make_ji_safe(j : int, i : int, array : np.ndarray):
     j = np.clip(j, 0, max_row - 1)
     i = np.clip(i, 0, max_col - 1)
     return j, i
+
+def _nearest_nonzero_ij(array, j, i):
+    """Nearest non-zero cell to (j, i) by squared Euclidean distance."""
+    # rows are [row, col] == [j, i]
+    cells = np.argwhere(array > 0)          
+    if cells.size == 0:
+        return None
+    d = (cells[:, 0] - j) ** 2 + (cells[:, 1] - i) ** 2
+    nj, ni = cells[np.argmin(d)]
+    return int(nj), int(ni)
+
 class VeraOutCore(LazyHDF5Loader):
     """Holds the core-level data for a VERA output file (the /CORE group).
 
@@ -478,10 +522,19 @@ class VeraOutCore(LazyHDF5Loader):
         return ids - 1
 
     def reduced_core_map_assembly(self, i, j, is_comp=False) -> int:
-        """Get the index of the assembly at reduced core map position i, j"""
+        """Get the index of the assembly at reduced core map position i, j
+        
+        clamps to the nearest real assembly in the same map, so the result
+        is always a valid assembly when the map has any. Returns -1 only if the
+        chosen map has no assemblies at all.
+        """
         cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
-        j, i =_make_ji_safe(j, i, cm)
-        return int(cm[j, i] - 1)    
+        j, i = _make_ji_safe(j, i, cm)
+        snapped = _nearest_nonzero_ij(cm, j, i)
+        if snapped is None:
+            return -1
+        j, i = snapped
+        return int(cm[j, i]) - 1    
     
     def reduced_core_map_ij(self, assembly_idx, is_comp=False) -> tuple[int, int]:
         """Return the (column, row) position of an assembly in the reduced map."""
@@ -519,20 +572,6 @@ class VeraOutCore(LazyHDF5Loader):
         i, j = self.reduced_core_map_ij(assembly_idx, is_comp)
         labels = self.reduced_core_map_column_labels[i] if not is_comp else self.comp_core_map_column_labels[i]
         return labels
-    
-    def assy_to_comp_assy(self, assembly_id) -> int:
-        if not self.has_comp_core():
-            raise RuntimeError("This core does not have a computational core map")
-        i, j = self.reduced_core_map_ij(assembly_id, is_comp=False)
-        j, i = _make_ji_safe(j, i, self.comp_core_map)
-        return int(self.comp_core_map[j][i] - 1)
-    
-    def comp_assy_to_assy(self, comp_assembly_idx) -> int:
-        if not self.has_comp_core():
-            raise RuntimeError("This core does not have a computational core map")
-        i, j = self.reduced_core_map_ij(comp_assembly_idx, is_comp=True)
-        j, i = _make_ji_safe(j, i, self.reduced_core_map)
-        return int(self.reduced_core_map[j][i] - 1)
         
 
 class VeraOutState(LazyHDF5Loader):

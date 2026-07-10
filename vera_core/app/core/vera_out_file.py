@@ -110,8 +110,8 @@ class VeraOutFile(VeraDataSource):
                 return
             if not state.has_dataset(ref_dataset_name) or not state.has_dataset(comp_dataset_name):
                 continue
-            ref_data = getattr(state, ref_dataset_name)
-            comp_data = getattr(comp_src.states[idx], comp_dataset_name)
+            ref_data : VeraDataset = getattr(state, ref_dataset_name)
+            comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name)
             ref_axial_mesh_means = self.core.axial_mesh_means
             comp_axial_mesh_means = comp_src.core.axial_mesh_means
             if ref_data.dataset_type != comp_data.dataset_type:
@@ -119,8 +119,8 @@ class VeraOutFile(VeraDataSource):
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
                 diff = ref_data - comp_data
             else:
-                # data is (py, px, nax, nass) shape. py, px, and nass must match between the two dataset
-                spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=2)
+                # all data dimensions that are not the axial dim must match between the two dataset
+                spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=ref_data.dataset_type.axial_dim_idx)
                 comp_data_on_ref_mesh = spl(ref_axial_mesh_means, extrapolate=False)
                 diff = ref_data - comp_data_on_ref_mesh
             state.add_diff_dataset(new_diff_name, diff)

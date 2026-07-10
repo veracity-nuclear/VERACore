@@ -48,7 +48,7 @@ def option_for(view_id):
         "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.ASSEMBLY.title]
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title]
     }
 
 
@@ -155,7 +155,7 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
     if vera_out_file is None or not array_name:
         return
     array = vera_out_file.array(array_name)
-    if str(array.dataset_type).upper() not in option_for(0)["allowed_categories"]:
+    if array.dataset_type.title not in option_for(0)["allowed_categories"]:
         return
     core = vera_out_file.core
 

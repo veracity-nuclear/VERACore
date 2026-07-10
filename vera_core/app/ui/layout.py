@@ -49,8 +49,8 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
     
-    with vuetify.VBtn(icon=True, click="show_locate_dialog = true", disabled=("!has_data",)):   # add
-        vuetify.VIcon("mdi-crosshairs-gps")  
+    # with vuetify.VBtn(icon=True, click="show_locate_dialog = true", disabled=("!has_data",)):   # add
+    #     vuetify.VIcon("mdi-crosshairs-gps")  
 
     with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")

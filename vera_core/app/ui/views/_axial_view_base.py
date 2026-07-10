@@ -157,8 +157,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     @state.change(
         selected_array_key,
         selected_src_key,
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         pin_key,
         f"grid_view_{view_id}",
         f"locked_{view_id}",
@@ -169,10 +168,13 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             return
 
         selected_array = state[selected_array_key]
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
         if is_x:
-            selected_pin, _, _, selected_assembly, _, _ = get_safe_idxs(view_id, state, registry)
+            selected_pin, _, _, selected_assembly, _, _ = indices
         else:
-            _, selected_pin, _, selected_assembly, _, _ = get_safe_idxs(view_id, state, registry)
+            _, selected_pin, _, selected_assembly, _, _ = indices
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
         core = vera_source.core

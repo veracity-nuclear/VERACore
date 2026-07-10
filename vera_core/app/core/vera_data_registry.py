@@ -72,10 +72,15 @@ class VeraDataRegistry:
         src_idx = np.searchsorted(src_axial_mesh, physical_layer)
         src_idx = np.clip(src_idx, 0, len(src_axial_mesh) - 1)
         return int(src_idx)
+    
+    def has_src(self):
+        return self.default_src_id is not None
 
-    def get(self, src_id: str) -> VeraDataSource | None:
+    def get(self, src_id: str | None) -> VeraDataSource | None:
         """Return the source for src_id, or None if it isn't registered."""
-        return self._srcs.get(src_id)
+        if src_id is None:
+            return None
+        return self._srcs.get(src_id, None)
     
     def get_ds_dtype(self, src_id : str, ds_name : str) -> VeraDtype:
         if src_id not in self._srcs:
@@ -111,6 +116,20 @@ class VeraDataRegistry:
         for src in srcs:
             shared_axes &= set(src.time_axes())
         return sorted(shared_axes)
+    
+    def time_axis_value(self, axis: str, state_index: int) -> float:
+        """Value of `axis` at `state_index`, read from the source `selected_time`
+        indexes against (the max-state source). Exact for that source; other
+        sources with different sampling won't align perfectly"""
+        if not self._srcs:
+            return float(state_index)
+        if axis == "state_count":
+            return float(state_index)
+        ref = max(self._srcs.values(), key=lambda s: len(s.states))
+        axes = ref.time_axes()
+        if axis in axes and 0 <= state_index < len(axes[axis]):
+            return float(axes[axis][state_index])
+        return float(state_index)
 
     def remove_src(self, src_id: str) -> None:
         """Remove a source, close its file handles, and reassigns the default. Raises ValueError if src_id isn't registered."""
@@ -134,6 +153,7 @@ class VeraDataRegistry:
         self._srcs = {}
         self.default_src_id = None
     
+    
     def apply_recipe(self, recipe: dict):
         kind = recipe["kind"]
         if kind == "derive":
@@ -153,3 +173,6 @@ class VeraDataRegistry:
             )
         else:
             raise ValueError(f"Unknown recipe kind: {kind}")
+    
+    def __contains__(self, src_id):
+        return src_id in self._srcs

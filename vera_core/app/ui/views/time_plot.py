@@ -43,7 +43,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             array_shape = np.shape(src.array(array_name, mask_reflected=False))
             array_dtype = src.array_dtype(array_name)
             is_comp = array_dtype.is_computational()
-            ny, nx, nax, nass, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            if not indices:
+                continue
+            ny, nx, nax, nass, _, _ = indices
             assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
             axial_label = src.core.axial_mesh_means[nax] if not is_comp else src.core.comp_axial_mesh_means[nax]
             indices_list = []
@@ -99,11 +102,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # add_vline only spans y in [0, 1], so draw the marker manually.
         float_info = np.finfo(np.float64)
-        time_axis = state[time_axis_key]
-        if time_axis == "state_count":
-            x = [state["selected_time"]] * 2
-        else:
-            x=[np.asarray(getattr(registry.default_src.active_state, state[time_axis_key]).item())] * 2
+        axis = state[time_axis_key]
+        x_val = registry.time_axis_value(axis, int(state["selected_time"]))
+        x = [x_val] * 2
         figure.add_trace(
             go.Scatter(
                 x=x,
@@ -131,8 +132,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_set_key,
         "max_time",
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         "selected_layer",
         "selected_i",
         "selected_j",
@@ -143,7 +143,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
-        if is_non_active_view(state, view_id, option):
+        if is_non_active_view(state, view_id, option) or registry.default_src is None:
             return
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:

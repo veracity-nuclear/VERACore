@@ -32,8 +32,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_array_key,
         selected_src_key,
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         "selected_layer",
         "selected_i",
         "selected_j",
@@ -45,8 +44,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_table(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
         (selected_j, selected_i, selected_layer, 
-         selected_assembly, selected_src_id, selected_array) = get_safe_idxs(view_id, state, registry)
+         selected_assembly, selected_src_id, selected_array) = indices
 
         src : VeraDataSource = registry.get(selected_src_id)
         array = src.array(selected_array)

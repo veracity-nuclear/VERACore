@@ -13,13 +13,14 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     """
     state.show_diff_dialog = False
     state.diff_name = ""
-    state.ref_dataset_name = "pin_powers"
-    state.ref_src_id = registry.default_src_id
-    state.ref_label = format_label(registry.default_src_id, "pin_powers")
+    state.ref_dataset_name = ""
+    state.ref_src_id = None
+    state.ref_label = "Select dataset"
+    state.comp_dataset_name = ""
+    state.comp_src_id = None
+    state.comp_label = "Select dataset"
+
     state.diff_operator = "-"
-    state.comp_dataset_name = "pin_powers"
-    state.comp_src_id = registry.default_src_id
-    state.comp_label = format_label(registry.default_src_id, "pin_powers")
     state.diff_interp_kind = "Linear"
     state.diff_interp_kinds = INTERPOLATION_OPTIONS
     state.diff_error = ""
@@ -40,8 +41,14 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
     def create_diff_dataset():
         ref_src = registry.get(state.ref_src_id)
         comp_src = registry.get(state.comp_src_id)
-        if ref_src is None or comp_src is None:
-            state.diff_error = "Could not find source"
+        if ref_src is None or state.ref_dataset_name == "":
+            state.diff_error = "Please select a reference dataset"
+            return
+        if comp_src is None or state.comp_dataset_name == "":
+            state.diff_error = "Please select a comparison dataset"
+            return
+        if state.diff_name == "":
+            state.diff_error = "Please select a name for the new dataset"
             return
         try:
             recipe = diff_recipe(
@@ -52,12 +59,19 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
             registry.apply_recipe(recipe)
             state.recipes = state.recipes + [recipe]
             refresh_src_tree(state, registry)
-            state.show_diff_dialog = False
+            state.diff_name = ""
+            state.ref_dataset_name = ""
+            state.ref_src_id = None
+            state.ref_label = "Select dataset"
+            state.comp_dataset_name = ""
+            state.comp_src_id = None
+            state.comp_label = "Select dataset"
+            state.diff_error = ""
         except Exception as e:
             state.diff_error = str(e)
 
 def build_diff_dialog(state, ctrl, registry):
-    with vuetify.VDialog(v_model=("show_diff_dialog",), max_width=480, persistent=True):
+    with vuetify.VDialog(v_model=("show_diff_dialog",), max_width=560, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Create diff Dataset", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -65,33 +79,27 @@ def build_diff_dialog(state, ctrl, registry):
                 vuetify.VTextField(
                     v_model=("diff_name",),
                     label="Name",
-                    hide_details=True,
-                    dense=True,
-                    classes="mb-3",
+                    hide_details=True, dense=True,
+                    classes="mb-4",
                 )
-                with vuetify.VRow(classes="ma-0", align="center"):
-                    with vuetify.VCol(classes="pa-0"):
-                        build_dataset_picker(ctrl, "ref_label", "set_ref_dataset", "[src, entry.value]")
-                    with vuetify.VCol(cols="auto", classes="px-2"):
-                        vuetify.VSelect(
-                            v_model=("diff_operator",),
-                            items=("diff_operators", ["+", "-", "*", "/"]),
-                            hide_details=True,
-                            dense=True,
-                            style="width: 64px",
-                        )
-                    with vuetify.VCol(classes="pa-0"):
-                        build_dataset_picker(ctrl, "comp_label", "set_comp_dataset", "[src, entry.value]")
-                with vuetify.VRow(classes="ma-0 mt-3", align="center"):
-                    with vuetify.VCol(cols="auto", classes="pa-0 pr-3"):
-                        html.Div("Interpolation", classes="text-caption")
-                    with vuetify.VCol(classes="pa-0"):
-                        vuetify.VSelect(
-                            v_model=("diff_interp_kind",),
-                            items=("diff_interp_kinds",),
-                            hide_details=True,
-                            dense=True,
-                        )
+                # A op B, read top to bottom; pickers stretch full width
+                with html.Div(classes="mb-3", style="min-width: 0;"):
+                    build_dataset_picker(ctrl, "ref_label", "set_ref_dataset", "[src, entry.value]")
+                with html.Div(classes="d-flex justify-center mb-3"):
+                    vuetify.VSelect(
+                        v_model=("diff_operator",),
+                        items=("diff_operators", ["+", "-", "*", "/"]),
+                        hide_details=True, dense=True,
+                        style="max-width: 88px;",
+                    )
+                with html.Div(classes="mb-4", style="min-width: 0;"):
+                    build_dataset_picker(ctrl, "comp_label", "set_comp_dataset", "[src, entry.value]")
+                vuetify.VSelect(
+                    v_model=("diff_interp_kind",),
+                    items=("diff_interp_kinds",),
+                    label="Interpolation",
+                    hide_details=True, dense=True,
+                )
                 vuetify.VAlert(
                     "{{ diff_error }}",
                     v_show=("diff_error",),
@@ -103,6 +111,5 @@ def build_diff_dialog(state, ctrl, registry):
             vuetify.VDivider()
             with vuetify.VCardActions():
                 vuetify.VSpacer()
-                vuetify.VBtn("Cancel", text=True, click="show_diff_dialog = false")
+                vuetify.VBtn("Close", text=True, click="show_diff_dialog = false")
                 vuetify.VBtn("Create", color="primary", click=ctrl.create_diff_dataset)
-

@@ -41,7 +41,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src = registry.get(src_id)
             full_array = src.array(array_name)
             array_dtype : VeraDtype = full_array.dataset_type
-            j, i, layer, assy, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            if not indices:
+                continue
+            j, i, layer, assy, _, _ = indices
             assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
             identifier : str = ""
             axial_arrays = []
@@ -110,8 +113,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @state.change(
         selected_set_key,
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         "selected_layer",
         "selected_i",
         "selected_j",
@@ -122,7 +124,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
-        if is_non_active_view(state, view_id, option):
+        if is_non_active_view(state, view_id, option) or registry.default_src is None:
             return
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:

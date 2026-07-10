@@ -62,6 +62,7 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             return
         try:
             was_empty = registry.default_src_id is None
+            print(was_empty)
             registry.add_src(VeraOutFile(raw_path), src_id=pathobj.stem)
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
@@ -72,15 +73,15 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             if was_empty: # if this was the first source loaded render the initial UI
                 ctrl.activate_src()
         except Exception as e:
+            print(e)
             state.file_error = f"Could not load: {e}"
 
     @ctrl.set("close_file")
     def close_file(file_id):
         try:
-            registry.remove_src(file_id)
-            state.recipes = [r for r in state.recipes if file_id not in recipe_sources(r)]
-            refresh_src_tree(state, registry)
+            ctrl.remove_source(file_id)
         except Exception as e:
+            print(e)
             state.file_error = f"Could not remove file: {file_id}"
     
     global file_menu_state_initialized

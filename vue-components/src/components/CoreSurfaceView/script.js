@@ -6,6 +6,8 @@ const NORTH = 1;
 const EAST = 2;
 const SOUTH = 3;
 
+const CELL = 30;
+
 export default {
   name: 'VeraSurface',
   props: {
@@ -38,7 +40,9 @@ export default {
     selectedI(i) { this.activeI = i; },
     selectedJ(j) { this.activeJ = j; },
     aspectRatio() { this.resize(); },
-    value() { this.resize(); },
+    value() {
+      this.$nextTick(() => this.resize());
+    },
     colorPreset() { this.updateLut(); },
     colorRange() { this.updateLut(); },
     dark() { this.updateLut(); },
@@ -64,7 +68,9 @@ export default {
     this.updateNanColor();
   },
   mounted() {
-    this.resizeObserver.observe(this.$el);
+    this.measureTarget = this.$el.parentElement || this.$el;
+    this.resizeObserver.observe(this.measureTarget);
+    this.$nextTick(() => this.resize());
   },
   beforeDestroy() {
     this.resizeObserver.disconnect();
@@ -84,12 +90,16 @@ export default {
       this.lutVersion++; // invalidate triangle colors
     },
     resize() {
-      const { width, height } = this.$el.getBoundingClientRect();
-      const needed = (this.coreWidth + 1) * 32;
+      const target = this.measureTarget || this.$el;
+      const { width, height } = target.getBoundingClientRect();
+      if (width < 1 || height < 1 || this.coreWidth === 0) {
+        return;
+      }
+      const needed = (this.coreWidth + 1) * CELL;
       const ar = this.aspectRatio || 1;
       const t = Math.min(width / (needed * ar), height / needed);
       this.scaleStyle = { scale: `${ar * t} ${t}` };
-      this.sizeStyle = { width: `${needed + 10}px`, height: `${needed + 10}px` };
+      this.sizeStyle = { width: `${needed}px`, height: `${needed}px` };
     },
     hover(i, j) {
       this.activeI = i;

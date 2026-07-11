@@ -158,6 +158,10 @@ def nan_out_reflected(cm, core_sym, array):
         array[:, :int(NUM_NODES/2), :, :ax] = np.nan
         array[:, 0, :, cm[:, 0] - 1] = np.nan
         array[:, 2, :, cm[:, 0] - 1] = np.nan
+    elif dtype == VeraDtype.COMP_NODAL_SURFACE and core_sym == 4:
+        array[:, :, :int(NUM_NODES/2), :, :ax] = np.nan
+        array[:, :, 0, :, cm[:, 0] - 1] = np.nan
+        array[:, :, 2, :, cm[:, 0] - 1] = np.nan
     return array
 
 def build_core_dtypes(npiny = None, 

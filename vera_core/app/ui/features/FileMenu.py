@@ -62,8 +62,8 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             return
         try:
             was_empty = registry.default_src_id is None
-            print(was_empty)
             registry.add_src(VeraOutFile(raw_path), src_id=pathobj.stem)
+            state.max_layer = len(registry.global_axial_mesh) - 1
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
             refresh_src_tree(state, registry)

@@ -78,7 +78,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     line.append([float(dataset[index])])
                     labels_line.append(np.round(dataset[index], 2))
                 else:
-                    line.append(np.ravel(dataset[index]).tolist())    
+                    line.append(np.ravel(dataset[index]).tolist())
         return result, labels               
     
     @state.change("selected_assembly_ij")

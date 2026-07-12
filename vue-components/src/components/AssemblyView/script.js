@@ -26,9 +26,7 @@ export default {
     },
     activeStyle: {
       type: Object,
-      default: () => ({
-        outline: 'solid 3px black',
-      }),
+      default: () => ({}),
     },
     busy: {
       type: Boolean,
@@ -130,11 +128,15 @@ export default {
       return v.toFixed(2);
     },
     toStyle(i, j) {
-      const style = {};
-      if (i == this.activeI && j == this.activeJ) {
-        Object.assign(style, this.activeStyle);
+      if (i != this.activeI || j != this.activeJ) {
+        return {};
       }
-      return style;
+      return {
+        outline: this.dark ? 'solid 3px white' : 'solid 3px black',
+        outlineOffset: '-1px',
+        zIndex: 10,
+        ...this.activeStyle,
+      };
     },
     updateLookupTable() {
       const preset = vtkColorMaps.getPresetByName(this.colorPreset);

@@ -21,7 +21,7 @@ export default {
     colorRange: { type: Array, default: () => [0, 1] },
     activeStyle: {
       type: Object,
-      default: () => ({ outline: 'solid 2px black', zIndex: 10 }),
+      default: () => ({}),
     },
     xLabels: {
       type: Array,
@@ -114,7 +114,15 @@ export default {
       return Array.isArray(cell) && cell.length > 0;
     },
     toStyle(i, j) {
-      return (i === this.activeI && j === this.activeJ) ? this.activeStyle : {};
+      if (i !== this.activeI || j !== this.activeJ) {
+        return {};
+      }
+      return {
+        outline: this.dark ? 'solid 2px white' : 'solid 2px black',
+        outlineOffset: '-1px',
+        zIndex: 10,
+        ...this.activeStyle,
+      };
     },
     colorFor(v) {
       // eslint-disable-next-line no-unused-expressions

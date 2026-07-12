@@ -16,7 +16,7 @@ export default {
     colorRange: { type: Array, default: () => [0, 1] },
     activeStyle: {
       type: Object,
-      default: () => ({ outline: 'solid 1px black', zIndex: 10 }),
+      default: () => ({}),
     },
     xLabels: { type: Array, default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] },
     yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
@@ -115,11 +115,15 @@ export default {
       this.activeJ = this.selectedJ;
     },
     toStyle(i, j) {
-      const style = {};
-      if (i == this.activeI && j == this.activeJ) {
-        Object.assign(style, this.activeStyle);
+      if (i != this.activeI || j != this.activeJ) {
+        return {};
       }
-      return style;
+      return {
+        outline: this.dark ? 'solid 1px white' : 'solid 1px black',
+        outlineOffset: '-1px',
+        zIndex: 10,
+        ...this.activeStyle,
+      };
     },
     toUrl(i, j) {
       return this.images?.[j]?.[i];

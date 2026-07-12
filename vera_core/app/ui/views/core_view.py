@@ -19,10 +19,12 @@ def option_for(view_id):
                                VeraDtype.ASSEMBLY.title, VeraDtype.RADIAL.title, 
                                VeraDtype.RADIAL_ASSEMBLY.title, VeraDtype.COMP_NODAL.title,
                                VeraDtype.COMP_NODAL_ENERGY.title, VeraDtype.COMP_ASSY.title,
-                               VeraDtype.COMP_ASSY_ENERGY.title]
+                               VeraDtype.COMP_ASSY_ENERGY.title, VeraDtype.NODAL.title]
     }
 
 def _nan_out_control_rods(array : np.ndarray, control_rod_positions):
+    if control_rod_positions is None:
+        return array
     rod_rows, rod_cols = control_rod_positions
     new_array = array.copy()
     new_array[:, rod_rows, rod_cols] = np.nan
@@ -114,7 +116,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 layer_arrays.append(raw_array.swapaxes(0, 2).swapaxes(1, 2))
             case VeraDtype.RADIAL_ASSEMBLY:
                 layer_arrays.append(raw_array)
-            case VeraDtype.COMP_NODAL:
+            case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
                 layer_arrays.append(raw_array[:, selected_layer, :].swapaxes(0, 1))
             case VeraDtype.COMP_ASSY_ENERGY:
                 num_energy_groups = np.shape(raw_array)[0]

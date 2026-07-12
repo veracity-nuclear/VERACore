@@ -20,7 +20,8 @@ def option_for(view_id):
                                VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title,
                                VeraDtype.COMP_NODAL.title, VeraDtype.COMP_NODAL_ENERGY.title,
                                VeraDtype.COMP_NODAL_SURFACE.title, VeraDtype.COMP_ASSY_SURFACE.title,
-                               VeraDtype.COMP_ASSY.title, VeraDtype.COMP_ASSY_ENERGY.title]
+                               VeraDtype.COMP_ASSY.title, VeraDtype.COMP_ASSY_ENERGY.title,
+                               VeraDtype.NODAL.title]
     }
 
 
@@ -57,7 +58,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     identifier = f" | {assembly_label}"
                 case VeraDtype.AXIAL:
                     axial_arrays.append(full_array)
-                case VeraDtype.COMP_NODAL:
+                case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
                     node_idx = convert_ji_to_node(j, i)
                     axial_arrays.append(full_array[node_idx, :, assy])
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1})"

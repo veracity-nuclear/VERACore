@@ -40,8 +40,11 @@ def set_info(view_id : int, state : State, registry : VeraDataRegistry):
     dtype = vera_source.array_dtype(ds_name)
     is_comp = dtype.is_computational()
     axial_mesh = vera_source.core.axial_mesh_means if not is_comp else vera_source.core.comp_axial_mesh_means
+    exposure = None
+    if vera_source.active_state.has_dataset("exposure"):
+        exposure = vera_source.active_state.exposure[0]
     state[f"label_info_{view_id}"] = {
-            "Exposure": np.round(vera_source.active_state.exposure[0], decimals=3),
+            "Exposure": np.round(exposure, decimals=3) if exposure is not None else "none recorded",
             "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
             "Layer": np.round(axial_mesh[layer], decimals=2),
             "Pin_x" : int(i),

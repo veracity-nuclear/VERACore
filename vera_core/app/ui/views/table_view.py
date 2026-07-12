@@ -59,6 +59,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
             case VeraDtype.ASSEMBLY:
                 indices_list.append((selected_layer, selected_assembly))
+            case VeraDtype.NODAL:
+                indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
+            case VeraDtype.RADIAL_NODE:
+                indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_assembly))
             case VeraDtype.COMP_ASSY:
                 indices_list.append((0, selected_layer, selected_assembly))
             case VeraDtype.AXIAL:

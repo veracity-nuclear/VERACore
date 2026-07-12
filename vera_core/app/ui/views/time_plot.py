@@ -68,8 +68,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:
                     indices_list.append((0))
-                case VeraDtype.COMP_ASSY | VeraDtype.COMP_NODAL:
-                    node_idx = convert_ji_to_node(ny, nx) if array_dtype == VeraDtype.COMP_NODAL else 0 
+                case VeraDtype.RADIAL_NODE:
+                    node_idx = convert_ji_to_node(ny, nx)
+                    indices_list.append((node_idx, nass))
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
+                case VeraDtype.COMP_ASSY | VeraDtype.COMP_NODAL | VeraDtype.NODAL:
+                    node_idx = convert_ji_to_node(ny, nx) if array_dtype.is_nodal() else 0 
                     indices_list.append((node_idx, nax, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
                 case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:

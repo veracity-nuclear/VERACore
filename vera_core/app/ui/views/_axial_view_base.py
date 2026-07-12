@@ -3,10 +3,11 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, VeraOutCore
 from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node, requires_src
 
 MAX_VIS_GROUPS = 4
+FALLBACK_DISPLAY_SIZE = 17
 
 _AXIS_OPTIONS = {
     "x": {
@@ -35,6 +36,7 @@ def option_for(view_id, axis):
             VeraDtype.COMP_NODAL_ENERGY.title,
             VeraDtype.COMP_ASSY.title,
             VeraDtype.COMP_ASSY_ENERGY.title,
+            VeraDtype.NODAL.title,
         ],
     }
 
@@ -100,7 +102,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         node = int(convert_ji_to_node(0, selected_pin))       # i picks the col
         return (0, 2) if node in (0, 2) else (1, 3)
 
-    def _build_group_grid(array_2d_or_nodal, array_dtype : VeraDtype, core, selected_pin, assembly_indices):
+    def _build_group_grid(array_2d_or_nodal, array_dtype : VeraDtype, core : VeraOutCore, selected_pin, assembly_indices):
         """Return (grid, data_width, display_width, nb_cols) for one energy group's
         array slice."""
         is_assembly = array_dtype.is_assembly()
@@ -116,20 +118,20 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             data_width = display_width = cell_width
 
         elif is_assembly:
-            cell_width = core.pin_volumes.shape[0]
+            cell_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
             image_data = np.vstack(arr[:, assembly_indices])
             data_width = display_width = cell_width
 
-        elif array_dtype in (VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ENERGY):
+        elif array_dtype in (VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ENERGY, VeraDtype.NODAL):
             nodal = arr[:, :, assembly_indices]   # (nodes, nax, ncols)
             n_nodes = nodal.shape[0]
             if n_nodes == 1:
-                data_width = display_width = core.pin_volumes.shape[0]
+                data_width = display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
                 image_data = np.vstack(nodal[0])
             else:
                 node_pair = _nodal_node_pair(selected_pin)
                 data_width = len(node_pair)
-                display_width = core.pin_volumes.shape[0]
+                display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
                 sel = nodal[list(node_pair)]
                 sel = np.transpose(sel, (1, 2, 0))
                 image_data = sel.reshape(sel.shape[0], -1)

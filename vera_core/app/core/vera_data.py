@@ -26,7 +26,7 @@ class VeraDtype(Enum):
     PIN = 1
     ASSEMBLY = 2
     AXIAL = 3
-    NODE = 4
+    NODAL = 4
     RADIAL = 5
     SCALAR = 6 
     CORE = 6 # CORE is an alias for SCALAR
@@ -76,7 +76,7 @@ _INFO = {
     VeraDtype.PIN:                _Info(axial_idx=2),
     VeraDtype.ASSEMBLY:           _Info(axial_idx=0, assembly=True),
     VeraDtype.AXIAL:              _Info(axial_idx=0),
-    VeraDtype.NODE:               _Info(axial_idx=1, nodal=True),
+    VeraDtype.NODAL:               _Info(axial_idx=1, nodal=True),
     VeraDtype.RADIAL:             _Info(),
     VeraDtype.SCALAR:             _Info(),                       # == CORE
     VeraDtype.RADIAL_ASSEMBLY:    _Info(assembly=True),
@@ -150,7 +150,7 @@ def nan_out_reflected(cm, core_sym, array):
             case VeraDtype.RADIAL:
                 array[:hpy, :, :ax] = np.nan
                 array[:, :hpx, cm[:, 0] - 1] = np.nan
-    elif dtype == VeraDtype.COMP_NODAL and core_sym == 4:
+    elif (dtype == VeraDtype.COMP_NODAL or dtype == VeraDtype.NODAL) and core_sym == 4:
         array[:int(NUM_NODES/2), :, :ax] = np.nan
         array[0, :, cm[:, 0] - 1] = np.nan
         array[2, :, cm[:, 0] - 1] = np.nan
@@ -178,6 +178,8 @@ def build_core_dtypes(npiny = None,
             (nax, nass) : VeraDtype.ASSEMBLY,
             (nax,) : VeraDtype.AXIAL,
             (nass,) : VeraDtype.RADIAL_ASSEMBLY,
+            (NUM_NODES, nax, nass) : VeraDtype.NODAL,
+            (NUM_NODES, nass) : VeraDtype.RADIAL_NODE,
             (1,) : VeraDtype.SCALAR,
             () : VeraDtype.SCALAR
         }
@@ -186,8 +188,6 @@ def build_core_dtypes(npiny = None,
             (npiny, npinx, nax, nass) : VeraDtype.PIN,
             (npiny + 1, npinx + 1, nax, nass) : VeraDtype.CHANNEL,
             (npiny, npinx, nass) : VeraDtype.RADIAL,
-            (NUM_NODES, nax, nass) : VeraDtype.NODE,
-            (NUM_NODES, nass) : VeraDtype.RADIAL_NODE,
             (npiny + 1, npinx + 1, nass) : VeraDtype.CHANNEL_RADIAL,
         }
     if comp_nax and comp_nass:
@@ -370,15 +370,23 @@ class VeraOutCore(LazyHDF5Loader):
         self.nax = len(self.axial_mesh) - 1
         self.npy = 0 # if the core only contains assembly and axial data, then npy and npx will be zero
         self.npx = 0
-        if hasattr(self, "pin_volumes") and self.pin_volumes is not None:
-            self.npy, self.npx, nax, nass = np.shape(self.pin_volumes)
-            if nax != self.nax or nass != self.nass:
-                raise RuntimeError("core shape mismatch between core_map, axial_mesh and pin_volumes")
+        core_group = self.f["CORE"]
+        if "npin" in core_group:
+            npin = core_group["npin"]
+            self.npy, self.npx = npin, npin
+        elif "num_pins" in core_group:
+            num_pins = core_group["num_pins"]
+            self.npy, self.npx = num_pins, num_pins
+        if "pin_factors" in core_group:
+            self.npy, self.npx, self.nax, self.nass = core_group["pin_factors"].shape
+        elif "pin_heated_surface_area" in core_group:
+            self.npy, self.npx, self.nax, self.nass = core_group["pin_heated_surface_area"].shape
+        elif hasattr(self, "pin_volumes") and self.pin_volumes is not None:
+            self.npy, self.npx, self.nax, self.nass = np.shape(self.pin_volumes)
         elif "STATE_0001/pin_powers" in self.f:
             # if no pin_volumes see if state contains pin_powers as a source for core_shape
-            self.npy, self.npx, nax, nass = np.shape(self.f["STATE_0001/pin_powers"])
-            if nax != self.nax or nass != self.nass:
-                raise RuntimeError("core shape mismatch between core_map, axial_mesh and pin_powers")
+            self.npy, self.npx, self.nax, self.nass = np.shape(self.f["STATE_0001/pin_powers"])
+        print(self.core_shape)
         
     def _determine_computational_core_shape(self):
         self.comp_nass = None
@@ -424,6 +432,9 @@ class VeraOutCore(LazyHDF5Loader):
         """
         return self._shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
     
+    def is_even(self) -> bool:
+        return self.core_map.shape[0] % 2 == 0
+
     def compute_reduced_core_map(self) -> None:
         """Compute the reduced core map based upon the core_sym"""
         sym = self.core_sym[()] 
@@ -766,7 +777,8 @@ class VeraDataSource(ABC):
             return getattr(self.core, array_name)
         array : VeraDataset = getattr(self.active_state, array_name)
         cm = self.core.reduced_core_map if not array.dataset_type.is_computational() else self.core.comp_core_map
-        if mask_reflected:
+        is_even_core = self.core.is_even()
+        if mask_reflected and not is_even_core:
             array = nan_out_reflected(cm, self.core.core_sym, array)
         return array
     

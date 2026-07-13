@@ -337,8 +337,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
                 state.file_error = f"Session file not found: {path}"
                 return
         registry.clear()
+        core_overrides = session.core_overrides or {}
         for src_id, path in session.file_paths.items():
-            registry.add_src(VeraOutFile(path), src_id=src_id)
+            registry.add_src(VeraOutFile(path, core_overrides=core_overrides.get(path, {})), src_id=src_id)
         if session.default_src_id in registry:
             registry.default_src_id = session.default_src_id
 

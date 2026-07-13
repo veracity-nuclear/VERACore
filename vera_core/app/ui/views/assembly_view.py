@@ -93,9 +93,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             if thres.get(thres_key):
                 for idx, image in enumerate(images_dataset):
                     images_dataset[idx] = apply_thresholds(image, thres[thres_key])
-                
-            if array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
-                control_rod_positions = vera_source.core.control_rod_positions
+            if (array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL) and 
+                (control_rod_positions := vera_source.core.control_rod_positions) is not None):
                 # Make control rod positions equal to nan
                 for image in images_dataset:
                     image[control_rod_positions] = np.nan
@@ -104,7 +103,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             MAX_ITEMS_IN_CACHE = 1
             while len(cached_assembly_images) >= MAX_ITEMS_IN_CACHE:
                 cached_assembly_images.pop(next(iter(cached_assembly_images)))
-
             cached_assembly_images[cache_key] = images_dataset
             set_info(view_id, state, registry)
 

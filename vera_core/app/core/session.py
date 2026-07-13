@@ -36,6 +36,7 @@ class ViewSession:
 class Session:
     version: int
     file_paths: dict[str, str]
+    core_overrides : dict[str, int]
     default_src_id: str | None
     globals: dict[str, object]
     views: list[ViewSession]
@@ -81,9 +82,16 @@ def build_session(state : State, registry : "VeraDataRegistry", all_view_ids : l
     recipes = state.derived_recipes if state.has("derived_recipes") else []
     all_recipes = state.recipes if state.has("recipes") else []
     recipes = [r for r in all_recipes if recipe_sources(r) <= set(file_paths)]
+    core_overrides = state["core_overrides"]
 
-    session = Session(version=SESSION_VERSION, file_paths=file_paths, default_src_id=registry.default_src_id,
-                      globals=globals_, views=views, recipes=recipes)
+    session = Session(version=SESSION_VERSION, 
+                      file_paths=file_paths, 
+                      core_overrides=core_overrides, 
+                      default_src_id=registry.default_src_id,
+                      globals=globals_, 
+                      views=views, 
+                      recipes=recipes,
+            )
     return session
 
 def save_session(state, registry : VeraDataRegistry, all_view_ids : list, out_path: str):

@@ -2,7 +2,7 @@ import asyncio, sys
 from pathlib import Path
 from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
-from vera_core.app.core import VeraDataRegistry, VeraOutFile, recipe_sources
+from vera_core.app.core import VeraDataRegistry, VeraOutFile, recipe_sources, CorePropMissing
 from .DatasetPicker import refresh_src_tree
 from .file_picker_entry import launch_picker
 
@@ -21,6 +21,12 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     state.show_file_dialog = False
     state.file_error = ""
     state.file_path = ""
+    state.core_overrides = {}
+    state.core_prompt = {}
+    state.core_answer_npin = None
+    state.core_none_npin = False
+    state.core_answer_nax = None
+    state.show_core_dialog = False
     state.recent_file_paths = []
 
     @ctrl.set("open_file_dialog")
@@ -62,7 +68,16 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             return
         try:
             was_empty = registry.default_src_id is None
-            registry.add_src(VeraOutFile(raw_path), src_id=pathobj.stem)
+            try:
+                src = VeraOutFile(raw_path, core_overrides=state.core_overrides.get(raw_path, {}))
+            except CorePropMissing as e:
+                state.core_prompt = {"path": raw_path, "missing": e.missing, "inferred": e.inferred}
+                state.core_answer_npin = None
+                state.core_none_npin = False
+                state.core_answer_nax = None
+                state.show_core_dialog = True
+                return
+            registry.add_src(src, src_id=pathobj.stem)
             state.max_layer = len(registry.global_axial_mesh) - 1
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
@@ -75,6 +90,7 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
         except Exception as e:
             print(e)
             state.file_error = f"Could not load: {e}"
+            raise e
 
     @ctrl.set("close_file")
     def close_file(file_id):
@@ -83,6 +99,57 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
         except Exception as e:
             print(e)
             state.file_error = f"Could not remove file: {file_id}"
+
+    @ctrl.set("submit_core_props")
+    def submit_core_props():
+        path = state.core_prompt.get("path")
+        missing = state.core_prompt.get("missing", {})
+        if not path:
+            return
+
+        overrides = {}
+        if "npin" in missing:
+            if state.core_none_npin:
+                overrides["npin"] = 0
+            else:
+                val = _parse_positive_int(state.core_answer_npin, "Pins across an assembly",
+                                          allow_zero=False)
+                if val is None:
+                    return
+                overrides["npin"] = val
+        if "nax" in missing:
+            val = _parse_positive_int(state.core_answer_nax, "Number of axial layers",
+                                      allow_zero=False)
+            if val is None:
+                return
+            overrides["nax"] = val
+
+        state.core_overrides = {**state.core_overrides, path: overrides}
+        _reset_core_prompt()
+        state.file_path = path
+        load_file()
+
+    def _parse_positive_int(raw, label, allow_zero):
+        if raw is None or str(raw).strip() == "":
+            state.file_error = f"Enter a value for {label}."
+            return None
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            state.file_error = f"{label} must be a whole number."
+            return None
+        if val < 0 or (val == 0 and not allow_zero):
+            state.file_error = f"{label} must be positive."
+            return None
+        return val
+
+    def _reset_core_prompt():
+        state.core_answer_npin = None
+        state.core_none_npin = False
+        state.core_answer_nax = None
+        state.show_core_dialog = False
+        state.core_prompt = {}
+        state.file_error = ""
     
     global file_menu_state_initialized
     file_menu_state_initialized = True
@@ -180,3 +247,72 @@ def build_file_menu_dialog(ctrl: Controller):
                 vuetify.VSpacer()
                 with vuetify.VBtn(color="secondary", click="show_file_dialog = false"):
                     html.Span("Close")
+
+def build_core_prompt_dialog(ctrl: Controller):
+    with vuetify.VDialog(v_model=("show_core_dialog",), max_width=560, persistent=True):
+        with vuetify.VCard():
+            vuetify.VCardTitle("Core Properties", classes="text-subtitle-1")
+            vuetify.VDivider()
+            with vuetify.VCardText(classes="pt-4"):
+                html.Div(
+                    "This file does not specify all core properties. "
+                    "Confirm the values below and provide the missing ones.",
+                    classes="text-caption text--secondary mb-3",
+                )
+
+                html.Div("Determined from the file:", classes="text-caption mb-1",
+                         v_if="Object.keys(core_prompt.inferred || {}).length")
+                with vuetify.VSimpleTable(dense=True,
+                                          v_if="Object.keys(core_prompt.inferred || {}).length"):
+                    with html.Tbody():
+                        with html.Tr(v_for="(item, key) in core_prompt.inferred", key="key"):
+                            html.Td("{{ key }}")
+                            html.Td("{{ item.value }}")
+                            html.Td("{{ item.source }}", classes="text--secondary")
+
+                vuetify.VDivider(classes="my-3")
+
+                with html.Div(v_if="core_prompt.missing && core_prompt.missing.npin"):
+                    html.Div("Pins across an assembly:", classes="text-caption mb-1 mt-2")
+                    with html.Div(classes="d-flex align-center", style="gap: 16px;"):
+                        vuetify.VTextField(
+                            v_model=("core_answer_npin",),
+                            type="number",
+                            hide_details=True,
+                            dense=True,
+                            disabled=("core_none_npin",),
+                            style="max-width: 120px;",
+                        )
+                        vuetify.VCheckbox(
+                            v_model=("core_none_npin",),
+                            label="No pins",
+                            hide_details=True,
+                            dense=True,
+                            classes="mt-0 pt-0",
+                        )
+
+                with html.Div(v_if="core_prompt.missing && core_prompt.missing.nax"):
+                    html.Div("Number of axial layers:", classes="text-caption mb-1 mt-2")
+                    vuetify.VTextField(
+                        v_model=("core_answer_nax",),
+                        type="number",
+                        hide_details=True,
+                        dense=True,
+                        style="max-width: 120px;",
+                    )
+
+                vuetify.VAlert(
+                    "{{ file_error }}",
+                    v_if="file_error",
+                    type="error",
+                    dense=True,
+                    text=True,
+                    classes="mt-3 mb-0",
+                )
+            vuetify.VDivider()
+            with vuetify.VCardActions(classes="px-4 py-3"):
+                vuetify.VSpacer()
+                with vuetify.VBtn(text=True, click=ctrl.cancel_core_props):
+                    html.Span("Cancel")
+                with vuetify.VBtn(color="primary", click=ctrl.submit_core_props):
+                    html.Span("Load File")

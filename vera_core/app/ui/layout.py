@@ -142,6 +142,7 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
     DiffMenu.build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
+    FileMenu.build_core_prompt_dialog(ctrl)
     SaveSession.build_session_menu_dialog(ctrl)
     StreamMenu.build_stream_dialog(ctrl)
     LocateMenu.build_locate_dialog(state, ctrl, registry) 

@@ -325,6 +325,19 @@ def _nearest_nonzero_ij(array, j, i):
     nj, ni = cells[np.argmin(d)]
     return int(nj), int(ni)
 
+FALLBACK_AXIAL_MESH = np.array([0,20,40,60])
+DEFAULT_AXIAL_MESH_STEP = 20
+
+class CorePropMissing(Exception):
+    """The file doesn't specify everything needed to build the core.
+
+    missing:  {key: {"label": str, "allow_none": bool}}  — what to ask for
+    inferred: {key: {"value": Any, "source": str}}       — what was determined
+    """
+    def __init__(self, missing: dict, inferred: dict):
+        self.missing = missing
+        self.inferred = inferred
+        super().__init__(f"Core props missing: {', '.join(missing)}")
 class VeraOutCore(LazyHDF5Loader):
     """Holds the core-level data for a VERA output file (the /CORE group).
 
@@ -338,7 +351,7 @@ class VeraOutCore(LazyHDF5Loader):
     core_sym: H5_ARRAY_TYPE = None
     pin_volumes: H5_ARRAY_TYPE = None
 
-    def __init__(self, f: "h5py.File", aspect_ratio: float | None = None,):
+    def __init__(self, f: "h5py.File", aspect_ratio: float | None = None, overrides : dict[str, int] = {}):
         """Build the core from an open h5 file.
 
         Pass f to read the /CORE datasets from the file
@@ -348,14 +361,16 @@ class VeraOutCore(LazyHDF5Loader):
             aspect_ratio: dx / dy of a pin cell
         """
         self.f = f
+
         super().__init__(f, "/CORE", list(self.__annotations__))
         self.aspect_ratio = f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1 # dx / dy
         self._cache_all()
         if not hasattr(self, "core_map") or self.core_map is None:
             raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
-        if not hasattr(self, "axial_mesh") or self.axial_mesh is None:
-            raise RuntimeError("[ERROR} axial_mesh not found in h5 file, unable to visualize data")
-        self._determine_core_shape()
+        self._determine_core_shape(overrides)
+        self._check_missing()
+        if not self.has_axial_mesh():
+            self.axial_mesh = FALLBACK_AXIAL_MESH
         self._determine_computational_core_shape()
         self._shape_to_dtype = build_core_dtypes(npiny=self.npy, npinx=self.npx, nax=self.nax, nass=self.nass,
                                                  comp_nax=self.comp_nax, comp_nass=self.comp_nass)
@@ -364,30 +379,71 @@ class VeraOutCore(LazyHDF5Loader):
         self.compute_control_rod_positions()
         self.compute_axial_mesh_means()
 
-    def _determine_core_shape(self):
+    def has_axial_mesh(self):
+        return hasattr(self, "axial_mesh") and self.axial_mesh is not None
+
+    def _determine_core_shape(self, overrides : dict[str, int] = {}):
         cm = self.core_map
-        self.nass = np.count_nonzero(np.unique(cm[~np.isnan(cm)]))
-        self.nax = len(self.axial_mesh) - 1
-        self.npy = 0 # if the core only contains assembly and axial data, then npy and npx will be zero
-        self.npx = 0
+        self.nass = int(np.count_nonzero(np.unique(cm[~np.isnan(cm)])))
+        self.nax = None
+        self.npy = None
+        self.npx = None
+        self._npin_src = self._nax_src = "Could not find"   
+
         core_group = self.f["CORE"]
+
         if "npin" in core_group:
-            npin = core_group["npin"]
-            self.npy, self.npx = npin, npin
+            npin = int(core_group["npin"][()])
+            self.npy = self.npx = npin
+            self._npin_src = "/CORE/npin"
         elif "num_pins" in core_group:
-            num_pins = core_group["num_pins"]
-            self.npy, self.npx = num_pins, num_pins
+            num_pins = int(core_group["num_pins"][()])
+            self.npy = self.npx = num_pins
+            self._npin_src = "/CORE/num_pins"
         if "pin_factors" in core_group:
             self.npy, self.npx, self.nax, self.nass = core_group["pin_factors"].shape
+            self._npin_src = self._nax_src = "/CORE/pin_factors"
         elif "pin_heated_surface_area" in core_group:
             self.npy, self.npx, self.nax, self.nass = core_group["pin_heated_surface_area"].shape
+            self._npin_src = self._nax_src = "/CORE/pin_heated_surface_area"
         elif hasattr(self, "pin_volumes") and self.pin_volumes is not None:
             self.npy, self.npx, self.nax, self.nass = np.shape(self.pin_volumes)
+            self._npin_src = self._nax_src = "/CORE/pin_volumes"
         elif "STATE_0001/pin_powers" in self.f:
             # if no pin_volumes see if state contains pin_powers as a source for core_shape
             self.npy, self.npx, self.nax, self.nass = np.shape(self.f["STATE_0001/pin_powers"])
-        print(self.core_shape)
+            self._npin_src = self._nax_src = "/STATE_0001/pin_powers"
         
+        if "npin" in overrides:
+            self.npy = self.npx = overrides["npin"]
+            self._npin_src = "Overrides"
+        if "nax" in overrides:
+            nax = overrides["nax"]
+            self.nax = nax
+            self.axial_mesh = np.linspace(0, (nax + 1) * DEFAULT_AXIAL_MESH_STEP, nax + 1)
+            self._nax_src = "Overrides"
+        elif self.has_axial_mesh():
+            self.nax = len(self.axial_mesh) - 1
+            self._nax_src = "/CORE/axial_mesh"
+        
+        if not self.has_axial_mesh() and self.nax:
+            self.axial_mesh = np.linspace(0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
+    
+    def _check_missing(self):
+        missing = {}
+        inferred = {"nass": {"value": int(self.nass), "source": "/CORE/core_map"}}
+        if self.npy is None or self.npx is None:
+            missing["npin"] = {"label": "Pins across an assembly", "allow_none": True}
+        else:
+            inferred["npin"] = {"value": int(self.npy),  "source": self._npin_src}
+        if self.nax is None:
+            missing["nax"] = {"label" : "Number of axial layers", "allow_none" : False}
+        else:
+            inferred["nax"] = {"value": int(self.nax),  "source": self._nax_src}
+        if missing:
+            print('missing:', missing)
+            raise CorePropMissing(missing, inferred)
+
     def _determine_computational_core_shape(self):
         self.comp_nass = None
         self.comp_nax = None
@@ -414,12 +470,18 @@ class VeraOutCore(LazyHDF5Loader):
 
     @property
     def core_shape(self) -> tuple[int, ...]:
-        """Shape of core (num_piny, num_pinx, num_axial_levels, num_assemblys)"""
+        """Shape of core (num_piny, num_pinx, num_axial_levels, num_assemblys).
+        npy/npx are 0 when the core has no pin lattice."""
+        if self.npy is None or self.npx is None or self.nax is None:
+            raise RuntimeError("Core pin lattice is undetermined; complete characteristics first")
         return (self.npy, self.npx, self.nax, self.nass)
     
     @property
     def comp_core_shape(self) -> tuple[int, ...]:
-        """Shape of computational core (num_piny, num_pinx, num_computational_axial_levels, num_computational_assemblys)"""
+        """Shape of computational core (num_piny, num_pinx, num_computational_axial_levels, num_computational_assemblys)
+        npy/npx are 0 when the core has no pin lattice."""
+        if self.npy is None or self.npx is None or self.comp_nax is None or self.comp_nass is None:
+            raise RuntimeError("Core pin lattice is undetermined; complete characteristics first")
         return (self.npy, self.npx, self.comp_nax, self.comp_nass)
     
     def core_dtypes(self, dataset_shape : tuple[int, ...]) -> VeraDtype:

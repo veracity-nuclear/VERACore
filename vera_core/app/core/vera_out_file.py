@@ -3,10 +3,10 @@ import numpy as np
 import os
 from scipy.interpolate import make_interp_spline
 from .vera_tools.VERAout import VERAout
-from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, build_core_dtypes, VeraOutCore, VeraOutState
+from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, build_core_dtypes, VeraOutCore, VeraOutState, CorePropMissing
 class VeraOutFile(VeraDataSource):
     
-    def __init__(self, filename):
+    def __init__(self, filename : str, core_overrides: dict = {}):
         """Open a VERA output file and build its core and state objects.
 
         Opens two handles on the file (a direct h5py.File and a VERAout
@@ -16,15 +16,18 @@ class VeraOutFile(VeraDataSource):
         self._file_path = filename
         self.f = h5py.File(filename, "r", locking=False)
         try:
-            self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+            try:
+                self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+            except Exception as e:
+                self.vera_calculator = None
+            self._states = []
+            self._core = VeraOutCore(self.f, overrides=core_overrides)
+            self._create_states()
+            self.active_state_index = 0
+            self._determine_time_axes()
         except Exception as e:
-            self.vera_calculator = None
-        self._states = []
-        self._core = VeraOutCore(self.f)
-        self._core._cache_all()
-        self._create_states()
-        self.active_state_index = 0
-        self._determine_time_axes()
+            self.f.close()
+            raise e
 
     def _determine_time_axes(self):
         self._time_axes = {}

@@ -289,6 +289,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
                                     color_preset="jet",
+                                    units=(f"color_units_{view_id}",)
                                 )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"

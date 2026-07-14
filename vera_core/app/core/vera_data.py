@@ -118,15 +118,17 @@ class DerivationMethod(StrEnum):
     RMS = "Root Mean Square"
 class VeraDataset(np.ndarray):
     """Numpy array tagged with a vera dtype"""
-    def __new__(cls, data, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+    def __new__(cls, data, dataset_type : VeraDtype = VeraDtype.UNKNOWN, physical_units : str = "unitless"):
         obj = np.asarray(data).view(cls)
         obj.dataset_type = dataset_type
+        obj.physical_units = physical_units
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None:
             return
         self.dataset_type : VeraDtype = getattr(obj, "dataset_type", VeraDtype.UNKNOWN)
+        self.physical_units: str = getattr(obj, "physical_units", "unitless")
     
     def is_computational(self) -> bool:
         return self.dataset_type.is_computational()
@@ -252,13 +254,15 @@ class LazyHDF5Loader:
         """
         if not self._in_h5(name):
             return None
-        raw = self._load_dataset(name)[()]
+        h5_ref = self._load_dataset(name)
+        units = h5_ref.attrs["physical_units"] if "physical_units" in h5_ref.attrs else "unitless"
+        raw = h5_ref[()]
         shape = np.shape(raw)
         dtype = VeraDtype.UNKNOWN
         if self._dataset_dtypes and self._dataset_dtypes.get(shape) is not None:
             dtype = self._dataset_dtypes.get(shape)
         arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
-        return VeraDataset(arr, dtype)
+        return VeraDataset(arr, dtype, units)
 
     def _cache(self, name) -> None:
         """Read a dataset and store it as an instance attribute."""
@@ -723,7 +727,7 @@ class VeraOutState(LazyHDF5Loader):
         
         def _loop_through_datasets(h5_group, group_name=""):
             for ds_name in h5_group.keys():
-                ds = h5_group[ds_name]
+                ds : h5py.Group | h5py.Dataset = h5_group[ds_name]
                 full_name = "/".join(part for part in (group_name, ds_name) if part)
                 if isinstance(ds, h5py.Group): # recurse on group (subdir)
                     _loop_through_datasets(ds, group_name=full_name)
@@ -857,6 +861,21 @@ class VeraDataSource(ABC):
             return getattr(self.active_state, array_name).dataset_type
         else:
             return VeraDtype.UNKNOWN
+    
+    def array_units(self, array_name : str) -> str:
+        """Return the units of a named array, or "unitless" if not found.
+        Resolves against the core for core arrays and the active state otherwise.
+        """
+        arrays_on_core = [
+            "pin_volumes",
+        ]
+        if array_name in arrays_on_core:
+            # This one is on the core
+            return getattr(self.core, array_name).physical_units
+        if self.active_state.has_dataset(array_name) and isinstance(getattr(self.active_state, array_name), VeraDataset):
+            return getattr(self.active_state, array_name).physical_units
+        else:
+            return "unitless"
 
     @abstractmethod
     def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : "VeraDataSource", comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):

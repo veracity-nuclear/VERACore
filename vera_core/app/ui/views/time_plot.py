@@ -49,6 +49,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             ny, nx, nax, nass, _, _ = indices
             assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
             axial_label = src.core.axial_mesh_means[nax] if not is_comp else src.core.comp_axial_mesh_means[nax]
+            units = src.array_units(array_name)
+            units_label = f" ({units}) " if units != "unitless" else ""
             indices_list = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
@@ -100,7 +102,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         x=time_axis,
                         y=values,
                         mode="lines",
-                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{group_label + identifier}",
+                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{units_label}{group_label + identifier}",
                     )
                 )
 

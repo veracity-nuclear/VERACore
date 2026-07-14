@@ -172,6 +172,7 @@ class VerticalColorMapEditor(HtmlElement):
             "value",
             ("color_preset", "colorPreset"),
             "busy",
+            "units",
         ]
         self._event_names += [
             "input",

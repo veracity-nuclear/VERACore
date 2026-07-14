@@ -111,4 +111,5 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}",
                 color_preset="jet",
+                units=(f"color_units_{view_id}",)
             )

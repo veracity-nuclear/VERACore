@@ -164,6 +164,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state[f"selected_src_id_{view_id}"] = registry.default_src_id
         for g in range(MAX_NUM_GROUPS):
             state[f"color_range_{view_id}_{g}"] = (0.0, 1.0)
+        state[f"color_units_{view_id}"] = "unitless"
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         state[f"selected_label_{view_id}"] = format_label(registry.default_src_id, "pin_powers")
         state[f"locked_{view_id}"] = False
@@ -226,6 +227,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}", f"locked_{view_id}")
         def _on_card_array_change(**kwargs):
             _recompute_card_range(view_id)
+            if (src := registry.get(state[f"selected_src_id_{view_id}"])) is not None:
+                state[f"color_units_{view_id}"] = src.array_units(state[f"selected_array_{view_id}"])
         return _on_card_array_change
     
     def _make_option_watcher(view_id):

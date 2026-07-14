@@ -41,6 +41,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             full_array = src.array(array_name)
+            units = full_array.physical_units
+            units_label = f" ({units}) " if units != "unitless" else ""
             array_dtype : VeraDtype = full_array.dataset_type
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
@@ -86,7 +88,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         x=axial_array,
                         y=axial_mesh_means,
                         mode="lines",
-                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier + group_label}",
+                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{units_label}{identifier + group_label}",
                     )
                 )
 

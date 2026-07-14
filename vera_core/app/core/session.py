@@ -14,7 +14,6 @@ SESSION_GLOBAL_KEYS = [
     "selected_surface", 
     "dark_mode",
     "max_layer", 
-    "recent_file_paths",
     "thresholds", 
     ]
 
@@ -42,9 +41,16 @@ class Session:
     views: list[ViewSession]
     recipes: list[dict] = field(default_factory=list)
 
-def derive_recipe(src_id, source_array, name, method, axes) -> dict:
-    return {"kind": "derive", "src_id": src_id, "source_array": source_array,
-            "name": name, "method": method, "axes": axes}
+def derive_recipe(src_id, source_array, name, method, axes, use_factors, exclude_non_fuel_rods) -> dict:
+    return {"kind": "derive", 
+            "src_id": src_id, 
+            "source_array": source_array,
+            "name": name, 
+            "method": method, 
+            "axes": axes, 
+            "use_factor" : use_factors, 
+            "exclude_fuel_rods" : exclude_non_fuel_rods,
+    }
 
 def diff_recipe(ref_src_id, ref_array, comp_src_id, comp_array, name, interp_degree) -> dict:
     return {"kind": "diff", "ref_src_id": ref_src_id, "ref_array": ref_array,

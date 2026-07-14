@@ -441,7 +441,6 @@ class VeraOutCore(LazyHDF5Loader):
         else:
             inferred["nax"] = {"value": int(self.nax),  "source": self._nax_src}
         if missing:
-            print('missing:', missing)
             raise CorePropMissing(missing, inferred)
 
     def _determine_computational_core_shape(self):

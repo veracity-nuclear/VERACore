@@ -49,7 +49,8 @@ class VeraOutFile(VeraDataSource):
 
     def close(self):
         self.f.close()
-        self.vera_calculator.h5f.close()
+        if self.vera_calculator is not None:
+            self.vera_calculator.h5f.close()
 
     def _create_states(self):
         """Build a VeraOutState for every STATE_ group found in the file."""
@@ -59,7 +60,8 @@ class VeraOutFile(VeraDataSource):
 
     def default_datasets(self):
         categorized_ds_names = self.active_state.categorized_ds_names
-        default_names = {category.title : sorted(categorized_ds_names[category])[0] for category in categorized_ds_names if len(categorized_ds_names[category]) > 0}
+        default_names = {category.title : sorted(categorized_ds_names[category])[0] 
+                         for category in categorized_ds_names if category != VeraDtype.UNKNOWN and len(categorized_ds_names[category]) > 0}
         if not default_names:
             return None
         if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, "none"):
@@ -152,7 +154,7 @@ class VeraOutFile(VeraDataSource):
                 raise ValueError(f"Derivation: {axes} not implemented")
         return der
     
-    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes):
+    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes, use_factors : bool = True):
         if not self.vera_calculator:
             return
         for state in self._states:

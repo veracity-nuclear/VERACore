@@ -74,6 +74,8 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
             name=state["derived_name"],
             method=state["derivation_method"],
             axes=state["axes_to_derive"],
+            use_factors=state["derivation_use_factors"],
+            exclude_non_fuel_rods=state["derivation_exclude_non_fuel"],
         )
         registry.apply_recipe(recipe)
         state.recipes = state.recipes + [recipe]

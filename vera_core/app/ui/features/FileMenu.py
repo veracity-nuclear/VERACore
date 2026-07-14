@@ -5,6 +5,7 @@ from trame_server.core import Controller, State
 from vera_core.app.core import VeraDataRegistry, VeraOutFile, recipe_sources, CorePropMissing
 from .DatasetPicker import refresh_src_tree
 from .file_picker_entry import launch_picker
+from .appdata import load_prefs, save_prefs
 
 file_menu_state_initialized = False
 
@@ -21,13 +22,12 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     state.show_file_dialog = False
     state.file_error = ""
     state.file_path = ""
-    state.core_overrides = {}
     state.core_prompt = {}
     state.core_answer_npin = None
     state.core_none_npin = False
     state.core_answer_nax = None
     state.show_core_dialog = False
-    state.recent_file_paths = []
+    state.recent_file_paths, state.core_overrides = load_prefs()
 
     @ctrl.set("open_file_dialog")
     def open_file_dialog():
@@ -77,10 +77,28 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
                 state.core_answer_nax = None
                 state.show_core_dialog = True
                 return
+            if not src.default_datasets():
+                had_override = raw_path in state.core_overrides
+                if had_override:
+                    state.core_overrides = {k: v for k, v in state.core_overrides.items() if k != raw_path}
+                    save_prefs(state.recent_file_paths, state.core_overrides)
+                    state.file_error = (
+                        "No datasets match the core properties you entered. "
+                        "Please check the values and try again."
+                    )
+                    state.file_path = raw_path
+                    load_file() # re-prompt
+                    return
+                state.file_error = (
+                    "No datasets in this file match its core geometry. "
+                    "The file may be malformed or use an unsupported layout."
+                )
+                return 
             registry.add_src(src, src_id=pathobj.stem)
             state.max_layer = len(registry.global_axial_mesh) - 1
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
+            save_prefs(state.recent_file_paths, state.core_overrides)
             refresh_src_tree(state, registry)
             state.file_path = ""
             state.file_error = ""
@@ -99,6 +117,11 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
         except Exception as e:
             print(e)
             state.file_error = f"Could not remove file: {file_id}"
+    
+    @ctrl.set("cancel_core_props")
+    def cancel_core_props():
+        _reset_core_prompt()
+        state.file_path = ""
 
     @ctrl.set("submit_core_props")
     def submit_core_props():
@@ -150,6 +173,16 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
         state.show_core_dialog = False
         state.core_prompt = {}
         state.file_error = ""
+    
+    @ctrl.set("clear_core_override")
+    def clear_core_override(path):
+        state.core_overrides = {k: v for k, v in state.core_overrides.items() if k != path}
+        save_prefs(state.recent_file_paths, state.core_overrides)
+        src_id = Path(path).stem
+        if src_id in registry:
+            ctrl.remove_source(src_id)
+            state.file_path = path
+            load_file()
     
     global file_menu_state_initialized
     file_menu_state_initialized = True
@@ -227,6 +260,17 @@ def build_file_menu_dialog(ctrl: Controller):
                         click=(ctrl.load_recent, "[p]"),
                     ):
                         vuetify.VListItemTitle("{{ p }}")
+                html.Div("Saved core properties:", classes="text-caption mt-3 mb-1",
+                         v_if="Object.keys(core_overrides).length")
+                with vuetify.VList(dense=True, v_if="Object.keys(core_overrides).length"):
+                    with vuetify.VListItem(v_for="(vals, path) in core_overrides", key="path"):
+                        with vuetify.VListItemContent():
+                            vuetify.VListItemTitle("{{ path }}")
+                            vuetify.VListItemSubtitle("{{ JSON.stringify(vals) }}")
+                        with vuetify.VListItemAction():
+                            with vuetify.VBtn(icon=True, x_small=True,
+                                              click=(ctrl.clear_core_override, "[path]")):
+                                vuetify.VIcon("mdi-close", small=True)
 
                 vuetify.VAlert(
                     "{{ session_error }}",

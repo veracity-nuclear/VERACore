@@ -62,16 +62,19 @@ def build_toolbar(tb, ctrl: Controller, registry):
         vuetify.VIcon("mdi-plus")
 
 
-def build_grid_card(ctrl : Controller):
+def build_grid_card(ctrl: Controller):
     with grid.GridItem(
-                v_for="item in grid_layout",
-                key="item.i",
-                v_bind="item",
-                style="touch-action: none;",
-                drag_ignore_from=".drag_ignore",
+        v_for="item in grid_layout",
+        key="item.i",
+        v_bind="item",
+        style="touch-action: none;",
+        drag_ignore_from=".drag_ignore",
     ):
-        with vuetify.VCard(style="height: 100%;", key="grid_item_dirty_key"):
-            with vuetify.VCardTitle(classes="py-1 px-1"):
+        with vuetify.VCard(
+            style="height: 100%; display: flex; flex-direction: column;",
+            key="grid_item_dirty_key",
+        ):
+            with vuetify.VCardTitle(classes="py-1 px-1", style="flex: 0 0 auto;"):
                 with vuetify.VMenu(offset_y=True):
                     with vuetify.Template(v_slot_activator="{ on, attrs }"):
                         with vuetify.VBtn(icon=True, small=True, v_bind="attrs", v_on="on"):
@@ -92,13 +95,17 @@ def build_grid_card(ctrl : Controller):
                             with vuetify.VListItemIcon():
                                 vuetify.VIcon(v_text="option.icon")
                             vuetify.VListItemTitle("{{ option.label }}")
+
                 vuetify.VSpacer()
+
                 with vuetify.Template(v_if=("!get(`grid_view_${item.i}`).multi_picker",)):
-                    DatasetPicker.build_dataset_picker(ctrl, "selected_label_${item.i}", 
-                                                       "select_dataset", 
-                                                       "[item.i, src, entry.value]",
-                                                       "get(`grid_view_${item.i}`).allowed_categories"
-                                                       )
+                    DatasetPicker.build_dataset_picker(
+                        ctrl,
+                        "selected_label_${item.i}",
+                        "select_dataset",
+                        "[item.i, src, entry.value]",
+                        "get(`grid_view_${item.i}`).allowed_categories",
+                    )
                 with vuetify.Template(v_if=("get(`grid_view_${item.i}`).multi_picker",)):
                     DatasetPicker.build_dataset_multi_picker(
                         ctrl,
@@ -106,9 +113,11 @@ def build_grid_card(ctrl : Controller):
                         "multi_selected_${item.i}",
                         "toggle_multi_array",
                         "[item.i, src, entry.value]",
-                        "get(`grid_view_${item.i}`).allowed_categories"
+                        "get(`grid_view_${item.i}`).allowed_categories",
                     )
+
                 vuetify.VSpacer()
+
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
@@ -118,7 +127,9 @@ def build_grid_card(ctrl : Controller):
                         v_text="get(`locked_${item.i}`) ? 'mdi-lock' : 'mdi-lock-open-variant'",
                         small=True,
                     )
+
                 vuetify.VSpacer()
+
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
@@ -130,8 +141,9 @@ def build_grid_card(ctrl : Controller):
 
             style = "; ".join([
                 "position: relative",
-                "height: calc(100% - 37px)",
-                "overflow: auto",
+                "flex: 1 1 0",
+                "min-height: 0",
+                "overflow : auto",
             ])
             with vuetify.VCardText(style=style, classes="drag_ignore"):
                 client.ServerTemplate(name=("get(`grid_view_${item.i}`).name",))
@@ -164,7 +176,7 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
             key=("grid_rebuild_key",),
             layout=("grid_layout", []),
             row_height=30,
-            vertical_compact=True,
+            vertical_compact=False,
             style="width: 100%; height: 100%;",
         ):
             build_grid_card(ctrl)

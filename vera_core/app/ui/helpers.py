@@ -44,7 +44,7 @@ def set_info(view_id : int, state : State, registry : VeraDataRegistry):
     if vera_source.active_state.has_dataset("exposure"):
         exposure = vera_source.active_state.exposure[0]
     state[f"label_info_{view_id}"] = {
-            "Exposure": np.round(exposure, decimals=3) if exposure is not None else "none recorded",
+            "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
             "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
             "Layer": np.round(axial_mesh[layer], decimals=2),
             "Pin_x" : int(i),
@@ -56,12 +56,6 @@ def _get_assy_idx(ds_dtype : VeraDtype, state : State, src_core : VeraOutCore):
     i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
     assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp)
     return assy
-    # if is_comp and hasattr(state, "selected_comp_assembly"):
-    #     return int(state["selected_comp_assembly"])
-    # elif not is_comp and hasattr(state, "selected_assembly"):
-    #     return int(state["selected_assembly"])
-    # else:
-    #     raise RuntimeError("Unable to determine which assembly idx to use")
 
 def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel_src_id : str | None = None, sel_dataset_name : str | None = None) -> tuple | None:
     """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name)"""

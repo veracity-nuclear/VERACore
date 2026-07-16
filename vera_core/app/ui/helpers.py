@@ -5,7 +5,7 @@ from trame_server.core import State
 from vera_core.app.core import VeraDataSource, VeraDtype, VeraOutCore, VeraDataRegistry, NUM_NODES
 
 def format_label(file : str, key : str):
-    return f"{file} | {key.replace('_', ' ').upper()}"
+    return f"{key.replace('_', ' ').upper()} | {file}"
 
 def array_range(array):
     lo = float(np.nanmin(array))

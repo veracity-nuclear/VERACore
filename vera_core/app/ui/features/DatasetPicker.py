@@ -40,8 +40,16 @@ def register_dataset_picker_state(state : State, registry : VeraDataRegistry):
     refresh_src_tree(state, registry)
 
 def _make_label(selected_label_arg: str):
-    """helper method for creatign a JS span that contains the str contents of the python selected_label_arg """
-    return html.Span(f"{{{{ get(`{selected_label_arg}`) }}}}")
+    """helper method for creating a JS span that shows selected_label_arg, truncating with an ellipsis when it's too long for the picker button"""
+    return html.Span(
+        f"{{{{ get(`{selected_label_arg}`) }}}}",
+        style=(
+            "max-width: 26ch;"
+            "overflow: hidden;"
+            "text-overflow: ellipsis;"
+            "white-space: nowrap;"
+        ),
+    )
 
 def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: str = "_noop", ctrl_func_args: str = "[]", allowed_arg=None):
     """Create trame UI for selecting a single dataset to be visualized

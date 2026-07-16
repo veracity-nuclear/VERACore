@@ -207,7 +207,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         mesh_pixels = core.comp_axial_mesh_pixels if is_comp else core.axial_mesh_pixels
         mesh_means = core.comp_axial_mesh_means if is_comp else core.axial_mesh_means
-        state[size_y_key] = mesh_pixels.tolist()
+        state[size_y_key] = mesh_pixels[::-1].tolist()
         state[label_y_key] = [np.round(m, 1) for m in mesh_means][::-1]
 
         nb_cols = 0

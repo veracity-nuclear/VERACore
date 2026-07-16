@@ -136,6 +136,7 @@ def build_derived_dialog(state, ctrl, registry):
                                 label="Use Factors",
                                 hide_details=True,
                                 dense=True,
+                                disabled=True,
                             )
                         with vuetify.VCol(cols="auto", classes="pa-0 pl-4"):
                             vuetify.VCheckbox(
@@ -143,6 +144,7 @@ def build_derived_dialog(state, ctrl, registry):
                                 label="Exclude Non-Fuel Rods",
                                 hide_details=True,
                                 dense=True,
+                                disabled=True,
                             )
                 with vuetify.VCard(outlined=True, classes="pa-3"):
                     html.Div("4. Enter New Dataset Name", classes="text-caption font-weight-medium mb-2")

@@ -20,6 +20,8 @@ export default {
     },
     xLabels: { type: Array, default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] },
     yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
+    assemblySize: { type: Number, default: 0 },
+    coreCols: { type: Number, default: 0 }, 
     scaling: { type: Number, default: 2 },
     busy: { type: Boolean, default: false },
     labels: { type: Array, default: () => [] },
@@ -52,32 +54,35 @@ export default {
   },
   computed: {
     coreWidth() {
-      return this.value?.[0]?.length || 0;
+      return this.coreCols || (this.value || []).reduce((m, r) => Math.max(m, r.length), 0);
     },
     assemblyWidth() {
-      return Math.sqrt(this.value?.[0]?.[0]?.length || 0);
+      return this.assemblySize;
     },
     colorMap() {
       return this.lookupTable.update(this.colorPreset, this.colorRange);
     },
     images() {
       this.imagesReady;
-      const array = this.value;
+      const array = this.value || [];
       const lut = this.colorMap;
       const width = this.assemblyWidth;
       const images = [];
       for (let j = 0; j < array.length; j++) {
-        const line = array[j];
+        const line = array[j] || [];
         const lineImages = [];
         images.push(lineImages);
         for (let i = 0; i < line.length; i++) {
+          const cell = line[i];
           lineImages.push(
-            toImageURL(lut, line[i], width, width, this.scaling, this.scaling)
+            Array.isArray(cell) && cell.length
+              ? toImageURL(lut, cell, width, width, this.scaling, this.scaling)
+              : null
           );
         }
       }
       return images;
-    },
+    }
   },
   created() {
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -94,6 +99,10 @@ export default {
     this.resizeObserver = null;
   },
   methods: {
+    isFilled(i, j) {
+      const cell = this.value?.[j]?.[i];
+      return Array.isArray(cell) && cell.length > 0;
+    },
     resize() {
       const target = this.measureTarget || this.$el;
       const { width, height } = target.getBoundingClientRect();

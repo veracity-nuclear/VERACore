@@ -42,9 +42,9 @@
           outlined
           class="ma-0 pa-0"
           :style="toStyle(i, j)"
-          :class="{ busy, pointerCursor: !busy }"
-          @click="$emit('click', { i, j })"
-          @mouseenter="hover(i, j)"
+          :class="{ busy, pointerCursor: !busy && isFilled(i, j) }"
+          @click="isFilled(i, j) && $emit('click', { i, j })"
+          @mouseenter="isFilled(i, j) && hover(i, j)"
           @mouseleave="exit"
         >
           <div style="position: relative; width: 100%; height: 100%;">

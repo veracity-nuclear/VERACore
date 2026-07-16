@@ -5,7 +5,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS
+from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS, NUM_NODES
 from vera_core.app.core.thresholds import apply_thresholds
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
 
@@ -46,6 +46,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     label_keys = [f"core_labels_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
     x_label_key = f"core_view_x_labels_{view_id}"
     y_label_key = f"core_view_y_labels_{view_id}"
+    core_cols_key = f"core_cols_{view_id}"
+    assembly_size_key = f"assembly_size_{view_id}"
     
     for gk in group_keys:
         state.setdefault(gk, [])
@@ -59,29 +61,31 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(aspect_ratio_key, 1)
     state.setdefault(x_label_key, [])
     state.setdefault(y_label_key, [])
+    state.setdefault(core_cols_key, 1)
+    state.setdefault(assembly_size_key, 1)
 
-    def _vis_pin_level_data(src : VeraDataSource, dataset : VeraDataset):
+    def _vis_pin_level_data(src, dataset):
         cm = src.core.comp_core_map if dataset.is_computational() else src.core.reduced_core_map
         is_assembly_avg = dataset.is_assembly()
         core_width = cm.shape[0]
         result = []
         labels = []
         for i in range(core_width):
-            line = []
-            if is_assembly_avg:
-                labels_line = []
-                labels.append(labels_line)
+            line = [None] * core_width
             result.append(line)
+            if is_assembly_avg:
+                labels_line = [None] * core_width
+                labels.append(labels_line)
             for j in range(core_width):
                 index = cm[i, j] - 1
                 if index == -1:
-                    continue   
+                    continue
                 if is_assembly_avg:
-                    line.append([float(dataset[index])])
-                    labels_line.append(np.round(dataset[index], 2))
+                    line[j] = [float(dataset[index])]
+                    labels_line[j] = np.round(dataset[index], 2)
                 else:
-                    line.append(np.ravel(dataset[index]).tolist())
-        return result, labels               
+                    line[j] = np.ravel(dataset[index]).tolist()
+        return result, labels        
     
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
@@ -102,6 +106,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
         raw_array = vera_source.array(selected_array)
         raw_array_dtype = raw_array.dataset_type
+        is_comp = raw_array_dtype.is_computational()
         if raw_array_dtype.title not in option_for(0)["allowed_categories"]:
             return
         layer_arrays = []
@@ -144,8 +149,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             num_rows = len(result) 
             state[f"core_assemblies_{view_id}_{idx}"] = result
             state[f"core_labels_{view_id}_{idx}"] = labels
-        state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
+        if is_comp:
+            state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
+        else:
+            state[y_label_key] = core.reduced_core_map_row_labels
         num_groups = len(layer_arrays)
+        state[core_cols_key] = core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
+        if raw_array_dtype.is_assembly():
+            state[assembly_size_key] = 1
+        elif raw_array_dtype.is_nodal():
+            state[assembly_size_key] = np.sqrt(NUM_NODES)
+        else:    
+            state[assembly_size_key] = core.core_shape[0] + (1 if raw_array_dtype.is_channel() else 0)
         for idx in range(num_groups, MAX_NUM_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = []
             state[f"core_labels_{view_id}_{idx}"] = []
@@ -191,6 +206,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     aspect_ratio=(aspect_ratio_key, 1),
                                     x_labels=(f"{x_label_key}",),
                                     y_labels=(f"{y_label_key}",),
+                                    assembly_size = (assembly_size_key,),
+                                    core_cols = (core_cols_key,),
                                     color_preset="jet",
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click="selected_assembly_ij = $event",

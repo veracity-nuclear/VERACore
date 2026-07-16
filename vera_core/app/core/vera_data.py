@@ -394,6 +394,7 @@ class VeraOutCore(LazyHDF5Loader):
         self._shape_to_dtype = build_core_dtypes(npiny=self.npy, npinx=self.npx, nax=self.nax, nass=self.nass,
                                                  comp_nax=self.comp_nax, comp_nass=self.comp_nass)
         self.compute_reduced_core_map()
+        self._determine_core_labels()
         self.compute_axial_mesh_pixels()
         self.compute_control_rod_positions()
         self.compute_axial_mesh_means()
@@ -522,7 +523,7 @@ class VeraOutCore(LazyHDF5Loader):
         if sym == 1:
             self.reduced_core_map = self.core_map[:].copy()
             self.reduced_core_map_start_index = 0   
-            self.comp_map_start_index = 0             
+            self.comp_map_start_index = 0
         elif sym == 4:
             w, h = self.core_map[:].shape
             start_w = w // 2
@@ -540,19 +541,30 @@ class VeraOutCore(LazyHDF5Loader):
                 self.comp_map_start_index = start_w
         else:
             raise Exception(f"Unhandled symmetry: {sym}")
-
-        num_cols = self.reduced_core_map.shape[1]
+    
+    def _determine_core_labels(self):
+        """Must be called AFTER `self.reduced_core_map` is set"""
+        num_rows, num_cols = self.reduced_core_map.shape
+        start_index = self.reduced_core_map_start_index if hasattr(self, "reduced_core_map_start_index") else 0
         alphabet = [*string.ascii_uppercase]
-        self.reduced_core_map_column_labels = list(reversed(alphabet[:num_cols]))
-        if self.has_comp_core():
-            comp_num_cols = self.comp_core_map.shape[1]
-            cols_dif = comp_num_cols - num_cols
-            if cols_dif > 0:
-                self.comp_core_map_column_labels = (
-                    self.reduced_core_map_column_labels + list(reversed(alphabet[num_cols:comp_num_cols]))
-                )
-            else:
-                self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
+
+        if "xlabel" in self.f["CORE"]:
+            xlabels = [char.decode() for char in self.f["CORE/xlabel"][()][start_index:]]
+        else:
+            xlabels = list(reversed(alphabet[:num_cols]))
+        self.reduced_core_map_column_labels = xlabels
+
+        if "ylabel" in self.f["CORE"]:
+            ylabels = [char.decode() for char in self.f["CORE/ylabel"][()][start_index:]]
+        else:
+            ylabels = list(range(start_index + 1, start_index + num_rows + 1))
+        self.reduced_core_map_row_labels = ylabels
+
+        if not self.has_comp_core():
+            return
+        comp_num_rows, comp_num_cols = self.comp_core_map.shape
+        self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
+        self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
 
     def compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -657,10 +669,10 @@ class VeraOutCore(LazyHDF5Loader):
     def reduced_core_map_row_label(self, assembly_idx, is_comp=False) -> str:
         """Return the row-number label for an assembly."""
         i, j = self.reduced_core_map_ij(assembly_idx, is_comp)
-        start_index = self.comp_map_start_index if is_comp and self.has_comp_core() else self.reduced_core_map_start_index
-        row_len = len(self.core_map) + 1 if not is_comp else len(self.comp_core_map) + start_index + 1
-        rows = list(range(start_index + 1, row_len))
-        return str(rows[j])
+        if is_comp and self.has_comp_core():
+            return self.comp_core_map_row_labels[j]
+        else:
+            return self.reduced_core_map_row_labels[j]
 
     def reduced_core_map_column_label(self, assembly_idx, is_comp=False) -> str:
         """Return the column-letter label for an assembly."""

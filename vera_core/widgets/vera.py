@@ -90,6 +90,8 @@ class CoreView(HtmlElement):
             ("active_style", ":activeStyle"),
             ("x_labels", "xLabels"),
             ("y_labels", "yLabels"),
+            ("assembly_size", "assemblySize"),
+            ("core_cols", "coreCols"),
             "dark",
             "scaling",
             "busy",

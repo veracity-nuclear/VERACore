@@ -109,26 +109,42 @@ class VeraOutFile(VeraDataSource):
         self._active_state_index = index
         self.active_state._cache_all()
     
-    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : VeraDataSource, comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
+    def add_new_diff_dataset(self, 
+                             ref_dataset_name: str, 
+                             comp_src : "VeraDataSource", 
+                             comp_dataset_name: str, 
+                             new_diff_name: str, 
+                             interpolation_order : int = 1,
+                             ref_scale : float = 1.0,
+                             comp_scale : float = 1.0,
+                             units : str = "unitless",
+    ):
+        produced = 0
         for idx, state in enumerate(self._states):
             if idx >= len(comp_src.states):
                 return
             if not state.has_dataset(ref_dataset_name) or not state.has_dataset(comp_dataset_name):
                 continue
-            ref_data : VeraDataset = getattr(state, ref_dataset_name)
-            comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name)
+            ref_data : VeraDataset = getattr(state, ref_dataset_name) * ref_scale
+            comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name) * comp_scale
             ref_axial_mesh_means = self.core.axial_mesh_means
             comp_axial_mesh_means = comp_src.core.axial_mesh_means
             if ref_data.dataset_type != comp_data.dataset_type:
                 continue
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
                 diff = ref_data - comp_data
-            else:
+            elif ref_data.dataset_type.has_axial_dim():
                 # all data dimensions that are not the axial dim must match between the two dataset
                 spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=ref_data.dataset_type.axial_dim_idx)
                 comp_data_on_ref_mesh = spl(ref_axial_mesh_means, extrapolate=False)
-                diff = ref_data - comp_data_on_ref_mesh
+                diff : VeraDataset = ref_data - comp_data_on_ref_mesh
+            else:
+                continue
+            diff.physical_units = units
             state.add_diff_dataset(new_diff_name, diff)
+            produced += 1
+        if produced == 0:
+            raise ValueError(f"No overlapping/compatible states to diff for '{new_diff_name}'")
     
     def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
         """Reduce data over the given axes using the VERAout calculator.

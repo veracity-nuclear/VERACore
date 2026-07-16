@@ -52,10 +52,18 @@ def derive_recipe(src_id, source_array, name, method, axes, use_factors, exclude
             "exclude_fuel_rods" : exclude_non_fuel_rods,
     }
 
-def diff_recipe(ref_src_id, ref_array, comp_src_id, comp_array, name, interp_degree) -> dict:
-    return {"kind": "diff", "ref_src_id": ref_src_id, "ref_array": ref_array,
-            "comp_src_id": comp_src_id, "comp_array": comp_array,
-            "name": name, "interp_degree": interp_degree}
+def diff_recipe(ref_src_id, ref_array, comp_src_id, comp_array, name, interp_degree, ref_scale, comp_scale, units) -> dict:
+    return {"kind": "diff", 
+            "ref_src_id": ref_src_id, 
+            "ref_array": ref_array,
+            "comp_src_id": comp_src_id, 
+            "comp_array": comp_array,
+            "name": name, 
+            "interp_degree": interp_degree,
+            "ref_scale" : ref_scale,
+            "comp_scale" : comp_scale,
+            "units" : units,
+    }
 
 def recipe_sources(recipe) -> set:
     """The src_ids a recipe depends on — used for load validation and save filtering."""

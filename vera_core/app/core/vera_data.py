@@ -64,6 +64,9 @@ class VeraDtype(Enum):
         if idx is None:
             raise ValueError(f"{self} has no axial dimension")
         return idx
+    
+    def has_axial_dim(self):
+        return self._info.axial_idx is not None
 
     def is_computational(self): return self._info.computational
     def is_nodal(self):         return self._info.nodal
@@ -209,6 +212,18 @@ def build_core_dtypes(npiny = None,
 
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
 
+def _get_units(h5_ref : h5py.Dataset):
+    units = "Unitless"
+    if "physical_units" in h5_ref.attrs:
+        units = h5_ref.attrs["physical_units"]
+    elif "units" in h5_ref.attrs:
+        units = h5_ref.attrs["units"]
+    if isinstance(units, np.ndarray):
+        units = units.item() if units.size == 1 else units.tolist()[0]
+    if isinstance(units, bytes):
+        units = units.decode()
+    return str(units)
+
 class LazyHDF5Loader:
     """Lazily exposes HDF5 datasets as attributes, reading on access.
 
@@ -255,7 +270,7 @@ class LazyHDF5Loader:
         if not self._in_h5(name):
             return None
         h5_ref = self._load_dataset(name)
-        units = h5_ref.attrs["physical_units"] if "physical_units" in h5_ref.attrs else "unitless"
+        units = _get_units(h5_ref)
         raw = h5_ref[()]
         shape = np.shape(raw)
         dtype = VeraDtype.UNKNOWN
@@ -825,6 +840,18 @@ class VeraDataSource(ABC):
     def active_state_index(self, index):
         """Set the active state, switching which state's data is exposed."""
         pass
+
+    def _get_dataset(self, ds_name : str) -> VeraDataset | None:
+        arrays_on_core = [ 
+            "pin_volumes",
+        ]
+        if ds_name in arrays_on_core and isinstance(getattr(self.core, ds_name), VeraDataset):
+            # This one is on the core
+            return getattr(self.core, ds_name)
+        if self.active_state.has_dataset(ds_name) and isinstance(getattr(self.active_state, ds_name), VeraDataset):
+            return getattr(self.active_state, ds_name)
+        else:
+            return None
     
     def array(self, array_name: str, mask_reflected: bool = True) -> VeraDataset:
         """Return a named array from the core or the active state.
@@ -834,51 +861,48 @@ class VeraDataSource(ABC):
         """
 
         # These are on the core
-        arrays_on_core = [
-            "pin_volumes",
-        ]
-        if array_name in arrays_on_core:
-            # This one is on the core
-            return getattr(self.core, array_name)
-        array : VeraDataset = getattr(self.active_state, array_name)
+        array = self._get_dataset(array_name)
+        if array is None:
+            RuntimeError(f"Could not find dataset/array named {array_name}.")
         cm = self.core.reduced_core_map if not array.dataset_type.is_computational() else self.core.comp_core_map
         is_even_core = self.core.is_even()
         if mask_reflected and not is_even_core:
             array = nan_out_reflected(cm, self.core.core_sym, array)
         return array
     
+
+        
     def array_dtype(self, array_name : str) -> VeraDtype:
         """Return the VeraDtype of a named array, or UNKNOWN if not found.
         Resolves against the core for core arrays and the active state otherwise.
         """
-        arrays_on_core = [
-            "pin_volumes",
-        ]
-        if array_name in arrays_on_core:
-            # This one is on the core
-            return getattr(self.core, array_name).dataset_type
-        if self.active_state.has_dataset(array_name) and isinstance(getattr(self.active_state, array_name), VeraDataset):
-            return getattr(self.active_state, array_name).dataset_type
-        else:
-            return VeraDtype.UNKNOWN
+        ds = self._get_dataset(array_name)
+        return ds.dataset_type if ds is not None else VeraDtype.UNKNOWN
     
     def array_units(self, array_name : str) -> str:
         """Return the units of a named array, or "unitless" if not found.
         Resolves against the core for core arrays and the active state otherwise.
         """
-        arrays_on_core = [
-            "pin_volumes",
-        ]
-        if array_name in arrays_on_core:
-            # This one is on the core
-            return getattr(self.core, array_name).physical_units
-        if self.active_state.has_dataset(array_name) and isinstance(getattr(self.active_state, array_name), VeraDataset):
-            return getattr(self.active_state, array_name).physical_units
-        else:
-            return "unitless"
-
+        ds = self._get_dataset(array_name)
+        return ds.physical_units if ds is not None else "Unitless"
+    
+    def array_shape(self, array_name : str) -> tuple:
+        """Return the shape of a named array, or an empty tuple if not found.
+        Resolves against the core for core arrays and the active state otherwise.
+        """
+        ds = self._get_dataset(array_name)
+        return tuple(np.shape(ds)) if ds is not None else tuple()
+    
     @abstractmethod
-    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : "VeraDataSource", comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
+    def add_new_diff_dataset(self, 
+                             ref_dataset_name: str, 
+                             comp_src : "VeraDataSource", 
+                             comp_dataset_name: str, 
+                             new_diff_name: str, 
+                             interpolation_order : int = 1,
+                             ref_scale : float = 1.0,
+                             comp_scale : float = 1.0,
+                             units : str = "unitless",):
         """Create a difference dataset (ref minus comp) on each state."""
         pass
 

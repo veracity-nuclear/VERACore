@@ -176,7 +176,7 @@ def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRe
             key=("grid_rebuild_key",),
             layout=("grid_layout", []),
             row_height=30,
-            vertical_compact=False,
+            vertical_compact=True,
             style="width: 100%; height: 100%;",
         ):
             build_grid_card(ctrl)

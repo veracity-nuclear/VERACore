@@ -170,6 +170,9 @@ class VeraDataRegistry:
                 recipe["comp_array"],
                 recipe["name"],
                 recipe["interp_degree"],
+                recipe["ref_scale"],
+                recipe["comp_scale"],
+                recipe["units"],
             )
         else:
             raise ValueError(f"Unknown recipe kind: {kind}")

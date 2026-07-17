@@ -1,5 +1,5 @@
 import numpy as np
-import operator
+import math
 
 from trame.ui.html import DivLayout
 from trame.widgets import html
@@ -29,6 +29,15 @@ def _nan_out_control_rods(array : np.ndarray, control_rod_positions):
     new_array = array.copy()
     new_array[:, rod_rows, rod_cols] = np.nan
     return new_array
+
+def _assembly_side(n: int) -> int:
+    """Pin-side length for a cell of n values. n must be a perfect square."""
+    if n <= 0:
+        return 0
+    side = math.isqrt(n)
+    if side * side != n:
+        raise ValueError(f"assembly cell length {n} is not a perfect square")
+    return side
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -155,12 +164,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state[y_label_key] = core.reduced_core_map_row_labels
         num_groups = len(layer_arrays)
         state[core_cols_key] = core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
-        if raw_array_dtype.is_assembly():
-            state[assembly_size_key] = 1
-        elif raw_array_dtype.is_nodal():
-            state[assembly_size_key] = np.sqrt(NUM_NODES)
-        else:    
-            state[assembly_size_key] = core.core_shape[0] + (1 if raw_array_dtype.is_channel() else 0)
+        
+        sample = next((c for row in result for c in row if isinstance(c, list) and c), None)
+        state[f"assembly_size_{view_id}"] = _assembly_side(len(sample)) if sample else 0
+        
         for idx in range(num_groups, MAX_NUM_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = []
             state[f"core_labels_{view_id}_{idx}"] = []

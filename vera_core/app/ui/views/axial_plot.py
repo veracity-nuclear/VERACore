@@ -16,12 +16,20 @@ def option_for(view_id):
         "label": "Axial Plot",
         "multi_picker" : True,
         "icon": "mdi-align-horizontal-center",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
-                               VeraDtype.AXIAL.title, VeraDtype.ASSEMBLY.title,
-                               VeraDtype.COMP_NODAL.title, VeraDtype.COMP_NODAL_ENERGY.title,
-                               VeraDtype.COMP_NODAL_SURFACE.title, VeraDtype.COMP_ASSY_SURFACE.title,
-                               VeraDtype.COMP_ASSY.title, VeraDtype.COMP_ASSY_ENERGY.title,
-                               VeraDtype.NODAL.title]
+        "allowed_categories": [
+            VeraDtype.PIN.title, 
+            VeraDtype.CHANNEL.title, 
+            VeraDtype.AXIAL.title, 
+            VeraDtype.ASSEMBLY.title,
+            VeraDtype.COMP_NODAL.title, 
+            VeraDtype.COMP_NODAL_ENERGY.title,
+            VeraDtype.COMP_NODAL_SURFACE.title, 
+            VeraDtype.COMP_ASSY_SURFACE.title,
+            VeraDtype.COMP_ASSY.title, 
+            VeraDtype.COMP_ASSY_ENERGY.title,
+            VeraDtype.NODAL.title,
+            VeraDtype.DETECTOR.title,
+        ]
     }
 
 
@@ -55,8 +63,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     axial_arrays.append(full_array[j, i, :, assy])
                     identifier = f" | {assembly_label} @({i + 1},{j + 1})"
-                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY: 
-                    axial_arrays.append(full_array[:, assy] if array_dtype == VeraDtype.ASSEMBLY else full_array[0, :, assy])
+                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY | VeraDtype.DETECTOR: 
+                    axial_arrays.append(full_array[:, assy] if not array_dtype.is_computational() else full_array[0, :, assy])
                     identifier = f" | {assembly_label}"
                 case VeraDtype.AXIAL:
                     axial_arrays.append(full_array)

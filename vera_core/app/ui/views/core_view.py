@@ -15,11 +15,18 @@ def option_for(view_id):
         "label": "Core View",
         "multi_picker" : False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, 
-                               VeraDtype.ASSEMBLY.title, VeraDtype.RADIAL.title, 
-                               VeraDtype.RADIAL_ASSEMBLY.title, VeraDtype.COMP_NODAL.title,
-                               VeraDtype.COMP_NODAL_ENERGY.title, VeraDtype.COMP_ASSY.title,
-                               VeraDtype.COMP_ASSY_ENERGY.title, VeraDtype.NODAL.title]
+        "allowed_categories": [VeraDtype.PIN.title, 
+                               VeraDtype.CHANNEL.title, 
+                               VeraDtype.ASSEMBLY.title, 
+                               VeraDtype.RADIAL.title, 
+                               VeraDtype.RADIAL_ASSEMBLY.title, 
+                               VeraDtype.COMP_NODAL.title,
+                               VeraDtype.COMP_NODAL_ENERGY.title, 
+                               VeraDtype.COMP_ASSY.title,
+                               VeraDtype.COMP_ASSY_ENERGY.title, 
+                               VeraDtype.NODAL.title,
+                               VeraDtype.DETECTOR.title,
+                               VeraDtype.RADIAL_DETECTOR.title]
     }
 
 def _nan_out_control_rods(array : np.ndarray, control_rod_positions):
@@ -73,8 +80,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(core_cols_key, 1)
     state.setdefault(assembly_size_key, 1)
 
-    def _vis_pin_level_data(src, dataset):
-        cm = src.core.comp_core_map if dataset.is_computational() else src.core.reduced_core_map
+    def _vis_pin_level_data(src : VeraDataSource, dataset : VeraDataset):
+        cm = src.core.get_map(dataset)
         is_assembly_avg = dataset.is_assembly()
         core_width = cm.shape[0]
         result = []
@@ -122,13 +129,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         match raw_array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 layer_arrays.append(raw_array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.ASSEMBLY:
+            case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
                 layer_arrays.append(raw_array[selected_layer, :])
             case VeraDtype.COMP_ASSY:
                 layer_arrays.append(raw_array[0, selected_layer, :])
             case VeraDtype.RADIAL:
                 layer_arrays.append(raw_array.swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.RADIAL_ASSEMBLY:
+            case VeraDtype.RADIAL_ASSEMBLY, VeraDtype.RADIAL_DETECTOR:
                 layer_arrays.append(raw_array)
             case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
                 layer_arrays.append(raw_array[:, selected_layer, :].swapaxes(0, 1))

@@ -4,7 +4,8 @@ from trame.ui.html import DivLayout
 from trame.widgets import html
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, VeraOutCore
-from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node, requires_src
+from vera_core.app.core.thresholds import apply_thresholds
+from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to_node, requires_src, format_label
 
 MAX_VIS_GROUPS = 4
 FALLBACK_DISPLAY_SIZE = 17
@@ -32,6 +33,7 @@ def option_for(view_id, axis):
             VeraDtype.PIN.title,
             VeraDtype.CHANNEL.title,
             VeraDtype.ASSEMBLY.title,
+            VeraDtype.DETECTOR.title,
             VeraDtype.COMP_NODAL.title,
             VeraDtype.COMP_NODAL_ENERGY.title,
             VeraDtype.COMP_ASSY.title,
@@ -107,23 +109,23 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         array slice."""
         is_assembly = array_dtype.is_assembly()
         arr = array_2d_or_nodal
-
+        assembly_data_indices = assembly_indices[assembly_indices > -1]
         if array_dtype in (VeraDtype.PIN, VeraDtype.CHANNEL):
             cell_width = arr.shape[0]
             if is_x:
-                image_data = arr[selected_pin, :, :, assembly_indices]
+                image_data = arr[selected_pin, :, :, assembly_data_indices]
             else:
-                image_data = arr[:, selected_pin, :, assembly_indices]
+                image_data = arr[:, selected_pin, :, assembly_data_indices]
             image_data = np.vstack(image_data).T
             data_width = display_width = cell_width
 
         elif is_assembly:
             cell_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-            image_data = np.vstack(arr[:, assembly_indices])
+            image_data = np.vstack(arr[:, assembly_data_indices])
             data_width = display_width = cell_width
 
         elif array_dtype in (VeraDtype.COMP_NODAL, VeraDtype.COMP_NODAL_ENERGY, VeraDtype.NODAL):
-            nodal = arr[:, :, assembly_indices]   # (nodes, nax, ncols)
+            nodal = arr[:, :, assembly_data_indices]   # (nodes, nax, ncols)
             n_nodes = nodal.shape[0]
             if n_nodes == 1:
                 data_width = display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
@@ -143,17 +145,22 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         image_data = image_data[::-1, :]   # axial level 0 at the bottom
         nb_lines = image_data.shape[0]
         nb_cols = image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
-
+        nb_cols = len(assembly_indices)
         grid = []
         for j in range(nb_lines):
             line = []
             grid.append(line)
-            for i in range(nb_cols):
+            col = 0
+            for i in assembly_indices:
+                if i < 0:
+                    line.append(np.full(data_width, np.nan).tolist())
+                    continue
                 if is_assembly:
-                    line.append(np.full(data_width, image_data[j, i]).tolist())
+                    line.append(np.full(data_width, image_data[j, col]).tolist())
                 else:
-                    cell = image_data[j, i * data_width:(i + 1) * data_width]
+                    cell = image_data[j, col * data_width:(col + 1) * data_width]
                     line.append(np.ravel(cell).tolist())
+                col+= 1
         return grid, display_width, nb_cols
 
     @state.change(
@@ -163,34 +170,40 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         pin_key,
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        "thresholds",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_axial_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
 
-        selected_array = state[selected_array_key]
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
         if is_x:
-            selected_pin, _, _, selected_assembly, _, _ = indices
+            selected_pin, _, _, selected_assembly, src_id, selected_array = indices
         else:
-            _, selected_pin, _, selected_assembly, _, _ = indices
+            _, selected_pin, _, selected_assembly, src_id, selected_array = indices
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
         core = vera_source.core
         array = vera_source.array(selected_array)
         array_dtype: VeraDtype = array.dataset_type
+        thres_key = format_label(src_id, selected_array)
+        thres = state["thresholds"]
+        if thres.get(thres_key):
+            array = apply_thresholds(array, thres[thres_key]) 
+
         is_comp = array_dtype.is_computational()
+        is_detector = array_dtype.is_detector()
 
         if str(array_dtype).upper() not in option["allowed_categories"]:
             return
 
         if is_x:
-            assembly_indices = core.row_assembly_indices(selected_assembly, is_comp)
+            assembly_indices = core.row_assembly_indices(selected_assembly, is_comp, is_detector)
         else:
-            assembly_indices = core.col_assembly_indices(selected_assembly, is_comp)
+            assembly_indices = core.col_assembly_indices(selected_assembly, is_comp, is_detector)
 
         if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.COMP_ASSY_ENERGY):
             num_groups = array.shape[0]
@@ -213,7 +226,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         nb_cols = 0
         for g in range(num_groups):
             grid, display_width, nb_cols = _build_group_grid(
-                group_arrays[g], array_dtype, core, selected_pin, assembly_indices
+                group_arrays[g], array_dtype, core, selected_pin, assembly_indices,
             )
             state[core_keys[g]] = grid
             state[size_x_keys[g]] = [display_width for _ in range(nb_cols)]

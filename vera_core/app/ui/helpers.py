@@ -53,8 +53,9 @@ def set_info(view_id : int, state : State, registry : VeraDataRegistry):
 
 def _get_assy_idx(ds_dtype : VeraDtype, state : State, src_core : VeraOutCore):
     is_comp = ds_dtype.is_computational()
+    is_detector = ds_dtype.is_detector()
     i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
-    assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp)
+    assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp, is_detector=is_detector)
     return assy
 
 def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel_src_id : str | None = None, sel_dataset_name : str | None = None) -> tuple | None:

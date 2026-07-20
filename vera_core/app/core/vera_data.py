@@ -20,6 +20,7 @@ class _Info:
     assembly: bool = False
     surface: bool = False
     channel: bool = False
+    detector: bool = False
 
 class VeraDtype(Enum):
     """Dataset Identifiers"""
@@ -42,6 +43,8 @@ class VeraDtype(Enum):
     COMP_ASSY = 15
     COMP_ASSY_ENERGY = 16
     COMP_ASSY_SURFACE = 17
+    DETECTOR = 18
+    RADIAL_DETECTOR = 19
 
     def __str__(self):
         return self.name
@@ -73,6 +76,7 @@ class VeraDtype(Enum):
     def is_assembly(self):      return self._info.assembly
     def is_surface(self):       return self._info.surface
     def is_channel(self):       return self._info.channel
+    def is_detector(self):      return self._info.detector
 
 # the single place per-dtype facts are declared
 _INFO = {
@@ -93,6 +97,8 @@ _INFO = {
     VeraDtype.COMP_ASSY:          _Info(axial_idx=1, computational=True, assembly=True),
     VeraDtype.COMP_ASSY_ENERGY:   _Info(axial_idx=2, computational=True, assembly=True),
     VeraDtype.COMP_ASSY_SURFACE:  _Info(axial_idx=3, computational=True, assembly=True, surface=True),
+    VeraDtype.DETECTOR:           _Info(axial_idx=0, assembly=True, detector=True),
+    VeraDtype.RADIAL_DETECTOR:    _Info(assembly=True, detector=True),
 }
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -169,12 +175,14 @@ def nan_out_reflected(cm, core_sym, array):
         array[:, :, 2, :, cm[:, 0] - 1] = np.nan
     return array
 
-def build_core_dtypes(npiny = None, 
-                                npinx = None, 
-                                nax = None, 
-                                nass = None,
-                                comp_nax = None,
-                                comp_nass = None,
+def build_core_dtypes(
+            npiny = None, 
+            npinx = None, 
+            nax = None, 
+            nass = None,
+            comp_nax = None,
+            comp_nass = None,
+            nde = None,
 ) -> dict[tuple[int, ...], VeraDtype]:
     """Creates and retuns a dict mapping dataset shapes to dataset identifier (enums)"""
     shape_to_dtype = {}
@@ -187,6 +195,11 @@ def build_core_dtypes(npiny = None,
             (NUM_NODES, nass) : VeraDtype.RADIAL_NODE,
             (1,) : VeraDtype.SCALAR,
             () : VeraDtype.SCALAR
+        }
+    if nde and nax and (nass is None or nass != nde):
+        shape_to_dtype |= {
+            (nax, nde) : VeraDtype.DETECTOR,
+            (nde,) : VeraDtype.RADIAL_DETECTOR,
         }
     if npiny and npinx and nax and nass:
         shape_to_dtype |= {
@@ -390,17 +403,23 @@ class VeraOutCore(LazyHDF5Loader):
         self._check_missing()
         if not self.has_axial_mesh():
             self.axial_mesh = FALLBACK_AXIAL_MESH
+        self.core_sym = self.core_sym[()] 
         self._determine_computational_core_shape()
-        self._shape_to_dtype = build_core_dtypes(npiny=self.npy, npinx=self.npx, nax=self.nax, nass=self.nass,
-                                                 comp_nax=self.comp_nax, comp_nass=self.comp_nass)
-        self.compute_reduced_core_map()
+        self._determine_detectors()
+        self._shape_to_dtype = build_core_dtypes(
+            npiny=self.npy, 
+            npinx=self.npx, 
+            nax=self.nax,
+            nass=self.nass,
+            comp_nax=self.comp_nax, 
+            comp_nass=self.comp_nass, 
+            nde=self.nde,
+        )
+        self._compute_reduced_core_maps()
         self._determine_core_labels()
         self.compute_axial_mesh_pixels()
         self.compute_control_rod_positions()
         self.compute_axial_mesh_means()
-
-    def has_axial_mesh(self):
-        return hasattr(self, "axial_mesh") and self.axial_mesh is not None
 
     def _determine_core_shape(self, overrides : dict[str, int] = {}):
         cm = self.core_map
@@ -481,11 +500,77 @@ class VeraOutCore(LazyHDF5Loader):
         self.comp_core_map[np.isnan(self.comp_core_map)] = 0
         self._is_comp_rolled = np.count_nonzero(self.comp_core_map) == np.count_nonzero(np.unique(self.comp_core_map))
     
+    def _determine_detectors(self):
+        self.detector_map = None
+        self.nde = None
+        if "detector_map" not in self.f["CORE"]:
+            return
+        self.detector_map = self.f["CORE/detector_map"][()]
+        self.nde = int(np.count_nonzero(np.unique(self.detector_map[~np.isnan(self.detector_map)])))
+
+    def _compute_reduced_core_maps(self) -> None:
+        """Compute the reduced core map based upon the core_sym"""
+        sym = self.core_sym[()] 
+        has_comp_core = self.has_comp_core()
+        if sym == 1:
+            self.reduced_core_map = self.core_map[:].copy()
+            self.reduced_core_map_start_index = 0   
+            self.comp_map_start_index = 0
+        elif sym == 4:
+            w, h = self.core_map[:].shape
+            start_w = w // 2
+            start_h = h // 2
+            self.reduced_core_map = self.core_map[start_w:, start_h:]
+            self.reduced_core_map_start_index = start_w
+            if has_comp_core and not self._is_comp_rolled:
+                cw, ch = self.comp_core_map[:].shape
+                cstart_w = cw // 2
+                cstart_h = ch // 2
+                self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
+                self.comp_map_start_index = cstart_w
+                return
+            elif self.has_comp_core:
+                self.comp_map_start_index = start_w
+            if self.detector_map is not None:
+                self.detector_map = self.detector_map[start_w, start_h]
+        else:
+            raise Exception(f"Unhandled symmetry: {sym}")
+    
+    def _determine_core_labels(self):
+        """Must be called AFTER `self.reduced_core_map` is set"""
+        num_rows, num_cols = self.reduced_core_map.shape
+        start_index = self.reduced_core_map_start_index if hasattr(self, "reduced_core_map_start_index") else 0
+        alphabet = [*string.ascii_uppercase]
+
+        if "xlabel" in self.f["CORE"]:
+            xlabels = [char.decode() for char in self.f["CORE/xlabel"][()][start_index:]]
+        else:
+            xlabels = list(reversed(alphabet[:num_cols]))
+        self.reduced_core_map_column_labels = xlabels
+
+        if "ylabel" in self.f["CORE"]:
+            ylabels = [char.decode() for char in self.f["CORE/ylabel"][()][start_index:]]
+        else:
+            ylabels = list(range(start_index + 1, start_index + num_rows + 1))
+        self.reduced_core_map_row_labels = ylabels
+
+        if not self.has_comp_core():
+            return
+        comp_num_rows, comp_num_cols = self.comp_core_map.shape
+        self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
+        self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
+
+    def has_axial_mesh(self):
+        return hasattr(self, "axial_mesh") and self.axial_mesh is not None  
+    
     def has_comp_core(self) -> bool:
         return hasattr(self, "comp_core_map") and self.comp_core_map is not None
     
     def has_comp_axial_mesh(self) -> bool:
         return hasattr(self, "comp_axial_mesh") and self.comp_axial_mesh is not None
+    
+    def is_even(self) -> bool:
+        return self.core_map.shape[0] % 2 == 0
 
     @property
     def core_shape(self) -> tuple[int, ...]:
@@ -513,58 +598,17 @@ class VeraOutCore(LazyHDF5Loader):
         """
         return self._shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
     
-    def is_even(self) -> bool:
-        return self.core_map.shape[0] % 2 == 0
-
-    def compute_reduced_core_map(self) -> None:
-        """Compute the reduced core map based upon the core_sym"""
-        sym = self.core_sym[()] 
-        has_comp_core = self.has_comp_core()
-        if sym == 1:
-            self.reduced_core_map = self.core_map[:].copy()
-            self.reduced_core_map_start_index = 0   
-            self.comp_map_start_index = 0
-        elif sym == 4:
-            w, h = self.core_map[:].shape
-            start_w = w // 2
-            start_h = h // 2
-            self.reduced_core_map = self.core_map[start_w:, start_h:]
-            self.reduced_core_map_start_index = start_w
-            if has_comp_core and not self._is_comp_rolled:
-                print("comp not rolled")
-                cw, ch = self.comp_core_map[:].shape
-                cstart_w = cw // 2
-                cstart_h = ch // 2
-                self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
-                self.comp_map_start_index = cstart_w
-            elif self.has_comp_core:
-                self.comp_map_start_index = start_w
+    def get_map(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+        """get coresponding core map for `dataset`"""
+        dtype = dataset.dataset_type if dataset is not None else dataset_type
+        if dtype.is_computational() and self.has_comp_core():
+            return self.comp_core_map
+        elif dtype.is_detector() and self.detector_map is not None:
+            return self.detector_map
+        elif dtype != VeraDtype.UNKNOWN:
+            return self.reduced_core_map
         else:
-            raise Exception(f"Unhandled symmetry: {sym}")
-    
-    def _determine_core_labels(self):
-        """Must be called AFTER `self.reduced_core_map` is set"""
-        num_rows, num_cols = self.reduced_core_map.shape
-        start_index = self.reduced_core_map_start_index if hasattr(self, "reduced_core_map_start_index") else 0
-        alphabet = [*string.ascii_uppercase]
-
-        if "xlabel" in self.f["CORE"]:
-            xlabels = [char.decode() for char in self.f["CORE/xlabel"][()][start_index:]]
-        else:
-            xlabels = list(reversed(alphabet[:num_cols]))
-        self.reduced_core_map_column_labels = xlabels
-
-        if "ylabel" in self.f["CORE"]:
-            ylabels = [char.decode() for char in self.f["CORE/ylabel"][()][start_index:]]
-        else:
-            ylabels = list(range(start_index + 1, start_index + num_rows + 1))
-        self.reduced_core_map_row_labels = ylabels
-
-        if not self.has_comp_core():
-            return
-        comp_num_rows, comp_num_cols = self.comp_core_map.shape
-        self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
-        self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
+            raise RuntimeError(f"Could not find map for dataset of type {str(dtype)}")
 
     def compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -609,33 +653,40 @@ class VeraOutCore(LazyHDF5Loader):
         mesh = np.asarray(mesh, dtype=np.float64)
         return np.round((mesh[:-1] + mesh[1:]) / 2.0, decimals)
 
-    def row_assembly_indices(self, assembly_idx, is_comp=False) -> np.ndarray:
+    def row_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""
         # The core map and reduced core map use 1-based indexing
+        if is_comp and is_detector:
+            raise RuntimeError("No comp detector map currently")
         cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        cm = cm if not is_detector else self.detector_map
         row = np.where(cm == assembly_idx + 1)[0][0]
         ids = cm[row]
         # Remove any zeros
-        ids = ids[ids > 0]
         return ids - 1
 
-    def col_assembly_indices(self, assembly_idx, is_comp=False) -> np.ndarray:
+    def col_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same column as this assembly"""
+        if is_comp and is_detector:
+            raise RuntimeError("No comp detector map currently")
         cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        cm = cm if not is_detector else self.detector_map
         col = np.where(cm == assembly_idx + 1)[1][0]
         ids = cm[:, col]
         # Remove any zeros
-        ids = ids[ids > 0]
         return ids - 1
 
-    def reduced_core_map_assembly(self, i, j, is_comp=False) -> int:
+    def reduced_core_map_assembly(self, i, j, is_comp=False, is_detector=False) -> int:
         """Get the index of the assembly at reduced core map position i, j
         
         clamps to the nearest real assembly in the same map, so the result
         is always a valid assembly when the map has any. Returns -1 only if the
         chosen map has no assemblies at all.
         """
+        if is_comp and is_detector:
+            raise RuntimeError("No comp detector map currently")
         cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
+        cm = cm if not is_detector else self.detector_map
         j, i = _make_ji_safe(j, i, cm)
         snapped = _nearest_nonzero_ij(cm, j, i)
         if snapped is None:

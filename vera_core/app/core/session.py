@@ -30,6 +30,13 @@ class ViewSession:
     multi_selected: list
     multi_label: str
     locked: bool
+    # Volume-view crop; defaulted so pre-crop sessions still deserialize.
+    crop_enabled: bool = False
+    crop_mode: str = "keep"
+    crop_x: list = field(default_factory=lambda: [0.0, 1.0])
+    crop_y: list = field(default_factory=lambda: [0.0, 1.0])
+    crop_z: list = field(default_factory=lambda: [0.0, 1.0])
+    camera: dict | None = None
 
 @dataclass
 class Session:
@@ -89,6 +96,12 @@ def build_session(state : State, registry : "VeraDataRegistry", all_view_ids : l
             multi_selected=list(state[f"multi_selected_{vid}"]),
             multi_label=state[f"multi_label_{vid}"],
             locked=bool(state[f"locked_{vid}"]),
+            crop_enabled=bool(state[f"crop_enabled_{vid}"]),
+            crop_mode=state[f"crop_mode_{vid}"],
+            crop_x=list(state[f"crop_x_{vid}"]),
+            crop_y=list(state[f"crop_y_{vid}"]),
+            crop_z=list(state[f"crop_z_{vid}"]),
+            camera=state[f"camera_{vid}"] if state.has(f"camera_{vid}") else None,
         ))
 
     file_paths = registry.all_sources()

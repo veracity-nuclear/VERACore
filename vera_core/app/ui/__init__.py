@@ -374,6 +374,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
             state[f"multi_selected_{vid}"] = list(v.multi_selected)
             state[f"multi_label_{vid}"] = v.multi_label
             state[f"locked_{vid}"] = v.locked
+            state[f"crop_enabled_{vid}"] = v.crop_enabled
+            state[f"crop_mode_{vid}"] = v.crop_mode
+            state[f"crop_x_{vid}"] = list(v.crop_x)
+            state[f"crop_y_{vid}"] = list(v.crop_y)
+            state[f"crop_z_{vid}"] = list(v.crop_z)
+            state[f"camera_{vid}"] = v.camera
+            state.dirty(f"camera_{vid}")
             # Set active view LAST so its update handler sees the inputs in place.
             state[f"grid_view_{vid}"] = v.option
 

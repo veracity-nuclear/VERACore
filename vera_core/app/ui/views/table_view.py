@@ -57,7 +57,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
-            case VeraDtype.ASSEMBLY:
+            case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
                 indices_list.append((selected_layer, selected_assembly))
             case VeraDtype.NODAL:
                 indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
@@ -69,7 +69,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 indices_list.append((selected_layer))
             case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
                 indices_list.append((selected_j, selected_i, selected_assembly))
-            case VeraDtype.RADIAL_ASSEMBLY:
+            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
                 indices_list.append((selected_assembly))
             case VeraDtype.SCALAR:
                 indices_list.append((0))

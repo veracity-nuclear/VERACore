@@ -35,6 +35,7 @@ def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids : list)
         if not path.lower().endswith(".json"):
             path += ".json"
         try:
+            ctrl.snapshot_volume_cameras()
             session = build_session(state, registry, all_view_ids)
             Path(path).write_text(json.dumps(asdict(session), indent=2))
             state.session_saved_path = path

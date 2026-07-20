@@ -56,7 +56,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     indices_list.append((ny, nx, nax, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
-                case VeraDtype.ASSEMBLY:
+                case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
                     indices_list.append((nax, nass))
                     identifier = f" | {assembly_label} z = {axial_label}"
                 case VeraDtype.AXIAL:
@@ -65,7 +65,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
                     indices_list.append((ny, nx, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1})"
-                case VeraDtype.RADIAL_ASSEMBLY:
+                case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
                     indices_list.append((nass))
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:

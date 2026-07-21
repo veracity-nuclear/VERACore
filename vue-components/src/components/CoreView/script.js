@@ -27,6 +27,7 @@ export default {
     labels: { type: Array, default: () => [] },
     aspectRatio: { type: Number, default: 1 },
     dark: { type: Boolean, default: false },
+    decimals: { type: Number, default: 2 },
   },
   watch: {
     selectedI(i) { this.activeI = i; },
@@ -142,7 +143,7 @@ export default {
       if (v === undefined || v === null || Number.isNaN(v)) {
         return '';
       }
-      return Number(v).toFixed(2);
+      return Number(v).toFixed(this.decimals);
     },
     updateNanColor() {
       if (this.dark) {

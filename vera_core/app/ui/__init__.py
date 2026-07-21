@@ -374,6 +374,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
             state[f"multi_selected_{vid}"] = list(v.multi_selected)
             state[f"multi_label_{vid}"] = v.multi_label
             state[f"locked_{vid}"] = v.locked
+            state[f"assembly_decimals_{vid}"] = v.assembly_decimals
             state[f"crop_enabled_{vid}"] = v.crop_enabled
             state[f"crop_mode_{vid}"] = v.crop_mode
             state[f"crop_x_{vid}"] = list(v.crop_x)
@@ -434,7 +435,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         # Default arrangement of views.
         place(x_axial_view,   0,  0, 3, 17, default_id)
         place(core_view,      6,  0, 4,  10, default_id)
-        place(assembly_view,  9,  0, 3,  9, default_id)
+        place(assembly_view,  6,  0, 4,  10, default_id)
         place(axial_plot,     6,  9, 3,  8, default_id)
         place(time_plot,      9,  9, 3,  8, default_id)
         place(volume_view,    3,  0, 3, 17, default_id)

@@ -36,6 +36,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    decimals: {
+      type: Number,
+      default: 2,
+    },
   },
   watch: {
     selectedI(i) {
@@ -122,10 +126,11 @@ export default {
         return '0';
       }
       const abs = Math.abs(v);
+      const d = this.decimals;
       if (abs < 1e-2 || abs >= 1e5) {
-        return v.toExponential(2).replace(/\.?0+e/, 'e');
+        return v.toExponential(d).replace(/\.?0+e/, 'e');
       }
-      return v.toFixed(2);
+      return v.toFixed(d);
     },
     toStyle(i, j) {
       if (i != this.activeI || j != this.activeJ) {

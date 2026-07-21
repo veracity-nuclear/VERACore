@@ -1,6 +1,6 @@
 import numpy as np
 from trame.ui.html import DivLayout
-from trame.widgets import html
+from trame.widgets import html, vuetify
 
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, MAX_NUM_GROUPS
@@ -13,12 +13,13 @@ def option_for(view_id):
     "label": "Assembly View",
     "multi_picker" : False,
     "icon": "mdi-dots-grid",
-    "allowed_categories": [VeraDtype.PIN.title, 
-                           VeraDtype.CHANNEL.title, 
-                           VeraDtype.RADIAL.title, 
-                           VeraDtype.COMP_NODAL.title,
-                           VeraDtype.COMP_NODAL_ENERGY.title
-                           ]
+    "allowed_categories": [
+        VeraDtype.PIN.title, 
+        VeraDtype.CHANNEL.title, 
+        VeraDtype.RADIAL.title, 
+        VeraDtype.COMP_NODAL.title,
+        VeraDtype.COMP_NODAL_ENERGY.title
+    ]
 }
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -40,6 +41,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     for ak in assembly_keys:
         state.setdefault(ak, [])
     info = f"label_info_{view_id}"
+    decimals_key = f"assembly_decimals_{view_id}"
+    state.setdefault(decimals_key, 2)
 
     @state.change(
         "assembly_view_size",
@@ -158,6 +161,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     click="setAll({ selected_i: $event.i, selected_j: $event.j})",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
+                                    decimals=(decimals_key, 2),
                                 )
                             with html.Div(style=(
                                 "flex: 0 0 auto; width: 70px; padding: 4px 0;"
@@ -168,9 +172,25 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",)
                                 )
-            html.Div(
-                "Exposure {{ " + info + ".Exposure }}"
-                " · ({{ " + info + ".Assembly }})"
-                " · Axial - {{ " + info + ".Layer }}",
-                classes="text-caption text-center",
-            )
+            with html.Div(style=(
+                "flex: 0 0 auto; position: relative;"
+                "display: flex; align-items: center; justify-content: center;"
+                "min-height: 44px; padding: 6px 16px;"
+            )):
+                html.Div(
+                    "Exposure {{ " + info + ".Exposure }}"
+                    " · ({{ " + info + ".Assembly }})"
+                    " · Axial - {{ " + info + ".Layer }}",
+                    classes="text-caption text-center text-truncate",
+                    style="max-width: calc(100% - 120px);",
+                )
+                with html.Div(
+                    style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%);",
+                ):
+                    vuetify.VSelect(
+                        v_model=decimals_key,
+                        items=("[0,1,2,3,4]",),
+                        label="Decimals",
+                        dense=True, hide_details=True,
+                        style="max-width: 72px;",
+                    )

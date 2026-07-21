@@ -24,6 +24,7 @@ class AssemblyView(HtmlElement):
             ("active_style", ":activeStyle"),
             "dark",
             "busy",
+            "decimals",
         ]
         self._event_names += [
             "click",
@@ -92,6 +93,7 @@ class CoreView(HtmlElement):
             ("y_labels", "yLabels"),
             ("assembly_size", "assemblySize"),
             ("core_cols", "coreCols"),
+            "decimals",
             "dark",
             "scaling",
             "busy",

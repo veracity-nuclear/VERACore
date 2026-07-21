@@ -2,7 +2,7 @@ import numpy as np
 import math
 
 from trame.ui.html import DivLayout
-from trame.widgets import html
+from trame.widgets import html, vuetify
 
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS, NUM_NODES
@@ -15,18 +15,20 @@ def option_for(view_id):
         "label": "Core View",
         "multi_picker" : False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": [VeraDtype.PIN.title, 
-                               VeraDtype.CHANNEL.title, 
-                               VeraDtype.ASSEMBLY.title, 
-                               VeraDtype.RADIAL.title, 
-                               VeraDtype.RADIAL_ASSEMBLY.title, 
-                               VeraDtype.COMP_NODAL.title,
-                               VeraDtype.COMP_NODAL_ENERGY.title, 
-                               VeraDtype.COMP_ASSY.title,
-                               VeraDtype.COMP_ASSY_ENERGY.title, 
-                               VeraDtype.NODAL.title,
-                               VeraDtype.DETECTOR.title,
-                               VeraDtype.RADIAL_DETECTOR.title]
+        "allowed_categories": [
+            VeraDtype.PIN.title, 
+            VeraDtype.CHANNEL.title, 
+            VeraDtype.ASSEMBLY.title, 
+            VeraDtype.RADIAL.title, 
+            VeraDtype.RADIAL_ASSEMBLY.title, 
+            VeraDtype.COMP_NODAL.title,
+            VeraDtype.COMP_NODAL_ENERGY.title, 
+            VeraDtype.COMP_ASSY.title,
+            VeraDtype.COMP_ASSY_ENERGY.title, 
+            VeraDtype.NODAL.title,
+            VeraDtype.DETECTOR.title,
+            VeraDtype.RADIAL_DETECTOR.title
+        ]
     }
 
 def _nan_out_non_fuel_locs(array : np.ndarray, src : VeraDataSource, selected_layer : int, is_radial : bool):
@@ -67,6 +69,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     y_label_key = f"core_view_y_labels_{view_id}"
     core_cols_key = f"core_cols_{view_id}"
     assembly_size_key = f"assembly_size_{view_id}"
+
+    decimals_key = f"assembly_decimals_{view_id}"
+    state.setdefault(decimals_key, 2)
+    has_labels_key = f"has_assembly_labels_{view_id}"
+    state.setdefault(has_labels_key, False)
     
     for gk in group_keys:
         state.setdefault(gk, [])
@@ -101,7 +108,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     continue
                 if is_assembly_avg:
                     line[j] = [float(dataset[index])]
-                    labels_line[j] = np.round(dataset[index], 2)
+                    labels_line[j] = float(dataset[index])
                 else:
                     line[j] = np.ravel(dataset[index]).tolist()
         return result, labels        
@@ -168,6 +175,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             num_rows = len(result) 
             state[f"core_assemblies_{view_id}_{idx}"] = result
             state[f"core_labels_{view_id}_{idx}"] = labels
+        state[has_labels_key] = any(cell is not None for row in labels for cell in row) if labels else False
         if is_comp:
             state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
         else:
@@ -223,13 +231,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     aspect_ratio=(aspect_ratio_key, 1),
                                     x_labels=(f"{x_label_key}",),
                                     y_labels=(f"{y_label_key}",),
-                                    assembly_size = (assembly_size_key,),
-                                    core_cols = (core_cols_key,),
+                                    assembly_size=(assembly_size_key,),
+                                    core_cols=(core_cols_key,),
                                     color_preset="jet",
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
+                                    decimals=(decimals_key, 2),
                                 )
                             with html.Div(style=(
                                 "flex: 0 0 auto; width: 70px; padding: 4px 0;"
@@ -240,9 +249,26 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
-            html.Div(
-                "Exposure {{ " + info + ".Exposure }}"
-                " · ({{ " + info + ".Assembly }})"
-                " · Axial - {{ " + info + ".Layer }}",
-                classes="text-caption text-center",
-            )
+            # Footer: centered caption with the decimals selector pinned right.
+            with html.Div(style=(
+                "flex: 0 0 auto; position: relative;"
+                "display: flex; align-items: center; justify-content: center;"
+                "min-height: 44px; padding: 6px 16px;"
+            )):
+                html.Div(
+                    "Exposure {{ " + info + ".Exposure }}"
+                    " · ({{ " + info + ".Assembly }})"
+                    " · Axial - {{ " + info + ".Layer }}",
+                    classes="text-caption text-center",
+                )
+                with html.Div(
+                    v_if=(has_labels_key,),
+                    style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%);",
+                ):
+                    vuetify.VSelect(
+                        v_model=decimals_key,
+                        items=("[0,1,2,3,4]",),
+                        label="Decimals",
+                        dense=True, hide_details=True,
+                        style="max-width: 90px;",
+                    )

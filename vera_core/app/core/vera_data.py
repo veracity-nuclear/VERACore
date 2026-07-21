@@ -417,9 +417,9 @@ class VeraOutCore(LazyHDF5Loader):
         )
         self._compute_reduced_core_maps()
         self._determine_core_labels()
-        self.compute_axial_mesh_pixels()
-        self.compute_control_rod_positions()
-        self.compute_axial_mesh_means()
+        self._compute_axial_mesh_pixels()
+        self._compute_non_fuel_locs()
+        self._compute_axial_mesh_means()
 
     def _determine_core_shape(self, overrides : dict[str, int] = {}):
         cm = self.core_map
@@ -488,14 +488,16 @@ class VeraOutCore(LazyHDF5Loader):
         if "computational_core_map" not in self.f["CORE"]:
             print("Could not find computational_core_map, unable to determine computational core shape")
             return
-        # FIXME vvvv, looks for computational axial mesh under NODAL_XS, this will need to be changed
-        # when computational axial mesh moved to core
-        if "STATE_0001/NODAL_XS/AXIALMESH" not in self.f:
+        if "computational_axial_mesh" in self.f["CORE"]:
+            comp_axial_mesh = self.f["CORE/computational_axial_mesh"]
+        elif "STATE_0001/NODAL_XS/AXIALMESH" in self.f: # fallback location
+            comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"]
+        else:  
             print("Could not find computational axial_mesh, unable to determine computational core shape")
             return
         self.comp_core_map = self.f["CORE/computational_core_map"][()]
         self.comp_nass = np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
-        self.comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"][()]
+        self.comp_axial_mesh = comp_axial_mesh[()]
         self.comp_nax = len(self.comp_axial_mesh) - 1
         self.comp_core_map[np.isnan(self.comp_core_map)] = 0
         self._is_comp_rolled = np.count_nonzero(self.comp_core_map) == np.count_nonzero(np.unique(self.comp_core_map))
@@ -559,6 +561,46 @@ class VeraOutCore(LazyHDF5Loader):
         comp_num_rows, comp_num_cols = self.comp_core_map.shape
         self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
         self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
+    
+    def _compute_axial_mesh_pixels(self) -> None:
+        """Compute the number of pixels that we will be displaying in
+        the axial direction for each length in the axial mesh.
+        """
+        diff_array = np.diff(self.axial_mesh[:])
+
+        # The min diff will be three pixels high. The rest will be computed based
+        # upon the min diff.
+        MIN_DIFF_PIXELS_HEIGHT = 3
+        pixel_height = np.min(diff_array) / MIN_DIFF_PIXELS_HEIGHT
+        pixel_height_array = diff_array / pixel_height
+        self.axial_mesh_pixels = np.round(pixel_height_array).astype(np.int64)
+
+        if self.has_comp_axial_mesh():
+            comp_diff_array = np.diff(self.comp_axial_mesh)
+            comp_pixel_height = np.min(comp_diff_array) / MIN_DIFF_PIXELS_HEIGHT
+            comp_pixel_height_array = comp_diff_array / comp_pixel_height
+            self.comp_axial_mesh_pixels = np.round(comp_pixel_height_array).astype(np.int64)
+
+    def _compute_non_fuel_locs(self) ->None:
+        """Locate non-fuel positions as the pins with zero volume."""
+        if self.pin_volumes is not None:
+            self.non_fuel_locs = np.where(self.pin_volumes == 0)
+        else:
+            self.non_fuel_locs = None
+
+    def _compute_axial_mesh_means(self):
+        """Midpoint between each pair of neighboring mesh boundaries."""
+        self.axial_mesh_means = self._midpoints(self.axial_mesh)
+        if self.has_comp_axial_mesh():
+            self.comp_axial_mesh_means = self._midpoints(self.comp_axial_mesh)
+            self.gross_axial_mesh = np.union1d(self.axial_mesh_means, self.comp_axial_mesh_means)
+        else:
+            self.gross_axial_mesh = self.axial_mesh_means
+
+    @staticmethod
+    def _midpoints(mesh, decimals=4):
+        mesh = np.asarray(mesh, dtype=np.float64)
+        return np.round((mesh[:-1] + mesh[1:]) / 2.0, decimals)
 
     def has_axial_mesh(self):
         return hasattr(self, "axial_mesh") and self.axial_mesh is not None  
@@ -609,49 +651,6 @@ class VeraOutCore(LazyHDF5Loader):
             return self.reduced_core_map
         else:
             raise RuntimeError(f"Could not find map for dataset of type {str(dtype)}")
-
-    def compute_axial_mesh_pixels(self) -> None:
-        """Compute the number of pixels that we will be displaying in
-        the axial direction for each length in the axial mesh.
-        """
-        diff_array = np.diff(self.axial_mesh[:])
-
-        # The min diff will be three pixels high. The rest will be computed based
-        # upon the min diff.
-        MIN_DIFF_PIXELS_HEIGHT = 3
-        pixel_height = np.min(diff_array) / MIN_DIFF_PIXELS_HEIGHT
-        pixel_height_array = diff_array / pixel_height
-        self.axial_mesh_pixels = np.round(pixel_height_array).astype(np.int64)
-
-        if self.has_comp_axial_mesh():
-            comp_diff_array = np.diff(self.comp_axial_mesh)
-            comp_pixel_height = np.min(comp_diff_array) / MIN_DIFF_PIXELS_HEIGHT
-            comp_pixel_height_array = comp_diff_array / comp_pixel_height
-            self.comp_axial_mesh_pixels = np.round(comp_pixel_height_array).astype(np.int64)
-
-    def compute_control_rod_positions(self) ->None:
-        """Locate control-rod positions as the pins with zero volume.
-        Assumes the rod layout is identical in every axial volume.
-        """
-        if self.pin_volumes is not None:
-            first_volume = self.pin_volumes[:, :, 0, 0]
-            self.control_rod_positions = np.where(first_volume == 0)
-        else:
-            self.control_rod_positions = None
-
-    def compute_axial_mesh_means(self):
-        """Midpoint between each pair of neighboring mesh boundaries."""
-        self.axial_mesh_means = self._midpoints(self.axial_mesh)
-        if self.has_comp_axial_mesh():
-            self.comp_axial_mesh_means = self._midpoints(self.comp_axial_mesh)
-            self.gross_axial_mesh = np.union1d(self.axial_mesh_means, self.comp_axial_mesh_means)
-        else:
-            self.gross_axial_mesh = self.axial_mesh_means
-
-    @staticmethod
-    def _midpoints(mesh, decimals=4):
-        mesh = np.asarray(mesh, dtype=np.float64)
-        return np.round((mesh[:-1] + mesh[1:]) / 2.0, decimals)
 
     def row_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""
@@ -731,7 +730,6 @@ class VeraOutCore(LazyHDF5Loader):
         labels = self.reduced_core_map_column_labels[i] if not is_comp else self.comp_core_map_column_labels[i]
         return labels
         
-
 class VeraOutState(LazyHDF5Loader):
     """Stores the datasets for a single VERA STATE_NNNN point.
 

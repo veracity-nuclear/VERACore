@@ -13,8 +13,12 @@ def option_for(view_id):
     "label": "Assembly View",
     "multi_picker" : False,
     "icon": "mdi-dots-grid",
-    "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.RADIAL.title, VeraDtype.COMP_NODAL.title,
-                           VeraDtype.COMP_NODAL_ENERGY.title]
+    "allowed_categories": [VeraDtype.PIN.title, 
+                           VeraDtype.CHANNEL.title, 
+                           VeraDtype.RADIAL.title, 
+                           VeraDtype.COMP_NODAL.title,
+                           VeraDtype.COMP_NODAL_ENERGY.title
+                           ]
 }
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -90,14 +94,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     images_dataset = [array[energy_group, :, selected_layer, selected_assembly] for energy_group in range(num_energy_groups)]
                 case _:
                     raise RuntimeError(f"Assembly View cannot visualize datasets of type {str(array_dtype)}")
+            if array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL) and vera_source.core.non_fuel_locs is not None:
+                rows, cols, layers, assys = vera_source.core.non_fuel_locs
+                in_image = (assys == selected_assembly) & (layers == selected_layer)
+                rod_ij = (rows[in_image], cols[in_image])
+                for image in images_dataset:
+                    image[rod_ij] = np.nan
             if thres.get(thres_key):
                 for idx, image in enumerate(images_dataset):
                     images_dataset[idx] = apply_thresholds(image, thres[thres_key])
-            if (array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL) and 
-                (control_rod_positions := vera_source.core.control_rod_positions) is not None):
-                # Make control rod positions equal to nan
-                for image in images_dataset:
-                    image[control_rod_positions] = np.nan
 
             # Only allow one image in the cache
             MAX_ITEMS_IN_CACHE = 1

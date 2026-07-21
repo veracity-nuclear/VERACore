@@ -29,12 +29,15 @@ def option_for(view_id):
                                VeraDtype.RADIAL_DETECTOR.title]
     }
 
-def _nan_out_control_rods(array : np.ndarray, control_rod_positions):
-    if control_rod_positions is None:
+def _nan_out_non_fuel_locs(array : np.ndarray, src : VeraDataSource, selected_layer : int, is_radial : bool):
+    non_fuel_locs = src.core.non_fuel_locs
+    if non_fuel_locs is None:
         return array
-    rod_rows, rod_cols = control_rod_positions
+    rod_rows, rod_cols, layers, assy_id = non_fuel_locs
+    keep = slice(None) if is_radial else (layers == selected_layer)
+    idx = (assy_id[keep], rod_rows[keep], rod_cols[keep])
     new_array = array.copy()
-    new_array[:, rod_rows, rod_cols] = np.nan
+    new_array[idx] = np.nan
     return new_array
 
 def _assembly_side(n: int) -> int:
@@ -135,7 +138,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 layer_arrays.append(raw_array[0, selected_layer, :])
             case VeraDtype.RADIAL:
                 layer_arrays.append(raw_array.swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.RADIAL_ASSEMBLY, VeraDtype.RADIAL_DETECTOR:
+            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
                 layer_arrays.append(raw_array)
             case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
                 layer_arrays.append(raw_array[:, selected_layer, :].swapaxes(0, 1))
@@ -157,7 +160,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         num_rows = 0
         for idx, layer_array in enumerate(layer_arrays):
             if raw_array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
-                layer_array = _nan_out_control_rods(layer_array, vera_source.core.control_rod_positions)
+                layer_array = _nan_out_non_fuel_locs(layer_array, vera_source, selected_layer, raw_array_dtype==VeraDtype.RADIAL)
             thres = state["thresholds"]
             if thres.get(thres_key):
                 layer_array = apply_thresholds(layer_array, thres[thres_key])        

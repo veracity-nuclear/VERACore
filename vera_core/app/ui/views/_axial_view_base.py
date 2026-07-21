@@ -189,6 +189,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         core = vera_source.core
         array = vera_source.array(selected_array)
         array_dtype: VeraDtype = array.dataset_type
+        if array_dtype == VeraDtype.PIN and core.non_fuel_locs is not None:
+            array[core.non_fuel_locs] = np.nan
+
         thres_key = format_label(src_id, selected_array)
         thres = state["thresholds"]
         if thres.get(thres_key):

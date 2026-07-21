@@ -23,6 +23,10 @@ html {
   white-space: nowrap;
 }
 
+.assembly-label--sm {
+  font-size: 5px;
+}
+
 vue-resizable-handle {
   z-index: 30;
   opacity: 0.9;

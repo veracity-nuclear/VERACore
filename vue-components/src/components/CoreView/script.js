@@ -143,7 +143,15 @@ export default {
       if (v === undefined || v === null || Number.isNaN(v)) {
         return '';
       }
-      return Number(v).toFixed(this.decimals);
+      if (v === 0) {
+        return '0';
+      }
+      const d = this.decimals;
+      const abs = Math.abs(v);
+      if (abs < 1e-2 || abs >= 1e5) {
+        return Number(v).toExponential(d).replace(/\.?0+e/, 'e');
+      }
+      return Number(v).toFixed(d);
     },
     updateNanColor() {
       if (this.dark) {

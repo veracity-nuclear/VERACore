@@ -1,4 +1,6 @@
 import operator
+from typing import Literal, TypedDict, Sequence
+
 import numpy as np
 from . import VeraDataset
 
@@ -11,7 +13,12 @@ THRESHOLD_OPS = {
     "!=": operator.ne,
 }
 
-def apply_thresholds(array : VeraDataset, conditions) -> VeraDataset:
+ThresholdOp = Literal[">", ">=", "<", "<=", "==", "!="]
+class ThresholdCondition(TypedDict):
+    op: ThresholdOp
+    value: float
+
+def apply_thresholds(array : VeraDataset, conditions : Sequence[ThresholdCondition]) -> VeraDataset:
     keep = np.ones(array.shape, dtype=bool)
     dtype = array.dataset_type
     for c in conditions:

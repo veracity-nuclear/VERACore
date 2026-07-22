@@ -2,6 +2,8 @@ from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
 from vera_core.app.core import VeraDataRegistry
 
+MENU_MAX_HEIGHT = "60vh"
+
 def refresh_src_tree(state: State, registry: VeraDataRegistry):
     """
     Defines and refreshes state for tracking what datasets are avaliable in each opened source
@@ -68,7 +70,7 @@ def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: s
     groups_expr = "groups"
     if allowed_arg:
         groups_expr = f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"    
-    with vuetify.VMenu( offset_y=True, close_on_content_click=False):
+    with vuetify.VMenu( offset_y=True, close_on_content_click=False, max_height=MENU_MAX_HEIGHT):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
             with vuetify.VBtn(
                 small=True, text=True, v_bind="attrs", v_on="on",
@@ -87,6 +89,7 @@ def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: s
                 offset_x=True,
                 open_on_hover=False,
                 close_on_content_click=True,
+                max_height=MENU_MAX_HEIGHT,
             ):
                 with vuetify.Template(v_slot_activator="{ on, attrs }"):
                     with vuetify.VListItem(v_bind="attrs", v_on="on"):
@@ -100,6 +103,7 @@ def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: s
                         offset_x=True,
                         open_on_hover=False,
                         close_on_content_click=True,
+                        max_height=MENU_MAX_HEIGHT,
                     ):
                         with vuetify.Template(v_slot_activator="{ on, attrs }"):
                             with vuetify.VListItem(v_bind="attrs", v_on="on"):
@@ -150,6 +154,7 @@ def build_dataset_multi_picker(ctrl: Controller, label_arg: str, selected_arg: s
                 offset_x=True,
                 open_on_hover=False,
                 close_on_content_click=False,
+                max_height=MENU_MAX_HEIGHT,
             ):
                 with vuetify.Template(v_slot_activator="{ on, attrs }"):
                     with vuetify.VListItem(v_bind="attrs", v_on="on"):
@@ -163,6 +168,7 @@ def build_dataset_multi_picker(ctrl: Controller, label_arg: str, selected_arg: s
                         offset_x=True,
                         open_on_hover=False,
                         close_on_content_click=False,
+                        max_height=MENU_MAX_HEIGHT,
                     ):
                         with vuetify.Template(v_slot_activator="{ on, attrs }"):
                             with vuetify.VListItem(v_bind="attrs", v_on="on"):

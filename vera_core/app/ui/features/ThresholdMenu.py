@@ -2,6 +2,7 @@ from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
 
 from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core.thresholds import ThresholdCondition
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker
 
@@ -46,7 +47,7 @@ def register_threshold_state_ctrl(state : State, ctrl : Controller, registry: Ve
                 state.threshold_error = "Please select a threshold value"
                 return
             name = format_label(state.threshold_src_id, state.threshold_dataset) # use src_id and dataset name as key for threshold
-            entry = {"op": state.threshold_operator, "value": float(state.threshold_value)}
+            entry : ThresholdCondition = {"op": state.threshold_operator, "value": float(state.threshold_value)}
             existing = state.thresholds.get(name, [])
             state.thresholds = {**state.thresholds, name: [*existing, entry]} # reconstruct to trigger trame state change
             state.threshold_value = None

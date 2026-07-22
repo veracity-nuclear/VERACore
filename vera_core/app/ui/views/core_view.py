@@ -1,13 +1,30 @@
-import numpy as np
 import math
+from typing import Sequence
+import numpy as np
 
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
 from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS, NUM_NODES
-from vera_core.app.core.thresholds import apply_thresholds
+from vera_core.app.core.thresholds import apply_thresholds, ThresholdCondition
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
+
+
+ALLOWED_DTYPES : list[VeraDtype] = [
+    VeraDtype.PIN, 
+    VeraDtype.CHANNEL, 
+    VeraDtype.ASSEMBLY, 
+    VeraDtype.RADIAL, 
+    VeraDtype.RADIAL_ASSEMBLY, 
+    VeraDtype.COMP_NODAL,
+    VeraDtype.COMP_NODAL_ENERGY, 
+    VeraDtype.COMP_ASSY,
+    VeraDtype.COMP_ASSY_ENERGY, 
+    VeraDtype.NODAL,
+    VeraDtype.DETECTOR,
+    VeraDtype.RADIAL_DETECTOR
+]
 
 def option_for(view_id):
     return {
@@ -15,20 +32,7 @@ def option_for(view_id):
         "label": "Core View",
         "multi_picker" : False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": [
-            VeraDtype.PIN.title, 
-            VeraDtype.CHANNEL.title, 
-            VeraDtype.ASSEMBLY.title, 
-            VeraDtype.RADIAL.title, 
-            VeraDtype.RADIAL_ASSEMBLY.title, 
-            VeraDtype.COMP_NODAL.title,
-            VeraDtype.COMP_NODAL_ENERGY.title, 
-            VeraDtype.COMP_ASSY.title,
-            VeraDtype.COMP_ASSY_ENERGY.title, 
-            VeraDtype.NODAL.title,
-            VeraDtype.DETECTOR.title,
-            VeraDtype.RADIAL_DETECTOR.title
-        ]
+        "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES]
     }
 
 def _nan_out_non_fuel_locs(array : np.ndarray, src : VeraDataSource, selected_layer : int, is_radial : bool):
@@ -50,6 +54,80 @@ def _assembly_side(n: int) -> int:
     if side * side != n:
         raise ValueError(f"assembly cell length {n} is not a perfect square")
     return side
+
+def _format_for_vis(src : VeraDataSource, dataset : VeraDataset):
+    cm = src.core.get_map(dataset)
+    is_assembly_avg = dataset.is_assembly()
+    core_width = cm.shape[0]
+    result = []
+    labels = []
+    for i in range(core_width):
+        line = [None] * core_width
+        result.append(line)
+        if is_assembly_avg:
+            labels_line = [None] * core_width
+            labels.append(labels_line)
+        for j in range(core_width):
+            index = cm[i, j] - 1
+            if index == -1:
+                continue
+            if is_assembly_avg:
+                line[j] = [float(dataset[index])]
+                labels_line[j] = float(dataset[index])
+            else:
+                line[j] = np.ravel(dataset[index]).tolist()
+    return result, labels    
+
+def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, thresholds : Sequence[ThresholdCondition] = []):
+    if z < 0:
+        return
+    dataset = vera_source.array(dataset_name)
+    ds_dtype = dataset.dataset_type
+    if ds_dtype not in ALLOWED_DTYPES:
+        return
+    is_comp = ds_dtype.is_computational()
+    layer_list = []
+    match ds_dtype:
+        case VeraDtype.PIN | VeraDtype.CHANNEL:
+            layer_list.append(dataset[:, :, z].swapaxes(0, 2).swapaxes(1, 2))
+        case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
+            layer_list.append(dataset[z, :])
+        case VeraDtype.COMP_ASSY:
+            layer_list.append(dataset[0, z, :])
+        case VeraDtype.RADIAL:
+            layer_list.append(dataset.swapaxes(0, 2).swapaxes(1, 2))
+        case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
+            layer_list.append(dataset)
+        case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
+            layer_list.append(dataset[:, z, :].swapaxes(0, 1))
+        case VeraDtype.COMP_ASSY_ENERGY:
+            num_energy_groups = np.shape(dataset)[0]
+            for energy_group in range(num_energy_groups):
+                layer_list.append(dataset[energy_group, 0, z, :])
+        case VeraDtype.COMP_NODAL_ENERGY:
+            num_energy_groups = np.shape(dataset)[0]
+            for energy_group in range(num_energy_groups):
+                layer_list.append(dataset[energy_group, :, z, :].swapaxes(0, 1))
+        case _:
+            raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
+    core = vera_source.core
+    results = []
+    result_assembly_labels = []
+    for layer in layer_list:
+        if ds_dtype.has_fuel_pins():
+            layer = _nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype==VeraDtype.RADIAL)
+        if thresholds:
+            layer = apply_thresholds(layer, thresholds)    
+        formatted_result, assy_labels = _format_for_vis(src=vera_source, dataset=layer)
+        results.append(formatted_result)
+        result_assembly_labels.append(assy_labels)
+
+    sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
+    assembly_side_size =  _assembly_side(len(sample)) if sample else 0
+    x_labels = core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
+    y_labels = core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
+    max_core_cols =  core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
+    return results, result_assembly_labels, assembly_side_size, x_labels, y_labels, max_core_cols
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -88,30 +166,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(x_label_key, [])
     state.setdefault(y_label_key, [])
     state.setdefault(core_cols_key, 1)
-    state.setdefault(assembly_size_key, 1)
-
-    def _vis_pin_level_data(src : VeraDataSource, dataset : VeraDataset):
-        cm = src.core.get_map(dataset)
-        is_assembly_avg = dataset.is_assembly()
-        core_width = cm.shape[0]
-        result = []
-        labels = []
-        for i in range(core_width):
-            line = [None] * core_width
-            result.append(line)
-            if is_assembly_avg:
-                labels_line = [None] * core_width
-                labels.append(labels_line)
-            for j in range(core_width):
-                index = cm[i, j] - 1
-                if index == -1:
-                    continue
-                if is_assembly_avg:
-                    line[j] = [float(dataset[index])]
-                    labels_line[j] = float(dataset[index])
-                else:
-                    line[j] = np.ravel(dataset[index]).tolist()
-        return result, labels        
+    state.setdefault(assembly_size_key, 1)    
     
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
@@ -127,69 +182,24 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             return
         _, _, selected_layer, _, selected_src_id, selected_array = indices
         thres_key = format_label(selected_src_id, selected_array)
+        thresholds_to_apply = state["thresholds"].get(thres_key, [])
         vera_source : VeraDataSource = registry.get(selected_src_id)
-        core = vera_source.core
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
-        raw_array = vera_source.array(selected_array)
-        raw_array_dtype = raw_array.dataset_type
-        is_comp = raw_array_dtype.is_computational()
-        if raw_array_dtype.title not in option_for(0)["allowed_categories"]:
+        vis_state = create_core_view(vera_source, selected_array, selected_layer, thresholds_to_apply)
+        if vis_state is None:
             return
-        layer_arrays = []
-        match raw_array_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
-                layer_arrays.append(raw_array[:, :, selected_layer].swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
-                layer_arrays.append(raw_array[selected_layer, :])
-            case VeraDtype.COMP_ASSY:
-                layer_arrays.append(raw_array[0, selected_layer, :])
-            case VeraDtype.RADIAL:
-                layer_arrays.append(raw_array.swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
-                layer_arrays.append(raw_array)
-            case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-                layer_arrays.append(raw_array[:, selected_layer, :].swapaxes(0, 1))
-            case VeraDtype.COMP_ASSY_ENERGY:
-                num_energy_groups = np.shape(raw_array)[0]
-                for energy_group in range(num_energy_groups):
-                    layer_arrays.append(raw_array[energy_group, 0, selected_layer, :])
-            case VeraDtype.COMP_NODAL_ENERGY:
-                num_energy_groups = np.shape(raw_array)[0]
-                for energy_group in range(num_energy_groups):
-                    layer_arrays.append(raw_array[energy_group, :, selected_layer, :].swapaxes(0, 1))
-            case _:
-                raise RuntimeError(f"Core View cannot visualize a dataset of type {str(raw_array_dtype)} ")
-        state[x_label_key] = (core.comp_core_map_column_labels if raw_array_dtype.is_computational() else
-            core.reduced_core_map_column_labels)
-        start_idx = (core.comp_map_start_index if raw_array_dtype.is_computational() else
-            vera_source.core.reduced_core_map_start_index)
-        
-        num_rows = 0
-        for idx, layer_array in enumerate(layer_arrays):
-            if raw_array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL):
-                layer_array = _nan_out_non_fuel_locs(layer_array, vera_source, selected_layer, raw_array_dtype==VeraDtype.RADIAL)
-            thres = state["thresholds"]
-            if thres.get(thres_key):
-                layer_array = apply_thresholds(layer_array, thres[thres_key])        
-            result, labels = _vis_pin_level_data(src=vera_source, dataset=layer_array)
-            num_rows = len(result) 
-            state[f"core_assemblies_{view_id}_{idx}"] = result
-            state[f"core_labels_{view_id}_{idx}"] = labels
-        state[has_labels_key] = any(cell is not None for row in labels for cell in row) if labels else False
-        if is_comp:
-            state[y_label_key] = [start_idx + row + 1 for row in range(num_rows)]
-        else:
-            state[y_label_key] = core.reduced_core_map_row_labels
-        num_groups = len(layer_arrays)
-        state[core_cols_key] = core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
-        
-        sample = next((c for row in result for c in row if isinstance(c, list) and c), None)
-        state[f"assembly_size_{view_id}"] = _assembly_side(len(sample)) if sample else 0
-        
-        for idx in range(num_groups, MAX_NUM_GROUPS):
-            state[f"core_assemblies_{view_id}_{idx}"] = []
-            state[f"core_labels_{view_id}_{idx}"] = []
+        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
+        has_assembly_labels = assy_labels and len(assy_labels) > 0 and any(cell is not None for row in assy_labels[0] for cell in row)
+        num_groups = len(results)
+        for idx in range(MAX_NUM_GROUPS):
+            state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx]
+            state[f"core_labels_{view_id}_{idx}"] = [] if idx >= num_groups else assy_labels[idx]
         state[n_groups_key] = num_groups
+        state[assembly_size_key] = assembly_side_size
+        state[x_label_key] = xlabels
+        state[y_label_key] = ylabels
+        state[core_cols_key] = max_core_cols
+        state[has_labels_key] = has_assembly_labels
         set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:

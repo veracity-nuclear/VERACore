@@ -15,6 +15,7 @@ LATERAL_SURACES = slice(0,4)
 @dataclass(frozen=True)
 class _Info:
     axial_idx: int | None = None   # None = no axial axis
+    fuel_pin: bool = False
     computational: bool = False
     nodal: bool = False
     assembly: bool = False
@@ -77,14 +78,15 @@ class VeraDtype(Enum):
     def is_surface(self):       return self._info.surface
     def is_channel(self):       return self._info.channel
     def is_detector(self):      return self._info.detector
+    def has_fuel_pins(self):     return self._info.fuel_pin
 
 # the single place per-dtype facts are declared
 _INFO = {
-    VeraDtype.PIN:                _Info(axial_idx=2),
+    VeraDtype.PIN:                _Info(axial_idx=2, fuel_pin=True),
     VeraDtype.ASSEMBLY:           _Info(axial_idx=0, assembly=True),
     VeraDtype.AXIAL:              _Info(axial_idx=0),
     VeraDtype.NODAL:               _Info(axial_idx=1, nodal=True),
-    VeraDtype.RADIAL:             _Info(),
+    VeraDtype.RADIAL:             _Info(fuel_pin=True),
     VeraDtype.SCALAR:             _Info(),                       # == CORE
     VeraDtype.RADIAL_ASSEMBLY:    _Info(assembly=True),
     VeraDtype.CHANNEL:            _Info(axial_idx=2, channel=True),

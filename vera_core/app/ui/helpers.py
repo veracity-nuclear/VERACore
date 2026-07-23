@@ -39,7 +39,7 @@ def set_info(view_id : int, state : State, registry : VeraDataRegistry):
     vera_source = registry.get(src_id)
     dtype = vera_source.array_dtype(ds_name)
     is_comp = dtype.is_computational()
-    axial_mesh = vera_source.core.axial_mesh_means if not is_comp else vera_source.core.comp_axial_mesh_means
+    axial_mesh = vera_source.core.get_axial_mesh_means(dataset_type=dtype)
     exposure = None
     if vera_source.active_state.has_dataset("exposure"):
         exposure = vera_source.active_state.exposure[0]
@@ -76,7 +76,7 @@ def get_safe_idxs(view_id : int, state : State, registry : VeraDataRegistry, sel
     sel_i = int(state.selected_i)
     sel_layer = registry.global_axial_idx_to_src_idx(src_id, vdtype, int(state.selected_layer))
 
-    core_shape = core.comp_core_shape if core.has_comp_core() and vdtype.is_computational() else core.core_shape
+    core_shape = core.get_core_shape(dataset_type=vdtype)
     if len(core_shape) != 4:
         raise ValueError("core_shape must have 4 dim: npy, npx, nax, nass")
     npy, npx, nax, nass = core_shape

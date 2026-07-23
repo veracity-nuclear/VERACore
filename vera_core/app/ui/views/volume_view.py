@@ -343,7 +343,7 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
         col_slice = slice(core_col * assembly_shape[1], (core_col + 1) * assembly_shape[1])
         volume_array[row_slice, col_slice] = array[:, :, :, assembly_id]
 
-    volume_array = np.repeat(volume_array, core.axial_mesh_pixels, axis=2)
+    volume_array = np.repeat(volume_array, core.get_axial_mesh_pixels(dataset=array), axis=2)
 
     scalars = volume_array.transpose(2, 1, 0).ravel()   # single contiguous copy
     vtk_array = np_s.numpy_to_vtk(scalars, deep=True)

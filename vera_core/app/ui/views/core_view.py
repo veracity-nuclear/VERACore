@@ -22,8 +22,8 @@ ALLOWED_DTYPES : list[VeraDtype] = [
     VeraDtype.COMP_ASSY,
     VeraDtype.COMP_ASSY_ENERGY, 
     VeraDtype.NODAL,
-    VeraDtype.DETECTOR,
-    VeraDtype.RADIAL_DETECTOR
+    VeraDtype.POINT_DETECTOR,
+    VeraDtype.RADIAL_POINT_DETECTOR
 ]
 
 def option_for(view_id):
@@ -80,23 +80,23 @@ def _format_for_vis(src : VeraDataSource, dataset : VeraDataset):
 
 def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, thresholds : Sequence[ThresholdCondition] = []):
     if z < 0:
-        return
+        raise RuntimeError(f"z must be < 0, z = {z}")
     dataset = vera_source.array(dataset_name)
     ds_dtype = dataset.dataset_type
     if ds_dtype not in ALLOWED_DTYPES:
-        return
+        raise RuntimeError(f"Core View cannot visualize datasets of type {str(ds_dtype)}")
     is_comp = ds_dtype.is_computational()
     layer_list = []
     match ds_dtype:
         case VeraDtype.PIN | VeraDtype.CHANNEL:
             layer_list.append(dataset[:, :, z].swapaxes(0, 2).swapaxes(1, 2))
-        case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
+        case VeraDtype.POINT_DETECTOR:
             layer_list.append(dataset[z, :])
-        case VeraDtype.COMP_ASSY:
+        case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
             layer_list.append(dataset[0, z, :])
         case VeraDtype.RADIAL:
             layer_list.append(dataset.swapaxes(0, 2).swapaxes(1, 2))
-        case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
+        case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
             layer_list.append(dataset)
         case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
             layer_list.append(dataset[:, z, :].swapaxes(0, 1))

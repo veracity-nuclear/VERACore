@@ -127,8 +127,8 @@ class VeraOutFile(VeraDataSource):
                 continue
             ref_data : VeraDataset = getattr(state, ref_dataset_name) * ref_scale
             comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name) * comp_scale
-            ref_axial_mesh_means = self.core.axial_mesh_means
-            comp_axial_mesh_means = comp_src.core.axial_mesh_means
+            ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
+            comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
             if ref_data.dataset_type != comp_data.dataset_type:
                 continue
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
@@ -155,7 +155,7 @@ class VeraOutFile(VeraDataSource):
         """
         match axes:
             case VeraAxes.ASSEMBLY:
-                der = VeraDataset(self.vera_calculator.Assembly(data), VeraDtype.ASSEMBLY)
+                der = VeraDataset(self.vera_calculator.Assembly(data)[np.newaxis, ...], VeraDtype.ASSEMBLY)
             case VeraAxes.AXIAL:
                 der = VeraDataset(self.vera_calculator.Axial(data), VeraDtype.AXIAL)
             case VeraAxes.CORE:

@@ -21,7 +21,7 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 return data[:, :, :, assembly_id]
             case VeraDtype.ASSEMBLY:
-                return data[:, assembly_id]
+                return data[0, :, assembly_id]
             case VeraDtype.RADIAL:
                 return data[:, :, assembly_id]
             case VeraDtype.RADIAL_ASSEMBLY:

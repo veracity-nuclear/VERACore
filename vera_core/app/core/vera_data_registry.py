@@ -55,7 +55,7 @@ class VeraDataRegistry:
         if src_id not in self._srcs:
             raise ValueError("src_id not in stored src_ids")
         core = self._srcs[src_id].core
-        src_axial_mesh = core.axial_mesh_means if not ds_dtype.is_computational() else core.comp_axial_mesh_means
+        src_axial_mesh = core.get_axial_mesh_means(dataset_type=ds_dtype)
         physical_layer = src_axial_mesh[idx]
         global_idx = self.get_axial_index(physical_layer)
         assert self.global_axial_mesh[global_idx] == physical_layer
@@ -68,7 +68,9 @@ class VeraDataRegistry:
             return 0
         core = self._srcs[src_id].core
         physical_layer = self.global_axial_mesh[idx]
-        src_axial_mesh = core.axial_mesh_means if not ds_dtype.is_computational() else core.comp_axial_mesh_means
+        src_axial_mesh = core.get_axial_mesh_means(dataset_type=ds_dtype)
+        if src_axial_mesh.ndim == 2:
+            src_axial_mesh = src_axial_mesh.ravel()
         src_idx = np.searchsorted(src_axial_mesh, physical_layer)
         src_idx = np.clip(src_idx, 0, len(src_axial_mesh) - 1)
         return int(src_idx)

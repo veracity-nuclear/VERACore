@@ -37,15 +37,16 @@ class VeraDtype(Enum):
     CHANNEL_RADIAL = 9
     RADIAL_NODE = 10
     UNKNOWN = 11
-    # all below use computational core map for shape
+    # COMP_ prefix means it uses computational core map for shape
     COMP_NODAL = 12
     COMP_NODAL_ENERGY = 13
     COMP_NODAL_SURFACE = 14
     COMP_ASSY = 15
     COMP_ASSY_ENERGY = 16
     COMP_ASSY_SURFACE = 17
-    DETECTOR = 18
-    RADIAL_DETECTOR = 19
+    POINT_DETECTOR = 18
+    RADIAL_POINT_DETECTOR = 19
+    CONTINOUS_DETECTOR = 20
 
     def __str__(self):
         return self.name
@@ -82,25 +83,26 @@ class VeraDtype(Enum):
 
 # the single place per-dtype facts are declared
 _INFO = {
-    VeraDtype.PIN:                _Info(axial_idx=2, fuel_pin=True),
-    VeraDtype.ASSEMBLY:           _Info(axial_idx=0, assembly=True),
-    VeraDtype.AXIAL:              _Info(axial_idx=0),
-    VeraDtype.NODAL:               _Info(axial_idx=1, nodal=True),
-    VeraDtype.RADIAL:             _Info(fuel_pin=True),
-    VeraDtype.SCALAR:             _Info(),                       # == CORE
-    VeraDtype.RADIAL_ASSEMBLY:    _Info(assembly=True),
-    VeraDtype.CHANNEL:            _Info(axial_idx=2, channel=True),
-    VeraDtype.CHANNEL_RADIAL:     _Info(channel=True),
-    VeraDtype.RADIAL_NODE:        _Info(nodal=True),
-    VeraDtype.UNKNOWN:            _Info(),
-    VeraDtype.COMP_NODAL:         _Info(axial_idx=1, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_ENERGY:  _Info(axial_idx=2, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_SURFACE: _Info(axial_idx=3, computational=True, nodal=True, surface=True),
-    VeraDtype.COMP_ASSY:          _Info(axial_idx=1, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_ENERGY:   _Info(axial_idx=2, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_SURFACE:  _Info(axial_idx=3, computational=True, assembly=True, surface=True),
-    VeraDtype.DETECTOR:           _Info(axial_idx=0, assembly=True, detector=True),
-    VeraDtype.RADIAL_DETECTOR:    _Info(assembly=True, detector=True),
+    VeraDtype.PIN:                      _Info(axial_idx=2, fuel_pin=True),
+    VeraDtype.ASSEMBLY:                 _Info(axial_idx=1, assembly=True),
+    VeraDtype.AXIAL:                    _Info(axial_idx=0),
+    VeraDtype.NODAL:                    _Info(axial_idx=1, nodal=True),
+    VeraDtype.RADIAL:                   _Info(fuel_pin=True),
+    VeraDtype.SCALAR:                   _Info(),                       # == CORE
+    VeraDtype.RADIAL_ASSEMBLY:          _Info(assembly=True),
+    VeraDtype.CHANNEL:                  _Info(axial_idx=2, channel=True),
+    VeraDtype.CHANNEL_RADIAL:           _Info(channel=True),
+    VeraDtype.RADIAL_NODE:              _Info(nodal=True),
+    VeraDtype.UNKNOWN:                  _Info(),
+    VeraDtype.COMP_NODAL:               _Info(axial_idx=1, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL_ENERGY:        _Info(axial_idx=2, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL_SURFACE:       _Info(axial_idx=3, computational=True, nodal=True, surface=True),
+    VeraDtype.COMP_ASSY:                _Info(axial_idx=1, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY_ENERGY:         _Info(axial_idx=2, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY_SURFACE:        _Info(axial_idx=3, computational=True, assembly=True, surface=True),
+    VeraDtype.POINT_DETECTOR:           _Info(axial_idx=0, assembly=True, detector=True),
+    VeraDtype.RADIAL_POINT_DETECTOR:    _Info(assembly=True, detector=True),
+    VeraDtype.CONTINOUS_DETECTOR:       _Info(axial_idx=0, assembly=True, detector=True)
 }
 class VeraAxes(Enum):
     """Derivation Axes"""
@@ -178,19 +180,21 @@ def nan_out_reflected(cm, core_sym, array):
     return array
 
 def build_core_dtypes(
-            npiny = None, 
-            npinx = None, 
-            nax = None, 
-            nass = None,
-            comp_nax = None,
-            comp_nass = None,
-            nde = None,
+    npiny = None, 
+    npinx = None, 
+    nax = None, 
+    nass = None,
+    comp_nax = None,
+    comp_nass = None,
+    ndet = None,
+    ndax = None,
+    continous_det = False,
 ) -> dict[tuple[int, ...], VeraDtype]:
     """Creates and retuns a dict mapping dataset shapes to dataset identifier (enums)"""
     shape_to_dtype = {}
     if nax and nass:
         shape_to_dtype |= {
-            (nax, nass) : VeraDtype.ASSEMBLY,
+            (1, nax, nass) : VeraDtype.ASSEMBLY,
             (nax,) : VeraDtype.AXIAL,
             (nass,) : VeraDtype.RADIAL_ASSEMBLY,
             (NUM_NODES, nax, nass) : VeraDtype.NODAL,
@@ -198,10 +202,13 @@ def build_core_dtypes(
             (1,) : VeraDtype.SCALAR,
             () : VeraDtype.SCALAR
         }
-    if nde and nax and (nass is None or nass != nde):
+    if ndet and ndax and (ndet != nass or ndax != ndet):
         shape_to_dtype |= {
-            (nax, nde) : VeraDtype.DETECTOR,
-            (nde,) : VeraDtype.RADIAL_DETECTOR,
+            (ndax, ndet) :  VeraDtype.CONTINOUS_DETECTOR if continous_det else VeraDtype.POINT_DETECTOR,
+        }
+    if ndet and ndet != nass:
+        shape_to_dtype |= {
+            (ndet,) : VeraDtype.RADIAL_POINT_DETECTOR,
         }
     if npiny and npinx and nax and nass:
         shape_to_dtype |= {
@@ -415,7 +422,9 @@ class VeraOutCore(LazyHDF5Loader):
             nass=self.nass,
             comp_nax=self.comp_nax, 
             comp_nass=self.comp_nass, 
-            nde=self.nde,
+            ndet=self.ndet,
+            ndax=self.ndax,
+            continous_det=self.is_continous_detector,
         )
         self._compute_reduced_core_maps()
         self._determine_core_labels()
@@ -504,13 +513,29 @@ class VeraOutCore(LazyHDF5Loader):
         self.comp_core_map[np.isnan(self.comp_core_map)] = 0
         self._is_comp_rolled = np.count_nonzero(self.comp_core_map) == np.count_nonzero(np.unique(self.comp_core_map))
     
-    def _determine_detectors(self):
+    def _determine_detectors(self, n_points=500):
         self.detector_map = None
-        self.nde = None
-        if "detector_map" not in self.f["CORE"]:
+        self.ndet = None
+        self.det_axial_mesh_means = None
+        self.ndax = self.nax
+        self.is_continous_detector = False
+        core_group : h5py.Group = self.f["CORE"]
+        if "detector_map" not in core_group:
             return
-        self.detector_map = self.f["CORE/detector_map"][()]
-        self.nde = int(np.count_nonzero(np.unique(self.detector_map[~np.isnan(self.detector_map)])))
+        self.detector_map = core_group["detector_map"][()]
+        self.ndet = int(np.count_nonzero(np.unique(self.detector_map[~np.isnan(self.detector_map)])))
+        det_axial_mesh_name = next((ds for ds in core_group.keys() if ds.startswith("detector_axial_mesh")), None)
+        if not det_axial_mesh_name:
+            return
+        self.det_axial_mesh_means = core_group[det_axial_mesh_name][()]
+        self.ndax = len(self.det_axial_mesh_means)
+        self.is_continous_detector = self.det_axial_mesh_means.ndim == 2
+        if not self.is_continous_detector:
+            return
+        # raw = self.det_axial_mesh_means
+        # if raw.shape[1] != 2:
+        #     raise RuntimeError("Expects start/stop for 2d detector axial mesh")
+        # self.det_axial_mesh_means = np.linspace(raw[:, 0], raw[:, 1], num=n_points, axis=-1)
 
     def _compute_reduced_core_maps(self) -> None:
         """Compute the reduced core map based upon the core_sym"""
@@ -536,7 +561,7 @@ class VeraOutCore(LazyHDF5Loader):
             elif self.has_comp_core:
                 self.comp_map_start_index = start_w
             if self.detector_map is not None:
-                self.detector_map = self.detector_map[start_w, start_h]
+                self.detector_map = self.detector_map[start_w:, start_h:]
         else:
             raise Exception(f"Unhandled symmetry: {sym}")
     
@@ -593,11 +618,15 @@ class VeraOutCore(LazyHDF5Loader):
     def _compute_axial_mesh_means(self):
         """Midpoint between each pair of neighboring mesh boundaries."""
         self.axial_mesh_means = self._midpoints(self.axial_mesh)
+        self.gross_axial_mesh = self.axial_mesh_means
         if self.has_comp_axial_mesh():
             self.comp_axial_mesh_means = self._midpoints(self.comp_axial_mesh)
-            self.gross_axial_mesh = np.union1d(self.axial_mesh_means, self.comp_axial_mesh_means)
+            self.gross_axial_mesh = np.union1d(self.gross_axial_mesh, self.comp_axial_mesh_means)
+        if self.det_axial_mesh_means is not None:
+            self.gross_axial_mesh = np.union1d(self.gross_axial_mesh, self.det_axial_mesh_means)
         else:
-            self.gross_axial_mesh = self.axial_mesh_means
+            # no detector axial mesh means were found in the core, use axial_mesh as reference
+            self.det_axial_mesh_means = self.axial_mesh_means
 
     @staticmethod
     def _midpoints(mesh, decimals=4):
@@ -631,6 +660,13 @@ class VeraOutCore(LazyHDF5Loader):
         if self.npy is None or self.npx is None or self.comp_nax is None or self.comp_nass is None:
             raise RuntimeError("Core pin lattice is undetermined; complete characteristics first")
         return (self.npy, self.npx, self.comp_nax, self.comp_nass)
+
+    @property
+    def detector_shape(self) -> tuple[int, ...]:
+        """Shape of detector shape (ndax, ndet)"""
+        if self.npy is None or self.npx is None or self.ndax is None or self.ndet is None:
+            raise RuntimeError("Detector shape is undetermined")
+        return (self.npy, self.npx, self.ndax, self.ndet)
     
     def core_dtypes(self, dataset_shape : tuple[int, ...]) -> VeraDtype:
         """Get VeraDtype associated with dataset_shape
@@ -641,6 +677,18 @@ class VeraOutCore(LazyHDF5Loader):
         Return VeraDtype.UKNOWN if shape is not known.
         """
         return self._shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
+
+    def get_core_shape(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+        """get coresponding core shape for `dataset`"""
+        dtype = dataset.dataset_type if dataset is not None else dataset_type
+        if dtype.is_computational() and self.has_comp_core():
+            return self.comp_core_shape
+        elif dtype.is_detector() and self.detector_map is not None and self.det_axial_mesh_means is not None:
+            return self.detector_shape
+        elif dtype != VeraDtype.UNKNOWN:
+            return self.core_shape
+        else:
+            raise RuntimeError(f"Could not find core shape for dataset of type {str(dtype)}")
     
     def get_map(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
         """get coresponding core map for `dataset`"""
@@ -653,6 +701,38 @@ class VeraOutCore(LazyHDF5Loader):
             return self.reduced_core_map
         else:
             raise RuntimeError(f"Could not find map for dataset of type {str(dtype)}")
+
+    def get_axial_mesh(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+        """get coresponding axial mesh for `dataset`"""
+        dtype = dataset.dataset_type if dataset is not None else dataset_type
+        if dtype.is_computational() and self.has_comp_axial_mesh():
+            return self.comp_axial_mesh
+        elif dtype != VeraDtype.UNKNOWN:
+            return self.axial_mesh
+        else:
+            raise RuntimeError(f"Could not find axial mesh for dataset of type {str(dtype)}")
+
+    def get_axial_mesh_means(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+        """get coresponding axial mesh means for `dataset`"""
+        dtype = dataset.dataset_type if dataset is not None else dataset_type
+        if dtype.is_computational() and self.has_comp_axial_mesh():
+            return self.comp_axial_mesh_means
+        elif dtype.is_detector() and self.det_axial_mesh_means is not None:
+            return self.det_axial_mesh_means
+        elif dtype != VeraDtype.UNKNOWN:
+            return self.axial_mesh_means
+        else:
+            raise RuntimeError(f"Could not find axial mesh means for dataset of type {str(dtype)}")
+
+    def get_axial_mesh_pixels(self, dataset : VeraDataset = None, dataset_type : VeraDtype = VeraDtype.UNKNOWN):
+        """get coresponding axial mesh pixels for `dataset`"""
+        dtype = dataset.dataset_type if dataset is not None else dataset_type
+        if dtype.is_computational() and self.has_comp_axial_mesh():
+            return self.comp_axial_mesh_pixels
+        elif dtype != VeraDtype.UNKNOWN:
+            return self.axial_mesh_pixels
+        else:
+            raise RuntimeError(f"Could not find axial mesh means for dataset of type {str(dtype)}")
 
     def row_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""

@@ -57,19 +57,19 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
-            case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
+            case VeraDtype.POINT_DETECTOR:
                 indices_list.append((selected_layer, selected_assembly))
             case VeraDtype.NODAL:
                 indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
             case VeraDtype.RADIAL_NODE:
                 indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_assembly))
-            case VeraDtype.COMP_ASSY:
+            case VeraDtype.COMP_ASSY | VeraDtype.ASSEMBLY:
                 indices_list.append((0, selected_layer, selected_assembly))
             case VeraDtype.AXIAL:
                 indices_list.append((selected_layer))
             case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
                 indices_list.append((selected_j, selected_i, selected_assembly))
-            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
+            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
                 indices_list.append((selected_assembly))
             case VeraDtype.SCALAR:
                 indices_list.append((0))
@@ -107,7 +107,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         }
         is_comp = array_dtype.is_computational()
 
-        axial_value = src.core.axial_mesh_means[selected_layer] if not is_comp else src.core.comp_axial_mesh_means[selected_layer]
+        axial_value = src.core.get_axial_mesh_means(dataset_type=array_dtype)[selected_layer]
         assembly_label = src.core.reduced_core_map_label(selected_assembly, is_comp)
         pin_label = f"Pin ({selected_i + 1}, {selected_j + 1})"
         surface_label = f" {Surface(state.selected_surface).str}"

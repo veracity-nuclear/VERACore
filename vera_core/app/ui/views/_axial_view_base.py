@@ -33,7 +33,6 @@ def option_for(view_id, axis):
             VeraDtype.PIN.title,
             VeraDtype.CHANNEL.title,
             VeraDtype.ASSEMBLY.title,
-            VeraDtype.DETECTOR.title,
             VeraDtype.COMP_NODAL.title,
             VeraDtype.COMP_NODAL_ENERGY.title,
             VeraDtype.COMP_ASSY.title,
@@ -216,13 +215,13 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                 group_arrays = [array[g] for g in range(num_groups)]
         else:
             num_groups = 1
-            if array_dtype == VeraDtype.COMP_ASSY:
+            if array_dtype.is_assembly():
                 group_arrays = [array[0]]
             else:
                 group_arrays = [array]
 
-        mesh_pixels = core.comp_axial_mesh_pixels if is_comp else core.axial_mesh_pixels
-        mesh_means = core.comp_axial_mesh_means if is_comp else core.axial_mesh_means
+        mesh_pixels = core.get_axial_mesh_pixels(dataset_type=array_dtype)
+        mesh_means = core.get_axial_mesh_means(dataset_type=array_dtype)
         state[size_y_key] = mesh_pixels[::-1].tolist()
         state[label_y_key] = [np.round(m, 1) for m in mesh_means][::-1]
 

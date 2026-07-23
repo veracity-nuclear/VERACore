@@ -48,7 +48,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 continue
             ny, nx, nax, nass, _, _ = indices
             assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
-            axial_label = src.core.axial_mesh_means[nax] if not is_comp else src.core.comp_axial_mesh_means[nax]
+            axial_label = src.core.get_axial_mesh_means(dataset_type=array_dtype)[nax]
             units = src.array_units(array_name)
             units_label = f" ({units}) " if units != "unitless" else ""
             indices_list = []
@@ -56,7 +56,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     indices_list.append((ny, nx, nax, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
-                case VeraDtype.ASSEMBLY | VeraDtype.DETECTOR:
+                case VeraDtype.POINT_DETECTOR:
                     indices_list.append((nax, nass))
                     identifier = f" | {assembly_label} z = {axial_label}"
                 case VeraDtype.AXIAL:
@@ -65,7 +65,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
                     indices_list.append((ny, nx, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1})"
-                case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_DETECTOR:
+                case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
                     indices_list.append((nass))
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:
@@ -74,10 +74,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     node_idx = convert_ji_to_node(ny, nx)
                     indices_list.append((node_idx, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
-                case VeraDtype.COMP_ASSY | VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-                    node_idx = convert_ji_to_node(ny, nx) if array_dtype.is_nodal() else 0 
+                case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
+                    node_idx = convert_ji_to_node(ny, nx)
                     indices_list.append((node_idx, nax, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
+                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
+                    indices_list.append((0, nax, nass))
+                    identifier = f" | {assembly_label} | z = {axial_label}"
                 case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:
                     node_idx = convert_ji_to_node(ny, nx) if array_dtype == VeraDtype.COMP_NODAL_ENERGY else 0
                     num_energy_groups = array_shape[0]

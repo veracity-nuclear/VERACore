@@ -111,14 +111,18 @@ class CoreAxialView(HtmlElement):
         self._attr_names += [
             "value",
             "labels",
+            "mesh",
             ("x_range", "xRange"),
+            ("y_range", "yRange"),
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
             ("aspect_ratio", "aspectRatio"),
-            ("active_style", "activeStyle"),
+            ("color_preset", "colorPreset"),
+            ("color_range", "colorRange"),
             ("x_labels", "xLabels"),
             ("y_labels", "yLabels"),
             ("cell_size", "cellSize"),
+            "dark",
             "busy",
         ]
         self._event_names += [

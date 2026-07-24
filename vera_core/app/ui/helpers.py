@@ -31,6 +31,14 @@ def is_view_locked(state, view_id):
 def is_non_active_view(state : State, view_id : int, option : dict[str, str]) -> bool:
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
 
+def _layer_elevation(axial_mesh, layer):
+    mesh = np.asarray(axial_mesh, dtype=float)
+    if mesh.ndim == 2:
+        mesh = mesh.mean(axis=1)
+    if not 0 <= layer < mesh.shape[0]:
+        return None
+    return float(np.round(mesh[layer], 2))
+
 def set_info(view_id : int, state : State, registry : VeraDataRegistry):
     indices = get_safe_idxs(view_id, state, registry)
     if not indices:
@@ -46,7 +54,7 @@ def set_info(view_id : int, state : State, registry : VeraDataRegistry):
     state[f"label_info_{view_id}"] = {
             "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
             "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
-            "Layer": np.round(axial_mesh[layer], decimals=2),
+            "Layer": _layer_elevation(axial_mesh, layer),
             "Pin_x" : int(i),
             "Pin_y" : int(j),
         }

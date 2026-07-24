@@ -102,6 +102,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     @requires_src
     def _recompute_card_range(view_id):
         """Rescales the each views colorbar"""
+        option = state[f"grid_view_{view_id}"]
+        if option.get("owns_color_bar", False):
+            return
         src = registry.get(state[f"selected_src_id_{view_id}"])
         if src is None:
             return
@@ -328,7 +331,6 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
     @ctrl.set("load_session")
     def _load_session(in_path: str):
-        print("here", in_path)
         data = json.loads(Path(in_path).read_text())
         session = Session(**{
             **data,

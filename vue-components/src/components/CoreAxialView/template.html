@@ -1,75 +1,119 @@
-<div class="container" style="width: 100%; height: 100%; overflow: hidden;">
-  <div :style="scaleStyle" style="position: relative; width: 100%; height: 100%;">
-    <div :style="sizeStyle" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-      <v-col class="content ma-0">
-        <v-row class="ma-0">
-          <v-sheet height="30" width="30" />
-          <v-sheet
-            v-for="i in coreWidth"
-            :key="i"
-            height="30" width="30"
-            class="d-flex flex-column justify-center"
-            rounded
-            :dark="i == activeI + 1"
-          >
-            <div class="text-center text-overline">{{ xLabels[i - 1] }}</div>
-          </v-sheet>
-        </v-row>
-        <v-row
-          v-for="(line, j) in value"
-          :key="j"
-          class="ma-0"
-        >
-          <v-sheet
-            height="30" width="30"
-            class="d-flex flex-column justify-center"
-            rounded
-            :dark="j == activeJ"
-          >
-            <div class="text-center text-overline">{{ yLabels[j] }}</div>
-          </v-sheet>
+<div class="vera-core-axial" style="width: 100%; height: 100%; overflow: hidden;">
+  <svg
+    :viewBox="viewBox"
+    preserveAspectRatio="xMidYMid meet"
+    style="width: 100%; height: 100%; display: block;"
+    @mouseleave="exit"
+  >
+    <g class="axis-labels" :fill="theme.label">
+      <text
+        v-for="(cell, i) in (cells[0] || [])"
+        :key="'col-' + i"
+        :x="columnX(i)"
+        :y="gutter * 0.62"
+        :font-size="labelFont"
+        :font-weight="i === activeI ? 700 : 400"
+        text-anchor="middle"
+        dominant-baseline="middle"
+      >{{ xLabels[i] }}</text>
+      <text
+        v-for="(row, j) in cells"
+        :key="'row-' + j"
+        :x="gutter * 0.5"
+        :y="rowY(j)"
+        :font-size="labelFont"
+        :font-weight="j === activeJ ? 700 : 400"
+        text-anchor="middle"
+        dominant-baseline="middle"
+      >{{ yLabels[j] }}</text>
+    </g>
+    <template v-for="row in cells">
+      <g
+        v-for="cell in row"
+        :key="cell.j + '-' + cell.i"
+        :transform="`translate(${cell.tx}, ${cell.ty})`"
+      >
+        <template v-if="cell.shape">
+          <rect
+            :x="box.x"
+            :y="box.y"
+            :width="box.width"
+            :height="box.height"
+            :fill="isHovered(cell) ? theme.surfaceHover : theme.surface"
+            :stroke="cell.border"
+            :stroke-width="borderWidth"
+            vector-effect="non-scaling-stroke"
+          />
+          <line
+            v-for="(g, gi) in gridLines"
+            :key="'g' + gi"
+            :x1="g.x1" :y1="g.y1" :x2="g.x2" :y2="g.y2"
+            :stroke="theme.grid"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+          />
+          <line
+            v-if="referenceLine"
+            :x1="referenceLine.x1" :y1="referenceLine.y1"
+            :x2="referenceLine.x2" :y2="referenceLine.y2"
+            :stroke="theme.reference"
+            stroke-width="1"
+            stroke-dasharray="2 2"
+            vector-effect="non-scaling-stroke"
+          />
 
-          <v-sheet
-            v-for="(cell, i) in line"
-            :key="i"
-            height="30" width="30"
-            outlined
-            :style="toStyle(i, j)"
-            :class="{ busy, pointerCursor: !busy }"
-            @click="hasCell(i, j) && $emit('click', { i, j })"
-            @mouseenter="hover(i, j)"
-            @mouseleave="exit"
-          >
-            <div style="position: relative; width: 100%; height: 100%;">
-              <svg
-                v-if="hasCell(i, j)"
-                :viewBox="`0 0 ${cellSize} ${cellSize}`"
-                preserveAspectRatio="none"
-                style="position: absolute; width: 100%; height: 100%; top: 0; left: 0;"
-              >
-                <line
-                  v-for="(g, gi) in gridLines"
-                  :key="gi"
-                  :x1="g.x1" :y1="g.y1" :x2="g.x2" :y2="g.y2"
-                  stroke="#ddd"
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-                <polyline
-                  :points="toPoints(i, j)"
-                  fill="none"
-                  stroke="black"
-                  stroke-width="1"
-                  vector-effect="non-scaling-stroke"
-                />
-              </svg>
-              <div v-if="toLabel(i, j)" class="assembly-label">
-                {{ toLabel(i, j) }}
-              </div>
-            </div>
-          </v-sheet>
-        </v-row>
-      </v-col>
-    </div>
-  </div>
-</div>  
+          <path
+            v-if="cell.shape.kind === 'path'"
+            :d="cell.shape.d"
+            fill="none"
+            :stroke="cell.shape.color"
+            :stroke-width="seriesWidth"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          />
+          <circle
+            v-for="(dot, di) in (cell.shape.dots || [])"
+            :key="'d' + di"
+            :cx="dot.cx"
+            :cy="dot.cy"
+            :r="pointRadius"
+            :fill="cell.shape.color"
+          />
+
+          <text
+            v-if="cell.label"
+            class="assembly-label"
+            :x="cellW * 0.5"
+            :y="box.y + box.height - 3"
+            :font-size="labelFont * 0.8"
+            :fill="theme.label"
+            text-anchor="middle"
+          >{{ cell.label }}</text>
+        </template>
+        <rect
+          :width="cellW"
+          :height="cellH"
+          fill="transparent"
+          :style="{ cursor: busy ? 'wait' : (cell.shape ? 'pointer' : 'default') }"
+          @click="select(cell)"
+          @mouseenter="hover(cell)"
+        />
+      </g>
+    </template>
+    <g v-if="selectionPath" pointer-events="none" fill="none"
+       stroke-linecap="round" stroke-linejoin="round">
+      <path
+        :d="selectionPath"
+        :stroke="theme.halo"
+        :stroke-width="haloWidth"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        :d="selectionPath"
+        :stroke="selectionStroke"
+        :stroke-width="bracketWidth"
+        vector-effect="non-scaling-stroke"
+      />
+    </g>
+  </svg>
+</div>

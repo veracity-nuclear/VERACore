@@ -344,12 +344,23 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
         volume_array[row_slice, col_slice] = array[:, :, :, assembly_id]
 
     volume_array = np.repeat(volume_array, core.get_axial_mesh_pixels(dataset=array), axis=2)
+    for axis in range(3):
+        if volume_array.shape[axis] < 2:
+            volume_array = np.repeat(volume_array, 2, axis=axis)
+    axial_mesh = core.get_axial_mesh(dataset=array)
+    if axial_mesh is None:
+        return
+    axial_dim = np.diff(axial_mesh)
+    pin_pitch = core.pin_pitch
+    cm_per_axial_pixel = float(axial_dim.sum() / volume_array.shape[2])
+    spacing = (pin_pitch, pin_pitch, cm_per_axial_pixel)
 
     scalars = volume_array.transpose(2, 1, 0).ravel()   # single contiguous copy
     vtk_array = np_s.numpy_to_vtk(scalars, deep=True)
 
     volume_data = ctx["volume_data"]
     volume_data.SetDimensions(*volume_array.shape)
+    volume_data.SetSpacing(*spacing)
     pd = volume_data.GetPointData()
     while pd.GetNumberOfArrays() > 0:
         pd.RemoveArray(0)

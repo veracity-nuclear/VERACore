@@ -112,6 +112,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     core_axials_key = f"core_axials_{view_id}"
     xrange_key = f"core_axial_xrange_{view_id}"
     yrange_key = f"core_axial_yrange_{view_id}"
+    xlabels_key = f"core_axial_xlabels_{view_id}"
+    ylabels_key = f"core_axial_ylabels_{view_id}"
     mesh_key = f"core_axial_mesh_{view_id}"
     aspect_ratio_key = f"aspect_ratio_{view_id}"
     lock_flag = f"locked_{view_id}"
@@ -138,6 +140,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if src is None:
             return
         array = src.array(state[selected_array_key])
+        core = src.core
         dtype = array.dataset_type
         if dtype not in ALLOWED_DTYPES:
             return
@@ -148,7 +151,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 f"{dtype.title}: {data.shape[0]} values per assembly does not match "
                 f"{mesh.shape[0]} mesh entries"
             )
-        core_map = src.core.reduced_core_map
+        core_map = src.core.get_map(dataset_type=dtype)
         grid = []
         for j in range(core_map.shape[0]):
             row = []
@@ -165,6 +168,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 })
         means = [c["mean"] for row in grid for c in row if c and c["mean"] is not None]
         state[f"color_range_{view_id}_0"] = [min(means), max(means)]
+        is_comp = dtype.is_computational()
+        state[xlabels_key] = core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
+        state[ylabels_key] = core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
         state[mesh_key] = _mesh_geometry(dtype, mesh)
         state[core_axials_key] = grid
         state[xrange_key] = _finite_range(data)
@@ -177,7 +183,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         with html.Div(style="flex: 1; min-width: 0; display: flex; flex-direction: column;"):
             with html.Div(style="flex: 1; min-height: 0; position: relative;"):
                 vera.CoreAxialView(
-                    v_if=(f"{core_axials_key} && {core_axials_key}.length",),
+                    v_if=(f"{core_axials_key} && {core_axials_key}.length && {mesh_key} && {mesh_key}.y && {mesh_key}.y.length",),
                     value=(core_axials_key, []),
                     x_range=(xrange_key, [0.0, 1.0]),
                     y_range=(yrange_key, [0.0, 1.0]),
@@ -188,6 +194,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     color_preset="jet",
                     color_range=(f"color_range_{view_id}_0", [0.0, 1.0]),
                     dark=("$vuetify.theme.dark",),
+                    x_labels=(xlabels_key,),
+                    y_labels=(ylabels_key,),
                     click="selected_assembly_ij = $event",
                     busy=("trame__busy",),
                 )

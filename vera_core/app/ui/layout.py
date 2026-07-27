@@ -72,7 +72,7 @@ def build_grid_card(ctrl: Controller):
     ):
         with vuetify.VCard(
             style="height: 100%; display: flex; flex-direction: column;",
-            key="grid_item_dirty_key",
+            key=("`card_${item.i}_${get(`grid_view_${item.i}`).name}`",),
         ):
             with vuetify.VCardTitle(classes="py-1 px-1", style="flex: 0 0 auto;"):
                 with vuetify.VMenu(offset_y=True):
@@ -89,7 +89,6 @@ def build_grid_card(ctrl: Controller):
                             key="index",
                             click="""
                                 set(`grid_view_${item.i}`, option);
-                                grid_item_dirty_key++;
                             """,
                         ):
                             with vuetify.VListItemIcon():

@@ -48,6 +48,23 @@ function decimate(centers, gap) {
   return keep;
 }
 
+function niceStep(raw) {
+  if (!(raw > 0)) {
+    return 1;
+  }
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  let nice = 10;
+  if (norm <= 1) nice = 1;
+  else if (norm <= 2) nice = 2;
+  else if (norm <= 5) nice = 5;
+  return nice * mag;
+}
+
+function formatTick(value, step) {
+  return step >= 1 ? String(Math.round(value)) : value.toFixed(1);
+}
+
 export default {
   name: 'VeraAxial',
   props: {
@@ -85,6 +102,14 @@ export default {
     yLabels: {
       type: Array,
       default: () => ['8', '9', '10', '11', '12', '13', '14', '15'],
+    },
+    yBounds: {
+      type: Array,
+      default: () => [],
+    },
+    yUnit: {
+      type: String,
+      default: 'cm',
     },
     xScale: {
       type: Number,
@@ -142,6 +167,8 @@ export default {
       boxWidth: 0,
       boxHeight: 0,
       fontFamily: 'sans-serif',
+      measureNonce: 0,
+      hover: null,
     };
   },
   computed: {
@@ -171,17 +198,24 @@ export default {
     },
     renderedRows() {
       const rows = [];
+      const edges = this.yEdges;
       for (let j = 0; j < this.rowCount; j += 1) {
-        if (this.rowImages[j]) {
+        if (this.rowImages[j] && edges[j + 1] != null) {
           rows.push({ j, url: this.rowImages[j] });
         }
       }
       return rows;
     },
+    lineHeight() {
+      return Math.ceil(this.fontSize * 1.4);
+    },
     gutterWidth() {
       let width = 0;
-      for (let j = 0; j < this.rowCount; j += 1) {
+      for (let j = 0; j < this.yLabels.length; j += 1) {
         width = Math.max(width, this.textWidth(this.yLabels[j]));
+      }
+      for (let t = 0; t < this.yTicks.length; t += 1) {
+        width = Math.max(width, this.textWidth(this.yTicks[t].text));
       }
       return width ? Math.ceil(width) + this.labelPadding : 0;
     },
@@ -192,9 +226,6 @@ export default {
       }
       return width ? this.lineHeight : 0;
     },
-    lineHeight() {
-      return Math.ceil(this.fontSize * 1.4);
-    },
     xLabelGap() {
       let width = 0;
       for (let i = 0; i < this.columnCount; i += 1) {
@@ -203,7 +234,7 @@ export default {
       return Math.ceil(width) + this.labelPadding;
     },
     yLabelGap() {
-      return this.lineHeight;
+      return this.lineHeight + 4;
     },
     availWidth() {
       return Math.max(0, this.boxWidth - this.gutterWidth);
@@ -217,17 +248,17 @@ export default {
     unitHeight() {
       return this.ySizes.reduce((sum, size) => sum + size * this.yScale, 0);
     },
-
     fit() {
       if (!this.unitWidth || !this.unitHeight) {
         return 0;
       }
-      return Math.min(
+      const f = Math.min(
         this.availWidth / this.unitWidth,
         this.availHeight / this.unitHeight,
         this.maxCellSize / (Math.max(...this.xSizes) * this.xScale),
         this.maxCellSize / (Math.max(...this.ySizes) * this.yScale),
       );
+      return Number.isFinite(f) ? f : 0;
     },
     xEdges() { return edgesFrom(this.xSizes, this.xScale * this.fit); },
     yEdges() { return edgesFrom(this.ySizes, this.yScale * this.fit); },
@@ -237,21 +268,47 @@ export default {
     dataHeight() {
       return this.yEdges[this.yEdges.length - 1];
     },
+    useTicks() {
+      return this.yBounds.length >= 2 && this.yBounds.length === this.yEdges.length;
+    },
     visibleColumns() {
       return decimate(centersOf(this.xEdges), this.xLabelGap);
     },
     visibleRows() {
+      if (this.useTicks) {
+        return [];
+      }
       return decimate(centersOf(this.yEdges).slice(0, this.rowCount), this.yLabelGap);
     },
+    yTicks() {
+      const b = this.yBounds;
+      if (!this.useTicks || !this.dataHeight) {
+        return [];
+      }
+      const hi = Math.max(b[0], b[b.length - 1]);
+      const lo = Math.min(b[0], b[b.length - 1]);
+      const target = Math.max(2, Math.floor(this.dataHeight / (this.lineHeight * 1.8)));
+      const step = niceStep((hi - lo) / target);
+      const ticks = [];
+      const start = Math.ceil(lo / step) * step;
+      for (let v = start; v <= hi + 1e-9; v += step) {
+        ticks.push({ value: v, text: formatTick(v, step), y: this.pixelForCm(v) });
+      }
+      return ticks;
+    },
+    frameLeft() {
+      return Math.round((this.boxWidth - (this.gutterWidth + this.dataWidth)) / 2);
+    },
+    frameTop() {
+      return Math.round((this.boxHeight - (this.headerHeight + this.dataHeight)) / 2);
+    },
     frameStyle() {
-      const width = this.gutterWidth + this.dataWidth;
-      const height = this.headerHeight + this.dataHeight;
       return {
         position: 'absolute',
-        left: `${Math.round((this.boxWidth - width) / 2)}px`,
-        top: `${Math.round((this.boxHeight - height) / 2)}px`,
-        width: `${width}px`,
-        height: `${height}px`,
+        left: `${this.frameLeft}px`,
+        top: `${this.frameTop}px`,
+        width: `${this.gutterWidth + this.dataWidth}px`,
+        height: `${this.headerHeight + this.dataHeight}px`,
         fontSize: `${this.fontSize}px`,
         letterSpacing: `${this.letterSpacing}px`,
         lineHeight: `${this.lineHeight}px`,
@@ -282,6 +339,32 @@ export default {
         ...this.activeStyle,
       };
     },
+    tooltipStyle() {
+      if (!this.hover) {
+        return { display: 'none' };
+      }
+      const x = this.frameLeft + this.gutterWidth + this.hover.x;
+      const y = this.frameTop + this.headerHeight + this.hover.y;
+      // Flip to the left of the cursor when near the right edge so the readout
+      // stays on-panel for narrow (single-rod) frames.
+      const flip = x > this.boxWidth * 0.6;
+      return {
+        position: 'absolute',
+        left: flip ? 'auto' : `${x + 12}px`,
+        right: flip ? `${this.boxWidth - x + 12}px` : 'auto',
+        top: `${Math.max(0, y - 10)}px`,
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        zIndex: 20,
+      };
+    },
+    tooltipText() {
+      if (!this.hover) {
+        return '';
+      }
+      const label = this.yLabels[this.hover.j];
+      return label == null ? '' : `${label} ${this.yUnit}`;
+    },
   },
   created() {
     this.lookupTable = new LookupTable(this.colorPreset, this.colorRange);
@@ -291,7 +374,13 @@ export default {
   mounted() {
     this.fontFamily = window.getComputedStyle(this.$el).fontFamily || 'sans-serif';
     this.resizeObserver.observe(this.$el);
-    this.$nextTick(() => this.resize());
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        this.fontFamily = window.getComputedStyle(this.$el).fontFamily || 'sans-serif';
+        this.measureNonce += 1;
+        this.resize();
+      });
+    }
   },
   beforeDestroy() {
     this.resizeObserver.disconnect();
@@ -304,12 +393,45 @@ export default {
       this.boxHeight = height;
     },
     textWidth(text) {
+      this.measureNonce;
       const value = text == null ? '' : String(text);
       if (!value) {
         return 0;
       }
       this.measureContext.font = `${this.fontSize}px ${this.fontFamily}`;
       return this.measureContext.measureText(value).width + this.letterSpacing * value.length;
+    },
+    pixelForCm(v) {
+      const b = this.yBounds;
+      const e = this.yEdges;
+      if (v >= b[0]) return e[0];
+      if (v <= b[b.length - 1]) return e[e.length - 1];
+      for (let k = 0; k < b.length - 1; k += 1) {
+        if (v <= b[k] && v >= b[k + 1]) {
+          const span = b[k] - b[k + 1] || 1;
+          const t = (b[k] - v) / span;
+          return e[k] + t * (e[k + 1] - e[k]);
+        }
+      }
+      return e[e.length - 1];
+    },
+    tickLabelStyle(y) {
+      return {
+        position: 'absolute',
+        left: 0,
+        top: `${this.headerHeight + y - this.lineHeight / 2}px`,
+        width: `${Math.max(0, this.gutterWidth - this.labelPadding)}px`,
+        height: `${this.lineHeight}px`,
+      };
+    },
+    tickMarkStyle(y) {
+      return {
+        position: 'absolute',
+        left: `${this.gutterWidth - 3}px`,
+        top: `${this.headerHeight + Math.round(y)}px`,
+        width: '3px',
+        height: '1px',
+      };
     },
     rowStyle(j) {
       return {
@@ -342,22 +464,24 @@ export default {
     },
     locate(event) {
       const rect = event.currentTarget.getBoundingClientRect();
-      return {
-        i: indexAt(this.xEdges, event.clientX - rect.left),
-        j: indexAt(this.yEdges, event.clientY - rect.top),
-      };
+      const lx = event.clientX - rect.left;
+      const ly = event.clientY - rect.top;
+      return { lx, ly, i: indexAt(this.xEdges, lx), j: indexAt(this.yEdges, ly) };
     },
     onClick(event) {
-      this.$emit('click', this.locate(event));
+      const { i, j } = this.locate(event);
+      this.$emit('click', { i, j });
     },
     onHover(event) {
-      const { i, j } = this.locate(event);
+      const { lx, ly, i, j } = this.locate(event);
       this.activeI = i;
       this.activeJ = j;
+      this.hover = { x: lx, y: ly, j };
     },
     exit() {
       this.activeI = this.selectedI;
       this.activeJ = this.selectedJ;
+      this.hover = null;
     },
   },
 };

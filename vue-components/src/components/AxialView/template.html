@@ -8,14 +8,32 @@
     >
       {{ xLabels[i] }}
     </div>
-    <div
-      v-for="j in visibleRows"
-      :key="'y' + j"
-      class="vera-axial-label vera-axial-label-y"
-      :style="yLabelStyle(j)"
-    >
-      {{ yLabels[j] }}
-    </div>
+    <template v-if="useTicks">
+      <div
+        v-for="tick in yTicks"
+        :key="'t' + tick.value"
+        class="vera-axial-label vera-axial-label-y"
+        :style="tickLabelStyle(tick.y)"
+      >
+        {{ tick.text }}
+      </div>
+      <div
+        v-for="tick in yTicks"
+        :key="'m' + tick.value"
+        class="vera-axial-tick"
+        :style="tickMarkStyle(tick.y)"
+      ></div>
+    </template>
+    <template v-else>
+      <div
+        v-for="j in visibleRows"
+        :key="'y' + j"
+        class="vera-axial-label vera-axial-label-y"
+        :style="yLabelStyle(j)"
+      >
+        {{ yLabels[j] }}
+      </div>
+    </template>
     <div
       :style="dataStyle"
       :class="{ busy, pointerCursor: !busy }"
@@ -33,6 +51,9 @@
     </div>
 
   </div>
+
+  <!-- Hover readout: exact elevation of the cell under the cursor. -->
+  <div class="vera-axial-tooltip" :style="tooltipStyle">{{ tooltipText }}</div>
 </div>
 
 <style scoped>
@@ -46,5 +67,19 @@
 
 .vera-axial-label-y {
   justify-content: flex-end;
+}
+
+.vera-axial-tick {
+  background: currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.vera-axial-tooltip {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
 }
 </style>

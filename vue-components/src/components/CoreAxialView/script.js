@@ -1,13 +1,13 @@
 import { LookupTable } from '../../utils/Colors';
 
 const GUTTER = 30; // label gutter
-const CELL_GAP = 6; 
+const CELL_GAP = 6;
 const PLOT_PADDING = 3; // border to data
 const GRID_DIVISIONS = 2;
 const LABEL_FONT = 11;
-const POINT_RADIUS = 1.6;
+const POINT_RADIUS = 0.7;
 const BORDER_WIDTH = 1.5;
-const SERIES_WIDTH = 1.75;
+const SERIES_WIDTH = 0.7;
 const BRACKET_OFFSET = 2;
 const BRACKET_WIDTH = 2.5;
 const BRACKET_FRACTION = 0.3;
@@ -80,8 +80,8 @@ export default {
     labelFont() {
       return LABEL_FONT;
     },
-    pointRadius() {
-      return POINT_RADIUS;
+    pointDiameter() {
+      return POINT_RADIUS * 2;
     },
     borderWidth() {
       return BORDER_WIDTH;
@@ -236,13 +236,13 @@ export default {
       const color = this.theme.stroke;
 
       if (kind === 'points') {
-        const dots = [];
+        let d = '';
         for (let k = 0; k < x.length; k++) {
           if (x[k] != null && y[k] != null) {
-            dots.push({ cx: px(x[k]), cy: py(y[k]) });
+            d += `M${px(x[k])},${py(y[k])}h0`;
           }
         }
-        return dots.length ? { kind: 'points', dots, color } : null;
+        return d ? { kind: 'points', d, color } : null;
       }
 
       let d = '';

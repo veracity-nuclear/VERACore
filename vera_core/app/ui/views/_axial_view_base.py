@@ -9,6 +9,8 @@ from ..helpers import is_non_active_view, get_safe_idxs, set_info, convert_ji_to
 
 MAX_VIS_GROUPS = 4
 FALLBACK_DISPLAY_SIZE = 17
+X_SCALE = 3.0
+
 
 _AXIS_OPTIONS = {
     "x": {
@@ -53,12 +55,12 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     selected_src_key = f"selected_src_id_{view_id}"
 
     prefix = f"{axis}_axial_core"
-    # Per-group state keys (one set of grid/sizes per energy group).
     core_keys = [f"{prefix}_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     size_x_keys = [f"{prefix}_size_x_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     size_y_key = f"{prefix}_size_y_{view_id}"
     label_x_key = f"{prefix}_label_x_{view_id}"
     label_y_key = f"{prefix}_label_y_{view_id}"
+    y_scale_key = f"{prefix}_y_scale_{view_id}"
     selected_layer_key = f"selected_layer_{view_id}"
     n_groups_key = f"n_groups_{view_id}"
     info = f"label_info_{view_id}"
@@ -74,6 +76,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     state.setdefault(label_x_key, [])
     state.setdefault(selected_layer_key, 0)
     state.setdefault(n_groups_key, 0)
+    state.setdefault(y_scale_key, 3)
 
     def axial_cell_selected(layer, clicked_idx):
         if is_x:
@@ -225,6 +228,11 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         state[size_y_key] = mesh_pixels[::-1].tolist()
         state[label_y_key] = [np.round(m, 1) for m in mesh_means][::-1]
 
+        axial_mesh = core.get_axial_mesh(dataset_type=array_dtype)
+        total_h = float(abs(axial_mesh[-1] - axial_mesh[0]))
+        cm_per_pixel = total_h / mesh_pixels.sum()
+        state[y_scale_key] = float(X_SCALE * cm_per_pixel / core.pin_pitch)
+
         nb_cols = 0
         for g in range(num_groups):
             grid, display_width, nb_cols = _build_group_grid(
@@ -291,8 +299,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                         axial_cell_selected,
                                         f"[{label_y_key}.length - $event.j - 1, $event.i]",
                                     ),
-                                    x_scale=("3",),
-                                    y_scale=("3",),
+                                    x_scale=(str(X_SCALE),),
+                                    y_scale=(y_scale_key,),
                                     busy=("trame__busy",),
                                     dark=("dark_mode",),
                                 )

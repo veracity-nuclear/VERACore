@@ -368,6 +368,7 @@ def _nearest_nonzero_ij(array, j, i):
 
 FALLBACK_AXIAL_MESH = np.array([0,20,40,60])
 DEFAULT_AXIAL_MESH_STEP = 20
+DEFAULT_PIN_PITCH = 1.26 # cm
 
 class CorePropMissing(Exception):
     """The file doesn't specify everything needed to build the core.
@@ -438,7 +439,8 @@ class VeraOutCore(LazyHDF5Loader):
         self.nax = None
         self.npy = None
         self.npx = None
-        self._npin_src = self._nax_src = "Could not find"   
+        self._npin_src = self._nax_src = "Could not find"  
+        self._pin_pitch = DEFAULT_PIN_PITCH
 
         core_group = self.f["CORE"]
 
@@ -475,6 +477,11 @@ class VeraOutCore(LazyHDF5Loader):
         elif self.has_axial_mesh():
             self.nax = len(self.axial_mesh) - 1
             self._nax_src = "/CORE/axial_mesh"
+        if "apitch" in core_group and self.npx:
+            apitch = core_group["apitch"][()]
+            self._pin_pitch = float(apitch / self.npx)
+            print("found pin pitch")
+
         
         if not self.has_axial_mesh() and self.nax:
             self.axial_mesh = np.linspace(0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
@@ -644,6 +651,11 @@ class VeraOutCore(LazyHDF5Loader):
     
     def is_even(self) -> bool:
         return self.core_map.shape[0] % 2 == 0
+
+    @property
+    def pin_pitch(self):
+        """The pitch (cm) of a single fuel pin"""
+        return self._pin_pitch
 
     @property
     def core_shape(self) -> tuple[int, ...]:

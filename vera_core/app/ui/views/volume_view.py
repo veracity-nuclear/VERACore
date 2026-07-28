@@ -17,7 +17,7 @@ import vtk.util.numpy_support as np_s
 from trame.ui.html import DivLayout
 from trame.widgets import vtk, vuetify, html
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core import VeraDataRegistry, VeraDtype
 from vera_core.widgets import vera
 from ..helpers import is_view_locked
 
@@ -48,7 +48,7 @@ def option_for(view_id):
         "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
-        "allowed_categories": ["PIN", "CHANNEL", "ASSEMBLY"],
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title, VeraDtype.ASSEMBLY.title]
     }
 
 
@@ -62,7 +62,7 @@ def _is_active(state, view_id):
 def _build_view(server, view_id):
     """Construct one slot's VTK pipeline and template at startup."""
     ren = vtkRenderer()
-    ren.SetBackground(1, 1, 1)
+    ren.SetBackground(0.1176, 0.1176, 0.1176)
     ren_win = vtkRenderWindow()
     ren_win.AddRenderer(ren)
     ren_win.OffScreenRenderingOn()
@@ -138,13 +138,13 @@ def _build_view(server, view_id):
             "display: flex; align-self: stretch;"
         )):
             vera.VerticalColorMapEditor(
-                v_model=f"color_range_{view_id}",
+                v_model=f"color_range_{view_id}_0",
                 color_preset="jet",
             )
 
     return ctx
 
-def _update_volume(server, registry, view_id):
+def _update_volume(server, registry : VeraDataRegistry, view_id):
     state = server.state
     ctx = _views.get(view_id)
     if ctx is None or not _is_active(state, view_id):
@@ -155,6 +155,8 @@ def _update_volume(server, registry, view_id):
     if vera_out_file is None or not array_name:
         return
     array = vera_out_file.array(array_name)
+    if str(array.dataset_type).upper() not in option_for(0)["allowed_categories"]:
+        return
     core = vera_out_file.core
 
     assembly_shape = array.shape[:2]
@@ -208,7 +210,7 @@ def _update_color(server, view_id):
     if ctx is None or not _is_active(state, view_id):
         return
 
-    color_range = state[f"color_range_{view_id}"]
+    color_range = state[f"color_range_{view_id}_0"]
     original_range = (_COLOR_POINTS[0][0], _COLOR_POINTS[-1][0])
     color_fn = ctx["color_fn"]
     color_fn.RemoveAllPoints()
@@ -219,6 +221,23 @@ def _update_color(server, view_id):
     ctx["ren_win"].Render()
     ctx["view_update"]()
  
+
+DARK_BG = (30 / 255, 30 / 255, 30 / 255)
+LIGHT_BG = (1.0, 1.0, 1.0)
+
+def _bg_for_theme(is_dark):
+    return DARK_BG if is_dark else LIGHT_BG
+
+def _update_background(server, view_id):
+    state = server.state
+    ctx = _views.get(view_id)
+    if ctx is None:
+        return
+    ctx["ren"].SetBackground(*_bg_for_theme(state["dark_mode"]))
+    if _is_active(state, view_id):
+        ctx["ren_win"].Render()
+        ctx["view_update"]()
+
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
@@ -235,6 +254,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         ctx["ren"].ResetCamera()
         ctx["reset_camera"]()
         ctx["view_update"]()
+    
+    @state.change("dark_mode")
+    def _on_theme_changed(**kwargs):
+        _update_background(server, view_id)
 
     @state.change(f"grid_view_{view_id}", f"locked_{view_id}")
     def _on_slot_changed(**kwargs):
@@ -245,7 +268,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def _on_selection_changed(**kwargs):
         _update_volume(server, registry, view_id)
 
-    @state.change(f"color_range_{view_id}")
+    @state.change(f"color_range_{view_id}_0")
     def _on_color_changed(**kwargs):
         _update_color(server, view_id)
 

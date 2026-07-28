@@ -37,7 +37,7 @@ class VERAout:
             print(f"The file {filename:s} does not exist.")
 
         self.filename = filename  # save the filename
-        self.h5f = h5py.File(filename, "r")  # open HDF5 file for reading
+        self.h5f = h5py.File(filename, "r", locking=False)  # open HDF5 file for reading
 
         # Get VERA input from the VERA out file
         if "/INPUT/CASEID" in self.h5f:

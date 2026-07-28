@@ -2,16 +2,18 @@ import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
 function simplifyNumber(v, targetSize = 6) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) {
-    return n;
+  if (!Number.isFinite(v)) return v;
+  if (v === 0) return 0;
+  const abs = Math.abs(v);
+  if (abs < 1e-3 || abs >= 1e5) {
+    return v.toExponential(2).replace(/\.?0+e/, 'e').replace('e+', 'e');
   }
-
-  let strValue = `${n}`;
-  let precision = Math.max(0, targetSize);
-  while (strValue.length > targetSize && precision > 0) {
+  // Normal range: trim decimals to fit the field.
+  let strValue = `${v}`;
+  let precision = targetSize;
+  while (strValue.length > 6 && precision > 0) {
     precision -= 1;
-    strValue = n.toFixed(precision);
+    strValue = v.toFixed(precision);
   }
   return Number(strValue);
 }
@@ -45,23 +47,17 @@ export default {
       return this.lookupTable.update(this.colorPreset, this.value);
     },
     imgSrc() {
-      // samples ordered high -> low so the rendered image reads top=max, bottom=min
-      const min = Number(this.value?.[0]);
-      const max = Number(this.value?.[1]);
-      const fallback = Number.isFinite(max) ? max : (Number.isFinite(min) ? min : 0);
-
-      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-        return toImageURL(this.colorMap, [fallback], 1, 1);
+      const lo = this.value[0];
+      const hi = this.value[1];
+      const N = 512;
+      const samples = [];
+      if (hi > lo) {
+        for (let k = 0; k < N; k++) {
+          samples.push(hi - (k / (N - 1)) * (hi - lo));
+        }
+      } else {
+        samples.push(lo);
       }
-
-      const steps = 512;
-      const delta = (max - min) / steps;
-      const samples = new Array(steps + 1);
-      for (let k = 0; k <= steps; k++) {
-        samples[k] = max - k * delta;
-      }
-
-      // width=1, height=samples.length: a tall 1-pixel-wide strip
       return toImageURL(this.colorMap, samples, 1, samples.length);
     },
   },

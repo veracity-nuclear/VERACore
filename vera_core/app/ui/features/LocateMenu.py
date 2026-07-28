@@ -149,6 +149,10 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
             state["selected_i"] = int(px)
             state["selected_layer"] = int(ax)
             state["selected_assembly"] = int(assy_id)
+            if vera_dtype.is_computational():
+                ctrl.sync_comp_assembly(int(assy_id))
+            else:
+                ctrl.sync_core_assembly(int(assy_id))
             state["selected_time"] = int(state_idx)
             state.show_locate_dialog = False
         except Exception as e:

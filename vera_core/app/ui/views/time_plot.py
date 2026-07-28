@@ -2,10 +2,10 @@ import numpy as np
 import plotly.graph_objects as go
 
 from trame.ui.html import DivLayout
-from trame.widgets import plotly
+from trame.widgets import plotly, vuetify, html
 
 from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 SEP = "\x1f"
 
@@ -23,58 +23,80 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
+    time_axis_key = f"selected_time_axis_{view_id}"
+    time_axes_options_key = f"time_axes_{view_id}"
+    state[time_axis_key] = "state_count"
+    state[time_axes_options_key] = ["state_count"]
 
     selected_set_key = f"multi_selected_{view_id}"
 
     update_fn_name = f"update_time_plot_{view_id}"
 
-    def create_line(indices=(0, 0, 0, 0)):
-        selected_j, selected_i, selected_layer, selected_assy = indices
+    def create_line():
         figure = go.Figure()
         for token in state[selected_set_key]:
             identifier = ""
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
-            exposures = [np.asarray(x.exposure).item() for x in src.states]
+            time_axis = src.time_axes()[state[time_axis_key]]
             array_dtype = src.array_dtype(array_name)
-            ny, nx, nax, nass = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core_shape)
-            assembly_label = src.core.reduced_core_map_label(nass)
-            axial_label = src.core.axial_mesh_means[nax]
+            is_comp = array_dtype.is_computational()
+            ny, nx, nax, nass, _, _ = get_safe_idxs(view_id, state, registry, src_id, array_name)
+            assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
+            axial_label = src.core.axial_mesh_means[nax] if not is_comp else src.core.comp_axial_mesh_means[nax]
+            indices_list = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    indices = (ny, nx, nax, nass)
+                    indices_list.append((ny, nx, nax, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
                 case VeraDtype.ASSEMBLY:
-                    indices = (nax, nass)
+                    indices_list.append((nax, nass))
                     identifier = f" | {assembly_label} z = {axial_label}"
                 case VeraDtype.AXIAL:
-                    indices = (nax)
+                    indices_list.append((nax))
                     identifier = f" | z = {axial_label}"
                 case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
-                    indices = (ny, nx, nass)
+                    indices_list.append((ny, nx, nass))
                     identifier = f" | {assembly_label} @({nx + 1},{ny + 1})"
                 case VeraDtype.RADIAL_ASSEMBLY:
-                    indices = (nass)
+                    indices_list.append((nass))
                     identifier = f" | {assembly_label}"
                 case VeraDtype.SCALAR:
-                    indices = (0)
+                    indices_list.append((0))
+                case VeraDtype.COMP_NODAL:
+                    node_idx = convert_ji_to_node(ny, nx)
+                    indices_list.append((node_idx, nax, nass))
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
+                case VeraDtype.COMP_NODAL_ENERGY:
+                    node_idx = convert_ji_to_node(ny, nx)
+                    num_energy_groups = 2
+                    for n_group in range(num_energy_groups):
+                        indices_list.append((n_group, node_idx, nax, nass))
+                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
                 case _:
                     raise RuntimeError(f"Time plot cannot visualize datasets of type {str(array_dtype)}")
-            values = [getattr(x, array_name)[indices] for x in src.states]
-            figure.add_trace(
-                go.Scatter(
-                    x=exposures,
-                    y=values,
-                    mode="lines",
-                    name=f"{src_id} | {array_name.replace('_', ' ').title()}{identifier}",
+            for idx_n, indices in enumerate(indices_list):
+                group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
+                values = [getattr(x, array_name)[indices] for x in src.states]
+                figure.add_trace(
+                    go.Scatter(
+                        x=time_axis,
+                        y=values,
+                        mode="lines",
+                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{group_label + identifier}",
+                    )
                 )
-            )
 
         # add_vline only spans y in [0, 1], so draw the marker manually.
         float_info = np.finfo(np.float64)
+        time_axis = state[time_axis_key]
+        if time_axis == "state_count":
+            x = [state["selected_time"]] * 2
+        else:
+            x=[np.asarray(getattr(registry.default_src.active_state, state[time_axis_key]).item())] * 2
         figure.add_trace(
             go.Scatter(
-                x=[np.asarray(registry.default_src.active_state.exposure).item()] * 2,
+                x=x,
                 y=[float_info.min, float_info.max],
                 mode="lines",
                 line=go.scatter.Line(color="red", dash="dash"),
@@ -83,6 +105,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
 
         figure.update_layout(margin=dict(t=0, b=0, l=0, r=0),
+                             template="plotly_dark" if state["dark_mode"] else "plotly",
                              legend=dict(orientation="h",
                                          yanchor="top",
                                          y=-0.1,
@@ -90,6 +113,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                          x=0.5,)
                             ,)
         return figure
+
+    @state.change("src_tree_meta")
+    def update_time_axes_options(**kwargs):
+        state[time_axes_options_key] = registry.shared_time_axes()
 
     @state.change(
         selected_set_key,
@@ -100,31 +127,44 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        time_axis_key,
+        "dark_mode"
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        indices = (
-            int(state.selected_j),
-            int(state.selected_i),
-            int(state.selected_layer),
-            int(state.selected_assembly),
-        )
         update_fn = getattr(ctrl, update_fn_name, None)
         if update_fn is not None:
-            update_fn(create_line(indices))
+            update_fn(create_line())
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%; width: 100%;"
+        layout.root.style = (
+            "height: 100%; width: 100%;"
+            "display: flex; flex-direction: column;"
+        )
         style = "; ".join([
             "width: 100%",
             "height: 100%",
             "user-select: none",
         ])
-        figure = plotly.Figure(
-            display_logo=False,
-            display_mode_bar=False,
-            style=style,
-        )
-        setattr(ctrl, update_fn_name, figure.update)
+        with html.Div(style="flex: 1; min-height: 0; width: 100%;"):
+            figure = plotly.Figure(
+                display_logo=False,
+                display_mode_bar=False,
+                style=style,
+            )
+            setattr(ctrl, update_fn_name, figure.update)
+        with html.Div(style=(
+            "flex: 0 0 auto; display: flex; align-items: center;"
+            "justify-content: center; gap: 6px; padding: 4px 0;"
+        )):
+            html.Span("X-Axis:", classes="text-caption text--secondary")
+            vuetify.VSelect(
+                v_model=(time_axis_key,),
+                items=(time_axes_options_key,),
+                hide_details=True,
+                dense=True,
+                prepend_outer_icon="mdi-axis-x-arrow",
+                style="max-width: 220px;",
+            )

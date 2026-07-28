@@ -26,6 +26,17 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     vuetify.VSpacer()
 
+    vuetify.VSwitch(
+        v_model=("dark_mode",),
+        change="$vuetify.theme.dark = $event",
+        hide_details=True,
+        dense=True,
+        inset=True,
+        prepend_icon="mdi-white-balance-sunny",
+        append_icon="mdi-moon-waning-crescent",
+        classes="mt-0",
+    )
+
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
     
@@ -40,13 +51,9 @@ def build_toolbar(tb, ctrl: Controller, registry):
 
     with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")
-    
-    # FIXME this is btn for opening up the menu for creating difference datasets. 
-    # Interpolation between datasets with different axial meshes not handled yet so button is not displayed.
-    # vvvvv
 
-    # with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
-    #     vuetify.VIcon("mdi-delta")
+    with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
+        vuetify.VIcon("mdi-delta")
 
     with vuetify.VBtn(icon=True, click=ctrl.grid_add_view, disabled=("!has_data",)):
         vuetify.VIcon("mdi-plus")
@@ -129,8 +136,7 @@ def build_grid_card(ctrl : Controller):
 def build_content(layout, state : State, ctrl : Controller, registry: VeraDataRegistry):
     layout.content.style = "overflow: auto; margin: 36px 72px 35px 0px; padding: 0;"
     DeriveMenu.build_derived_dialog(state, ctrl, registry)
-    # FIXME vvvv
-    # build_diff_dialog(state, ctrl, registry)
+    DiffMenu.build_diff_dialog(state, ctrl, registry)
     ThresholdMenu.build_threshold_dialog(ctrl)
     FileMenu.build_file_menu_dialog(ctrl)
     StreamMenu.build_stream_dialog(ctrl)
@@ -211,10 +217,15 @@ def build_axial_slider():
         "bottom: 35px",
         "width: 56px",
         "z-index: 4",
-        "background-color: white",
         "border-left: 1px solid #e0e0e0",
     ])
-    with html.Div(style=strip, classes="d-flex flex-column align-center py-1"):
+    with html.Div(style=strip, 
+        v_bind_style=(
+            "dark_mode "
+            "? { backgroundColor: '#1e1e1e', borderLeft: '1px solid #333' } "
+            ": { backgroundColor: 'white', borderLeft: '1px solid #e0e0e0' }"
+        ),
+        classes="d-flex flex-column align-center py-1"):
         html.Div("Axial", classes="text-caption mb-1")
         with html.Div(
             style=(
@@ -263,7 +274,8 @@ def build_axial_slider():
 
 def build_layout(server : Server, state : State, ctrl : Controller, registry : VeraDataRegistry):
     with SinglePageLayout(server) as layout:
-        layout.root.classes = ("{ busy: trame__busy }",)
+        layout.root.classes = ("{ busy: trame__busy }")
+        client.ClientTriggers(mounted="$vuetify.theme.dark = dark_mode")
         with layout.toolbar as tb:
             build_toolbar(tb, ctrl, registry)
         with layout.content:

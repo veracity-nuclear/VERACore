@@ -212,7 +212,7 @@ class VERAinput:
             Path in the HDF5 file to read
         """
         print("Reading HDF5 file")
-        with h5py.File(h5file, "r") as h5f:
+        with h5py.File(h5file, "r", locking=False) as h5f:
             h5_obj = h5f[path]
             if isinstance(h5_obj, h5py.Group):
                 self._data = self._walkGroup(h5_obj)
@@ -257,7 +257,7 @@ class VERAinput:
         print(f"Writing VERA Input to HDF5 file: {h5file}")
         if os.path.exists(h5file):
             print(f"HDF5 file {h5file} already exists (overwriting)")
-        with h5py.File(h5file, "w") as h5f:
+        with h5py.File(h5file, "w", locking=False) as h5f:
             self._dumpHDF5(self._data, h5f, path)
 
     def _dumpHDF5(self, mydict: dict, h5f: h5py.File, path: str) -> None:

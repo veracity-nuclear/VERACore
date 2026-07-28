@@ -4,6 +4,7 @@ import msgpack
 import time
 import msgpack_numpy as m
 import argparse
+from vera_core.app.core.vera_tools.VERAout import VERAout
 
 parser = argparse.ArgumentParser(description="A script that mimics a possible vera data stream, pulls data from h5 file")
 
@@ -20,6 +21,7 @@ publisher.bind(f"tcp://0.0.0.0:{args.port}")
 
 with h5py.File(args.filename, "r") as f:
     core = f["CORE"]
+    calculator = VERAout(args.filename)
     axial_mesh = core["axial_mesh"][()]
     core_map = core["core_map"][()]
     core_sym = core["core_sym"][()]
@@ -30,18 +32,14 @@ with h5py.File(args.filename, "r") as f:
         state = f[state_key]
         pin_powers = state["pin_powers"]
         core_shape = np.shape(pin_powers)
-        full_core_datasets = {}
-        scalar_datasets = {}
+        datasets = {}
         for dataset_name in state.keys():
             dataset_shape = np.shape(state[dataset_name])
-            if dataset_shape == core_shape:
-                full_core_datasets.update({dataset_name: state[dataset_name][()]})
-            if dataset_shape in [(1,), ()]:
-                scalar_datasets.update({dataset_name: state[dataset_name][()]})
+            if dataset_shape is not None and len(dataset_shape) <= 4:
+                datasets.update({dataset_name : state[dataset_name][()]})
         payload = {"core" : core_data,
                    "state" : state_key,
-                   "data" : {"full_core_datasets" : full_core_datasets,
-                   "scalar_datasets" : scalar_datasets}}
+                   "datasets" : datasets}
         publisher.send(msgpack.packb(payload))
         print(f"Sent {state_key}")
         time.sleep(0.3)

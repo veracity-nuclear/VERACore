@@ -3,12 +3,13 @@ import numpy as np
 
 from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
-from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core import VeraDataRegistry, VeraDtype, MAX_NUM_GROUPS, LATERAL_SURACES
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu
 from .layout import build_layout
 from .helpers import format_label, get_next_y_from_layout, array_range, is_view_locked
 from .views import (
+    surface_core_view,
     assembly_view,
     axial_plot,
     core_view,
@@ -18,6 +19,8 @@ from .views import (
     x_axial_view,
     y_axial_view,
     volume_view,
+    core_axial_view,
+    surface_assembly_view
 )
 
 DEFAULT_NB_ROWS = 8
@@ -35,6 +38,9 @@ VIEW_MODULES = [
     volume_view,
     x_axial_view,
     y_axial_view,
+    core_axial_view,
+    surface_core_view,
+    surface_assembly_view,
 ]
 
 def _center_assembly(reduced_core_map):
@@ -61,6 +67,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     state.setdefault("selected_layer", 0)
     state.setdefault("max_layer", 0)
     state.setdefault("selected_assembly_ij", dict(i=0, j=0))
+    state.setdefault("selected_surface", -1)
+    state.setdefault("dark_mode", True)
 
     # initialize UI state for each feature
     DatasetPicker.register_dataset_picker_state(state, registry) # the File and Stream menu relies on dataset picker state
@@ -92,7 +100,14 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         if src is None:
             return
         array = src.array(state[f"selected_array_{view_id}"])
-        state[f"color_range_{view_id}"] = array_range(array)
+        if array.dataset_type in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.COMP_NODAL_ENERGY):
+            group_arrays = [array[g] for g in range(array.shape[0])]
+        elif array.dataset_type in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE):
+            group_arrays = [array[LATERAL_SURACES, g] for g in range(array.shape[1])]
+        else:
+            group_arrays = [array]
+        for g, group_array in enumerate(group_arrays):
+            state[f"color_range_{view_id}_{g}"] = array_range(group_array)
 
     @state.change("selected_time")
     @requires_src
@@ -113,18 +128,39 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
     def selected_assembly_ij_changed(selected_assembly_ij, **kwargs):
         """Keep selected_assembly and selected_assembly_ij in sync."""
         i, j = selected_assembly_ij["i"], selected_assembly_ij["j"]
-        new_assembly = registry.default_src.core.reduced_core_map_assembly(i, j)
-        if state.selected_assembly != new_assembly:
+        core = registry.default_src.core
+        new_assembly = core.reduced_core_map_assembly(i, j)
+        if new_assembly >= 0 and state.selected_assembly != new_assembly:
             state.selected_assembly = new_assembly
+        if not core.has_comp_core() or not hasattr(state, "selected_comp_assembly"):
+            return
+        new_comp_assembly = core.reduced_core_map_assembly(i, j, is_comp=True)
+        if new_comp_assembly != state.selected_comp_assembly:
+            state.selected_comp_assembly = new_comp_assembly
+        
 
-    @state.change("selected_assembly")
+    @ctrl.set("sync_ij_with_core_assembly")
     @requires_src
-    def selected_assembly_changed(selected_assembly, **kwargs):
-        """Keep selected_assembly and selected_assembly_ij in sync."""
-        i, j = registry.default_src.core.reduced_core_map_ij(int(selected_assembly))
-        new_ij = {"i": i, "j": j}
-        if state.selected_assembly_ij != new_ij:
-            state.selected_assembly_ij = new_ij
+    def sync_core_assembly(core_assembly_idx):
+        core = registry.default_src.core
+        i, j = core.reduced_core_map_ij(core_assembly_idx)
+        state.selected_assembly_ij = {"i":i, "j":j}
+        assert core.reduced_core_map_assembly(i,j) == core_assembly_idx
+    
+    @ctrl.set("sync_ij_with_comp_assembly")
+    @requires_src
+    def sync_comp_assembly(comp_assembly_idx):
+        core = registry.default_src.core
+        i, j = core.reduced_core_map_ij(comp_assembly_idx)
+        state.selected_assembly_ij = {"i":i, "j":j}
+        assert core.comp_core_map_assembly(i,j) == comp_assembly_idx
+
+        
+    @state.change("src_tree_meta")
+    def refresh_max_state(**kwargs):
+        max_state = registry.max_state
+        if max_state > state["max_time"]:
+            state["max_time"] = max_state
 
     # initialize state for each each view template. Each view_id has a full set of the templates initiliazed with that specific view_id
     for view_id in all_view_ids:
@@ -150,7 +186,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         state[f"grid_options_{view_id}"] = []
         state[f"selected_array_{view_id}"] = ""
         state[f"selected_src_id_{view_id}"] = registry.default_src_id
-        state[f"color_range_{view_id}"] = (0.0, 1.0)
+        for g in range(MAX_NUM_GROUPS):
+            state[f"color_range_{view_id}_{g}"] = (0.0, 1.0)
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         state[f"selected_label_{view_id}"] = format_label(registry.default_src_id, "pin_powers")
         state[f"locked_{view_id}"] = False
@@ -214,13 +251,53 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         def _on_card_array_change(**kwargs):
             _recompute_card_range(view_id)
         return _on_card_array_change
+    
+    def _make_option_watcher(view_id):
+        @state.change(f"grid_view_{view_id}")
+        @requires_src
+        def _on_grid_option_change(**kwargs):
+            # FIXME, need to add this to multi select views 
+            option = state[f"grid_view_{view_id}"]
+            src_id = state[f"selected_src_id_{view_id}"]
+            sel_ds = state[f"selected_array_{view_id}"]
+            dtype = registry.get(src_id).array_dtype(sel_ds)
+            if ("allowed_categories" in option and dtype.title in option["allowed_categories"]) or "allowed_categories" not in option:
+                return
+            default_datasets_names = registry.get(src_id).default_datasets()
+            allowed_categories = option["allowed_categories"]
+            available_categories = sorted(set(default_datasets_names).intersection(allowed_categories))
+            if len(available_categories) == 0:
+                return
+            new_ds_name = default_datasets_names[available_categories[0]]
+            state[f"selected_array_{view_id}"] = new_ds_name
+            state[f"selected_label_{view_id}"] = format_label(src_id, new_ds_name)
+        return _on_grid_option_change
 
     for view_id in all_view_ids:
         _make_array_watcher(view_id)
+        _make_option_watcher(view_id)
 
-    def place(module, x, y, w, h):
+    def place(module, x, y, w, h, default_datasets_names : dict, default_id):
         """helper function for intializing UI"""
+
+        if "allowed_categories" in module.option_for(0):
+            module_allowed_categories = module.option_for(0)["allowed_categories"]
+            available_categories = set(default_datasets_names).intersection(module_allowed_categories)
+        else:
+            available_categories = set(default_datasets_names)
+        if not available_categories:
+            return
+        default_dataset_name = default_datasets_names.get(next(iter(available_categories)))
+        if VeraDtype.PIN.title in available_categories:
+            default_dataset_name = default_datasets_names[VeraDtype.PIN.title]
+
         view_id = available_view_ids.pop(0)
+        state[f"selected_src_id_{view_id}"] = default_id
+        state[f"selected_array_{view_id}"] = default_dataset_name
+        state[f"selected_label_{view_id}"] = format_label(default_id, default_dataset_name)
+        state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{default_dataset_name}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
+        state[f"multi_label_{view_id}"] = "1 Selected"
+        _recompute_card_range(view_id)
         state.grid_layout.append(dict(x=x, y=y, w=w, h=h, i=view_id))
         state[f"grid_view_{view_id}"] = module.option_for(view_id)
 
@@ -238,7 +315,12 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
 
         src = registry.default_src
         default_id = registry.default_src_id
-        core_shape = src.core_shape
+        default_names = src.default_datasets()
+        default_name = default_names[next(iter(default_names))]
+        if VeraDtype.PIN.title in default_names:
+            default_name = default_names[str(VeraDtype.PIN)]
+
+        core_shape = src.core.core_shape
         ny, nx, nz = core_shape[0], core_shape[1], core_shape[2]
 
         # Global State
@@ -250,29 +332,32 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         # state.max_time : state for tracking the maximum state number of all sources in the registry
         # state.selected_time : state for tracking the STATE_n being visualized, i.e. if state.selected_time == 2, STATE_0002 in the vera source is being visualized
         state.selected_layer = nz // 2
-        state.max_layer = nz - 1
+        state.max_layer = len(registry.global_axial_mesh) - 1
         state.selected_i = (nx // 2) - (1 if nx // 2 >= 1 else 0) # not a center pin
         state.selected_j = (ny // 2) - (1 if ny // 2 >= 1 else 0)
         state.selected_assembly = _center_assembly(src.core.reduced_core_map)
+        if src.core.has_comp_core():
+            state.selected_comp_assembly = src.core.assy_to_comp_assy(state.selected_assembly)
+            assert src.core.comp_assy_to_assy(state.selected_comp_assembly) == state.selected_assembly
         assembly_i, assembly_j = src.core.reduced_core_map_ij(state.selected_assembly)
         state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}
         state.max_time = registry.max_state
         state.selected_time = 0
         for view_id in all_view_ids:
             state[f"selected_src_id_{view_id}"] = default_id
-            state[f"selected_array_{view_id}"] = "pin_powers"
-            state[f"selected_label_{view_id}"] = format_label(default_id, "pin_powers")
-            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}pin_powers"]  # a seperator must be used instead of a tuple since the trame state needs to serializable
+            state[f"selected_array_{view_id}"] = default_name
+            state[f"selected_label_{view_id}"] = format_label(default_id, default_name)
+            state[f"multi_selected_{view_id}"] = [f"{default_id}{MULTI_SEP}{default_name}"] # a seperator must be used instead of a tuple since the trame state needs to serializable
             state[f"multi_label_{view_id}"] = "1 Selected"
             _recompute_card_range(view_id)
         # Default arrangement of views.
-        place(x_axial_view,   0,  0, 3, 17)
-        place(core_view,      6,  0, 3,  9)
-        place(assembly_view,  9,  0, 3,  9)
-        place(axial_plot,     6,  9, 3,  8)
-        place(time_plot,      9,  9, 3,  8)
-        place(volume_view,    3,  0, 3, 17)
-        place(table_view,     0, 17, 6, 10)
+        place(x_axial_view,   0,  0, 3, 17, default_names, default_id)
+        place(core_view,      6,  0, 4,  10, default_names, default_id)
+        place(assembly_view,  9,  0, 3,  9, default_names, default_id)
+        place(axial_plot,     6,  9, 3,  8, default_names, default_id)
+        place(time_plot,      9,  9, 3,  8, default_names, default_id)
+        place(volume_view,    3,  0, 3, 17, default_names, default_id)
+        place(table_view,     0, 17, 6, 10, default_names, default_id)
         state.dirty("grid_layout")
         state.has_data = True
         # for view_id in all_view_ids:

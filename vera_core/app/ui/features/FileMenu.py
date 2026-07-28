@@ -106,23 +106,23 @@ def build_file_menu_dialog(ctrl: Controller):
             with vuetify.VCardText(classes="pt-3 pb-1"):
                 html.Div("Loaded files:", classes="text-caption mb-2")
                 with vuetify.VSimpleTable(dense=True):
-                            with html.Thead():
-                                with html.Tr():
-                                    html.Th("Name", classes="text-left")
-                                    html.Th("Shape", classes="text-left")
-                                    html.Th("States", classes="text-left")
-                                    html.Th("")
-                            with html.Tbody():
-                                with html.Tr(v_for="(info, file) in src_tree_meta", key="file"):
-                                    html.Td("{{ file }}")
-                                    html.Td("{{ info.shape }}")
-                                    html.Td("{{ info.states }}")
-                                    with html.Td():
-                                        with vuetify.VBtn(icon=True, x_small=True, click=(ctrl.close_file, "[file]")):
-                                            vuetify.VIcon("mdi-close", small=True)
+                    with html.Thead():
+                        with html.Tr():
+                            html.Th("Name", classes="text-left")
+                            html.Th("Shape", classes="text-left")
+                            html.Th("States", classes="text-left")
+                            html.Th("")
+                    with html.Tbody():
+                        with html.Tr(v_for="(info, file) in src_tree_meta", key="file"):
+                            html.Td("{{ file }}")
+                            html.Td("{{ info.shape }}")
+                            html.Td("{{ info.states }}")
+                            with html.Td():
+                                with vuetify.VBtn(icon=True, x_small=True, click=(ctrl.close_file, "[file]")):
+                                    vuetify.VIcon("mdi-close", small=True)
 
             vuetify.VDivider()
-            with vuetify.VCardText(classes="pt-3"):
+            with vuetify.VCardText(classes="pt-3 pb-1"):
                 html.Div("Open new file:", classes="text-caption mb-2")
                 vuetify.VAlert(
                     "{{ file_error }}",
@@ -131,12 +131,10 @@ def build_file_menu_dialog(ctrl: Controller):
                     dense=True,
                     classes="mb-2",
                 )
-                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
-                    vuetify.VIcon("mdi-folder-open", left=True)
-                    html.Span("Browse")
 
-                html.Div("Recent:", classes="text-caption mt-3 mb-1",
-                        v_if="recent_file_paths.length")
+                # Recent list sits above the button row so the buttons stay together.
+                html.Div("Recent:", classes="text-caption mt-1 mb-1",
+                         v_if="recent_file_paths.length")
                 with vuetify.VList(dense=True, v_if="recent_file_paths.length"):
                     with vuetify.VListItem(
                         v_for="(p, idx) in recent_file_paths", key="idx",
@@ -144,7 +142,11 @@ def build_file_menu_dialog(ctrl: Controller):
                     ):
                         vuetify.VListItemTitle("{{ p }}")
 
-                with vuetify.VBtn(color="secondary", click="show_file_dialog = false",
-                                classes="mt-3"):
+            # Browse and Close on one level (adjacent, left-aligned).
+            with vuetify.VCardActions(classes="px-4 pb-4 pt-0"):
+                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
+                    vuetify.VIcon("mdi-folder-open", left=True)
+                    html.Span("Browse")
+                with vuetify.VBtn(color="secondary", click="show_file_dialog = false", classes="ml-2"):
                     html.Span("Close")
             vuetify.VDivider()

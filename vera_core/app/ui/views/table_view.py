@@ -3,8 +3,8 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype
-from ..helpers import is_non_active_view, make_safe_index
+from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES
+from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
 
 def option_for(view_id):
     return {
@@ -42,35 +42,40 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_table(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        selected_src_id = state[selected_src_key]
-        selected_array = state[selected_array_key]
-        selected_assy = int(state.selected_assembly)
-        selected_layer = int(state.selected_layer)
-        selected_i = int(state.selected_i)
-        selected_j = int(state.selected_j)
+        (selected_j, selected_i, selected_layer, 
+         selected_assembly, selected_src_id, selected_array) = get_safe_idxs(view_id, state, registry)
 
         src : VeraDataSource = registry.get(selected_src_id)
         array = src.array(selected_array)
         array_dtype = array.dataset_type
-        selected_j, selected_i, selected_layer, selected_assembly = make_safe_index(selected_j, selected_i, selected_layer, selected_assy, array_dtype, src.core_shape)
+        indices_list = []
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
-                indices = (selected_j, selected_i, selected_layer, selected_assembly)
+                indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
             case VeraDtype.ASSEMBLY:
-                indices = (selected_layer, selected_assembly)
+                indices_list.append((selected_layer, selected_assembly))
             case VeraDtype.AXIAL:
-                indices = (selected_layer)
+                indices_list.append((selected_layer))
             case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
-                indices = (selected_j, selected_i, selected_assembly)
+                indices_list.append((selected_j, selected_i, selected_assembly))
             case VeraDtype.RADIAL_ASSEMBLY:
-                indices = (selected_assembly)
+                indices_list.append((selected_assembly))
             case VeraDtype.SCALAR:
-                indices = (0)
+                indices_list.append((0))
+            case VeraDtype.COMP_NODAL:
+                indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
+            case VeraDtype.COMP_NODAL_ENERGY:
+                num_energy_groups = array.shape[0]
+                for group_n in range(num_energy_groups):
+                    indices_list.append((group_n, convert_ji_to_node(selected_j, selected_i), selected_layer, selected_assembly))
             case _:
                 raise RuntimeError(f"Table view cannot visualize datasets of type {str(array_dtype)}")
-        value = array[indices]
-
-        data_dict = {selected_array.replace("_", " ").title(): value}
+        data_dict = {}
+        base_label = selected_array.replace('_', ' ').title()
+        for group_n, indices in enumerate(indices_list):
+            group_label = "" if len(indices_list) <= 1 else f" GROUP {group_n + 1}"
+            value = array[indices]
+            data_dict[f"{base_label}{group_label}"] = value
         for scalar_dataset in src.active_state.scalar_datasets:
             data_dict[scalar_dataset.replace("_", " ").title()] = np.asarray(
                 src.array(scalar_dataset)
@@ -83,9 +88,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             for k, v in data_dict.items()
             if isinstance(v, float)
         }
+        is_comp = array_dtype.is_computational()
 
-        axial_value = src.core.axial_mesh_means[selected_layer]
-        assembly_label = src.core.reduced_core_map_label(selected_assembly)
+        axial_value = src.core.axial_mesh_means[selected_layer] if not is_comp else src.core.comp_axial_mesh_means[selected_layer]
+        assembly_label = src.core.reduced_core_map_label(selected_assembly, is_comp)
         columns = [
             "Dataset",
             f"Assembly {assembly_label}; Axial {axial_value:0.6g} cm; Pin ({selected_i + 1}, {selected_j + 1})",

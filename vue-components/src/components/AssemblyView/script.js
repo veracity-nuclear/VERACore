@@ -34,6 +34,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    dark: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedI(i) {
@@ -50,6 +54,10 @@ export default {
       this.updateColors();
     },
     colorRange() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    dark() {
       this.updateLookupTable();
       this.updateColors();
     },
@@ -109,8 +117,15 @@ export default {
     },
     toValue(i, j) {
       const v = this.value[this.toIdx(i, j)];
-      if (Number.isNaN(v) || v === undefined) {
+      if (v === undefined || Number.isNaN(v)) {
         return '';
+      }
+      if (v === 0) {
+        return '0';
+      }
+      const abs = Math.abs(v);
+      if (abs < 1e-2 || abs >= 1e5) {
+        return v.toExponential(2).replace(/\.?0+e/, 'e');
       }
       return v.toFixed(2);
     },
@@ -126,7 +141,11 @@ export default {
       this.lookupTable.applyColorMap(preset);
       this.lookupTable.setMappingRange(this.colorRange[0], this.colorRange[1]);
       this.lookupTable.updateRange();
-      this.lookupTable.setNanColor(1, 1, 1, 1);
+      if (this.dark) {
+        this.lookupTable.setNanColor(30 / 255, 30 / 255, 30 / 255, 1);
+      } else {
+        this.lookupTable.setNanColor(1, 1, 1, 1);
+      }
     },
     updateColors() {
       const colors = [];

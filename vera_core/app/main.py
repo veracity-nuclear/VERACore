@@ -9,7 +9,7 @@ from trame_server.core import Server
 
 from . import ui
 from .core import VeraDataRegistry, VeraOutFile, VeraDataSource
-from .core.vera_data_stream import VirtualVeraDataStream, VeraDataStream
+from .core.vera_data_stream import VeraDataStream
 
 # The user can set this via an environment variable
 DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"

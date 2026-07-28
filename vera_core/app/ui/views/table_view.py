@@ -101,9 +101,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         # Round floats so we don't display too many sig figs (7 matches veraview).
         sig_figs = 7
         data_dict = {
-            k: float(f"{v:0.{sig_figs}g}")
+            k : (float(f"{v:0.{sig_figs}g}") if isinstance(v, float) else v) 
             for k, v in data_dict.items()
-            if isinstance(v, float)
         }
         is_comp = array_dtype.is_computational()
 

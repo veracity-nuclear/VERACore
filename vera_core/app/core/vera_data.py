@@ -10,7 +10,7 @@ NUM_ENERGY_GROUPS = 2
 MAX_NUM_GROUPS = 8
 NUM_DF = 6
 NUM_NODES = 4
-LATERAL_SURACES = slice(0,4)
+LATERAL_SURFACES = slice(0,4)
 
 @dataclass(frozen=True)
 class _Info:

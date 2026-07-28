@@ -7,7 +7,7 @@ from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
 from vera_core.app.core import (VeraDataRegistry, VeraDtype, 
                                 VeraOutFile, MAX_NUM_GROUPS, 
-                                LATERAL_SURACES, Session, 
+                                LATERAL_SURFACES, Session, 
                                 ViewSession, recipe_sources)
 
 from .features import DeriveMenu, DiffMenu, ThresholdMenu, FileMenu, StreamMenu, DatasetPicker, LocateMenu, SaveSession
@@ -115,7 +115,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue : StateQu
         if array.dataset_type in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.COMP_NODAL_ENERGY):
             group_arrays = [array[g] for g in range(array.shape[0])]
         elif array.dataset_type in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE):
-            group_arrays = [array[LATERAL_SURACES, g] for g in range(array.shape[1])]
+            group_arrays = [array[LATERAL_SURFACES, g] for g in range(array.shape[1])]
         else:
             group_arrays = [array]
         for g, group_array in enumerate(group_arrays):

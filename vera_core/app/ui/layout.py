@@ -43,8 +43,8 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-content-save")
     
-    with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
-        vuetify.VIcon("mdi-access-point")
+    # with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
+    #     vuetify.VIcon("mdi-access-point")
 
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")

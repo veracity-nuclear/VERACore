@@ -123,10 +123,11 @@ class VeraOutFile(VeraDataSource):
         for idx, state in enumerate(self._states):
             if idx >= len(comp_src.states):
                 return
-            if not state.has_dataset(ref_dataset_name) or not state.has_dataset(comp_dataset_name):
+            comp_state = comp_src.states[idx]
+            if not state.has_dataset(ref_dataset_name) or not comp_state.has_dataset(comp_dataset_name):
                 continue
             ref_data : VeraDataset = getattr(state, ref_dataset_name) * ref_scale
-            comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name) * comp_scale
+            comp_data : VeraDataset = getattr(comp_state, comp_dataset_name) * comp_scale
             ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
             comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
             if ref_data.dataset_type != comp_data.dataset_type:

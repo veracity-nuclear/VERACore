@@ -602,7 +602,7 @@ class VeraOutState(LazyHDF5Loader):
                     continue
                 ds_shape = np.shape(ds)
                 ds_dtype = self.core.core_dtypes(ds_shape)
-                if ds_shape == VeraDtype.UNKNOWN:
+                if ds_dtype == VeraDtype.UNKNOWN:
                     continue
                 self.categorized_ds_names[ds_dtype].add(full_name)
                 self.dataset_dtypes[ds_shape] = ds_dtype

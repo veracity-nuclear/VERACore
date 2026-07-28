@@ -99,7 +99,8 @@ export default {
     rowImages() {
       const array = this.value;
       const lut = this.colorMap;
-      this.dark;
+      // eslint-disable-next-line no-unused-expressions
+      this.dark; // establish reactive dependency on theme for NaN color
 
       const urls = [];
       for (let j = 0; j < array.length; j++) {

@@ -1,4 +1,4 @@
-"""FIXME Change to write this to a new h5 file"""
+"""FIXME major design decisions around the stream are tbd"""
 
 from .vera_data import VeraDataSource, VeraAxes, VeraOutCore, VeraOutState, DerivationMethod
 import threading

@@ -71,10 +71,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             case _:
                 raise RuntimeError(f"Table view cannot visualize datasets of type {str(array_dtype)}")
         data_dict = {}
+        base_label = selected_array.replace('_', ' ').title()
         for group_n, indices in enumerate(indices_list):
             group_label = "" if len(indices_list) <= 1 else f" GROUP {group_n + 1}"
             value = array[indices]
-            data_dict.update({f"{selected_array.replace("_", " ").title()}" + group_label: value})
+            data_dict[f"{base_label}{group_label}"] = value
         for scalar_dataset in src.active_state.scalar_datasets:
             data_dict[scalar_dataset.replace("_", " ").title()] = np.asarray(
                 src.array(scalar_dataset)

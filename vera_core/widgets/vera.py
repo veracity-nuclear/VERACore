@@ -24,6 +24,7 @@ class AssemblyView(HtmlElement):
             ("active_style", ":activeStyle"),
             "dark",
             "busy",
+            "decimals",
         ]
         self._event_names += [
             "click",
@@ -90,6 +91,9 @@ class CoreView(HtmlElement):
             ("active_style", ":activeStyle"),
             ("x_labels", "xLabels"),
             ("y_labels", "yLabels"),
+            ("assembly_size", "assemblySize"),
+            ("core_cols", "coreCols"),
+            "decimals",
             "dark",
             "scaling",
             "busy",
@@ -107,14 +111,18 @@ class CoreAxialView(HtmlElement):
         self._attr_names += [
             "value",
             "labels",
+            "mesh",
             ("x_range", "xRange"),
+            ("y_range", "yRange"),
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
             ("aspect_ratio", "aspectRatio"),
-            ("active_style", "activeStyle"),
+            ("color_preset", "colorPreset"),
+            ("color_range", "colorRange"),
             ("x_labels", "xLabels"),
             ("y_labels", "yLabels"),
             ("cell_size", "cellSize"),
+            "dark",
             "busy",
         ]
         self._event_names += [
@@ -172,6 +180,7 @@ class VerticalColorMapEditor(HtmlElement):
             "value",
             ("color_preset", "colorPreset"),
             "busy",
+            "units",
         ]
         self._event_names += [
             "input",

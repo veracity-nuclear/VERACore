@@ -1,8 +1,9 @@
+from dataclasses import asdict
 from trame.widgets import html, vuetify
 from trame_server.core import State, Controller
-from vera_core.app.core import VeraDataRegistry, VeraAxes, DerivationMethod
+from vera_core.app.core import VeraDataRegistry, VeraAxes, DerivationMethod, derive_recipe
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
-from ..helpers import format_label
+from ..helpers import format_label, default_dataset_name
 
 """
 Commented out derivation presets and methods need to be implemented
@@ -38,9 +39,11 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     state.derivation_methods : state the stores preconfigured derivation method options i.e. "AVERAGE"
     """
     state.show_derived_dialog = False
-    state.derivation_src_dataset = "pin_powers"
-    state.derivation_src_id = registry.default_src_id
-    state.derivation_source_label = format_label(registry.default_src_id, "pin_powers")
+
+    state.derivation_src_dataset = ""
+    state.derivation_src_id = None
+    state.derivation_source_label = "Select dataset"
+    
     state.axes_to_derive = "ASSEMBLY"
     state.derivation_method = "Average"
     state.derivation_use_factors = True
@@ -50,29 +53,39 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     state.derivation_axes_presets = DERIVATION_PRESETS
     state.derivation_methods = DERIVATION_METHODS
 
-    @state.change("has_data")
-    def update_label(has_data, **kwargs):
-        if has_data and state.derivation_src_id is None:
-            state.derivation_src_id = registry.default_src_id
-            state.derivation_src_dataset = "pin_powers"
-            state.derivation_source_label = format_label(registry.default_src_id, "pin_powers")
-
     @ctrl.set("set_derived_source")
     def set_derived_source(file, array):
-        print("in_set_derived_source")
         state.derivation_src_id = file
         state.derivation_src_dataset = array
         state.derivation_source_label = format_label(file, array)
+        state.derived_error = ""
     
-    def _add_derived_dataset_to_source():
+    def _add_derived_dataset_to_source() -> bool:
         """add a new derived dataset to selected source"""
-        registry.get(state["derivation_src_id"]).add_new_derived_dataset(
-                source_array_name=state["derivation_src_dataset"], 
-                new_dataset_name=state["derived_name"], 
-                der_method=state["derivation_method"], 
-                axes=VeraAxes[state["axes_to_derive"]]
-            )
+        if state.derivation_src_dataset == "" or state.derivation_src_id is None:
+            state.derived_error = "Please select a dataset"
+            return
+        if state.derived_name == "":
+            state.derived_error = "Please select a name for the derived dataset"
+            return
+        recipe = derive_recipe(
+            src_id=state["derivation_src_id"],
+            source_array=state["derivation_src_dataset"],
+            name=state["derived_name"],
+            method=state["derivation_method"],
+            axes=state["axes_to_derive"],
+            use_factors=state["derivation_use_factors"],
+            exclude_non_fuel_rods=state["derivation_exclude_non_fuel"],
+        )
+        registry.apply_recipe(recipe)
+        state.recipes = state.recipes + [recipe]
         refresh_src_tree(state, registry)
+        state.derivation_src_dataset = ""
+        state.derivation_src_id = None
+        state.derivation_source_label = "Select dataset"
+        state.derived_name = ""
+        state.derived_error = ""
+        return True
 
     @ctrl.set("create_derived_dataset")
     def create_derived_dataset():
@@ -84,11 +97,8 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     @ctrl.set("create_derived_dataset_and_close")
     def create_derived_dataset_and_close():
         try:
-            _add_derived_dataset_to_source()
-            state.show_derived_dialog = False
-            state.derivation_src_dataset = "pin_powers"
-            state.derivation_src_id = registry.default_src_id
-            state.derivation_source_label = format_label(registry.default_src_id, "pin_powers")
+            if _add_derived_dataset_to_source():
+                state.show_derived_dialog = False
         except Exception as e:
             state.derived_error = str(e)
 
@@ -126,6 +136,7 @@ def build_derived_dialog(state, ctrl, registry):
                                 label="Use Factors",
                                 hide_details=True,
                                 dense=True,
+                                disabled=True,
                             )
                         with vuetify.VCol(cols="auto", classes="pa-0 pl-4"):
                             vuetify.VCheckbox(
@@ -133,6 +144,7 @@ def build_derived_dialog(state, ctrl, registry):
                                 label="Exclude Non-Fuel Rods",
                                 hide_details=True,
                                 dense=True,
+                                disabled=True,
                             )
                 with vuetify.VCard(outlined=True, classes="pa-3"):
                     html.Div("4. Enter New Dataset Name", classes="text-caption font-weight-medium mb-2")

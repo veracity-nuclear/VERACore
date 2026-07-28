@@ -2,8 +2,10 @@ import asyncio, sys
 from pathlib import Path
 from trame.widgets import vuetify, html
 from trame_server.core import Controller, State
-from vera_core.app.core import VeraDataRegistry, VeraOutFile, VeraDataStream
+from vera_core.app.core import VeraDataRegistry, VeraOutFile, recipe_sources, CorePropMissing
 from .DatasetPicker import refresh_src_tree
+from .file_picker_entry import launch_picker
+from .appdata import load_prefs, save_prefs
 
 file_menu_state_initialized = False
 
@@ -20,7 +22,12 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     state.show_file_dialog = False
     state.file_error = ""
     state.file_path = ""
-    state.recent_file_paths = []
+    state.core_prompt = {}
+    state.core_answer_npin = None
+    state.core_none_npin = False
+    state.core_answer_nax = None
+    state.show_core_dialog = False
+    state.recent_file_paths, state.core_overrides = load_prefs()
 
     @ctrl.set("open_file_dialog")
     def open_file_dialog():
@@ -30,28 +37,18 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
     @ctrl.set("pick_file")
     async def pick_file():
         state.file_error = ""
-        # launch file picker process
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable, "--pick-file"] # if frozen the module doesn't exist so pass flag to entry point
-        else:
-            cmd = [sys.executable, "-m", "vera_core.app.file_picker"]
         try:
-            # get file path from subprocess
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+            path = await launch_picker("--mode", "open", "--filter", "h5",
+                                    "--prompt", "Open VERA Output file")
         except asyncio.TimeoutError:
-            proc.kill()
             state.file_error = "File picker timed out."
             return
         except Exception as e:
             state.file_error = f"Picker error: {e}"
             return
-        path = out.decode().strip()
         if not path:
             return
-        state.file_path = path # file path to be loaded
+        state.file_path = path
         load_file()
 
     @ctrl.set("load_recent")
@@ -71,9 +68,37 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             return
         try:
             was_empty = registry.default_src_id is None
-            registry.add_src(VeraOutFile(raw_path), src_id=pathobj.stem)
+            try:
+                src = VeraOutFile(raw_path, core_overrides=state.core_overrides.get(raw_path, {}))
+            except CorePropMissing as e:
+                state.core_prompt = {"path": raw_path, "missing": e.missing, "inferred": e.inferred}
+                state.core_answer_npin = None
+                state.core_none_npin = False
+                state.core_answer_nax = None
+                state.show_core_dialog = True
+                return
+            if not src.default_datasets():
+                had_override = raw_path in state.core_overrides
+                if had_override:
+                    state.core_overrides = {k: v for k, v in state.core_overrides.items() if k != raw_path}
+                    save_prefs(state.recent_file_paths, state.core_overrides)
+                    state.file_error = (
+                        "No datasets match the core properties you entered. "
+                        "Please check the values and try again."
+                    )
+                    state.file_path = raw_path
+                    load_file() # re-prompt
+                    return
+                state.file_error = (
+                    "No datasets in this file match its core geometry. "
+                    "The file may be malformed or use an unsupported layout."
+                )
+                return 
+            registry.add_src(src, src_id=pathobj.stem)
+            state.max_layer = len(registry.global_axial_mesh) - 1
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
+            save_prefs(state.recent_file_paths, state.core_overrides)
             refresh_src_tree(state, registry)
             state.file_path = ""
             state.file_error = ""
@@ -81,18 +106,113 @@ def register_file_menu_state_ctrl(state : State, ctrl : Controller, registry: Ve
             if was_empty: # if this was the first source loaded render the initial UI
                 ctrl.activate_src()
         except Exception as e:
+            print(e)
             state.file_error = f"Could not load: {e}"
+            raise e
 
     @ctrl.set("close_file")
     def close_file(file_id):
         try:
-            registry.remove_src(file_id)
-            refresh_src_tree(state, registry)
+            ctrl.remove_source(file_id)
         except Exception as e:
+            print(e)
             state.file_error = f"Could not remove file: {file_id}"
+    
+    @ctrl.set("cancel_core_props")
+    def cancel_core_props():
+        _reset_core_prompt()
+        state.file_path = ""
+
+    @ctrl.set("submit_core_props")
+    def submit_core_props():
+        path = state.core_prompt.get("path")
+        missing = state.core_prompt.get("missing", {})
+        if not path:
+            return
+
+        overrides = {}
+        if "npin" in missing:
+            if state.core_none_npin:
+                overrides["npin"] = 0
+            else:
+                val = _parse_positive_int(state.core_answer_npin, "Pins across an assembly",
+                                          allow_zero=False)
+                if val is None:
+                    return
+                overrides["npin"] = val
+        if "nax" in missing:
+            val = _parse_positive_int(state.core_answer_nax, "Number of axial layers",
+                                      allow_zero=False)
+            if val is None:
+                return
+            overrides["nax"] = val
+
+        state.core_overrides = {**state.core_overrides, path: overrides}
+        _reset_core_prompt()
+        state.file_path = path
+        load_file()
+
+    def _parse_positive_int(raw, label, allow_zero):
+        if raw is None or str(raw).strip() == "":
+            state.file_error = f"Enter a value for {label}."
+            return None
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            state.file_error = f"{label} must be a whole number."
+            return None
+        if val < 0 or (val == 0 and not allow_zero):
+            state.file_error = f"{label} must be positive."
+            return None
+        return val
+
+    def _reset_core_prompt():
+        state.core_answer_npin = None
+        state.core_none_npin = False
+        state.core_answer_nax = None
+        state.show_core_dialog = False
+        state.core_prompt = {}
+        state.file_error = ""
+    
+    @ctrl.set("clear_core_override")
+    def clear_core_override(path):
+        state.core_overrides = {k: v for k, v in state.core_overrides.items() if k != path}
+        save_prefs(state.recent_file_paths, state.core_overrides)
+        src_id = Path(path).stem
+        if src_id in registry:
+            ctrl.remove_source(src_id)
+            state.file_path = path
+            load_file()
     
     global file_menu_state_initialized
     file_menu_state_initialized = True
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+
+def register_session_state_ctrl(state, ctrl : Controller, registry : VeraDataRegistry):
+    state.session_error = ""
+
+    @ctrl.set("pick_session")
+    async def pick_session():
+        state.session_error = ""
+        try:
+            path = await launch_picker("--mode", "open", "--filter", "json",
+                                    "--prompt", "Open Session")
+        except Exception as e:
+            state.session_error = f"Picker error: {e}"
+            return
+        if not path:
+            return
+        if not Path(path).is_file():
+            state.session_error = f"File not found: {path}"
+            return
+        try:
+            ctrl.load_session(path)
+            state.show_file_dialog = False
+        except Exception as e:
+            state.session_error = f"Could not load session: {e}"
 
 def build_file_menu_dialog(ctrl: Controller):
     """Build the file menu UI"""
@@ -132,7 +252,6 @@ def build_file_menu_dialog(ctrl: Controller):
                     classes="mb-2",
                 )
 
-                # Recent list sits above the button row so the buttons stay together.
                 html.Div("Recent:", classes="text-caption mt-1 mb-1",
                          v_if="recent_file_paths.length")
                 with vuetify.VList(dense=True, v_if="recent_file_paths.length"):
@@ -141,12 +260,103 @@ def build_file_menu_dialog(ctrl: Controller):
                         click=(ctrl.load_recent, "[p]"),
                     ):
                         vuetify.VListItemTitle("{{ p }}")
+                html.Div("Saved core properties:", classes="text-caption mt-3 mb-1",
+                         v_if="Object.keys(core_overrides).length")
+                with vuetify.VList(dense=True, v_if="Object.keys(core_overrides).length"):
+                    with vuetify.VListItem(v_for="(vals, path) in core_overrides", key="path"):
+                        with vuetify.VListItemContent():
+                            vuetify.VListItemTitle("{{ path }}")
+                            vuetify.VListItemSubtitle("{{ JSON.stringify(vals) }}")
+                        with vuetify.VListItemAction():
+                            with vuetify.VBtn(icon=True, x_small=True,
+                                              click=(ctrl.clear_core_override, "[path]")):
+                                vuetify.VIcon("mdi-close", small=True)
 
-            # Browse and Close on one level (adjacent, left-aligned).
-            with vuetify.VCardActions(classes="px-4 pb-4 pt-0"):
-                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
-                    vuetify.VIcon("mdi-folder-open", left=True)
-                    html.Span("Browse")
-                with vuetify.VBtn(color="secondary", click="show_file_dialog = false", classes="ml-2"):
-                    html.Span("Close")
+                vuetify.VAlert(
+                    "{{ session_error }}",
+                    v_if="session_error",
+                    type="error",
+                    dense=True,
+                    classes="mb-2 mt-2",
+                )
+
             vuetify.VDivider()
+            with vuetify.VCardActions(classes="px-4 py-3"):
+                with vuetify.VBtn(color="primary", click=ctrl.pick_file):
+                    vuetify.VIcon("mdi-file-upload", left=True)
+                    html.Span("Upload H5 Output File")
+                with vuetify.VBtn(color="secondary", click=ctrl.pick_session, classes="ml-2"):
+                    vuetify.VIcon("mdi-folder-open", left=True)
+                    html.Span("Load Session")
+                vuetify.VSpacer()
+                with vuetify.VBtn(color="secondary", click="show_file_dialog = false"):
+                    html.Span("Close")
+
+def build_core_prompt_dialog(ctrl: Controller):
+    with vuetify.VDialog(v_model=("show_core_dialog",), max_width=560, persistent=True):
+        with vuetify.VCard():
+            vuetify.VCardTitle("Core Properties", classes="text-subtitle-1")
+            vuetify.VDivider()
+            with vuetify.VCardText(classes="pt-4"):
+                html.Div(
+                    "This file does not specify all core properties. "
+                    "Confirm the values below and provide the missing ones.",
+                    classes="text-caption text--secondary mb-3",
+                )
+
+                html.Div("Determined from the file:", classes="text-caption mb-1",
+                         v_if="Object.keys(core_prompt.inferred || {}).length")
+                with vuetify.VSimpleTable(dense=True,
+                                          v_if="Object.keys(core_prompt.inferred || {}).length"):
+                    with html.Tbody():
+                        with html.Tr(v_for="(item, key) in core_prompt.inferred", key="key"):
+                            html.Td("{{ key }}")
+                            html.Td("{{ item.value }}")
+                            html.Td("{{ item.source }}", classes="text--secondary")
+
+                vuetify.VDivider(classes="my-3")
+
+                with html.Div(v_if="core_prompt.missing && core_prompt.missing.npin"):
+                    html.Div("Pins across an assembly:", classes="text-caption mb-1 mt-2")
+                    with html.Div(classes="d-flex align-center", style="gap: 16px;"):
+                        vuetify.VTextField(
+                            v_model=("core_answer_npin",),
+                            type="number",
+                            hide_details=True,
+                            dense=True,
+                            disabled=("core_none_npin",),
+                            style="max-width: 120px;",
+                        )
+                        vuetify.VCheckbox(
+                            v_model=("core_none_npin",),
+                            label="No pins",
+                            hide_details=True,
+                            dense=True,
+                            classes="mt-0 pt-0",
+                        )
+
+                with html.Div(v_if="core_prompt.missing && core_prompt.missing.nax"):
+                    html.Div("Number of axial layers:", classes="text-caption mb-1 mt-2")
+                    vuetify.VTextField(
+                        v_model=("core_answer_nax",),
+                        type="number",
+                        hide_details=True,
+                        dense=True,
+                        style="max-width: 120px;",
+                    )
+
+                vuetify.VAlert(
+                    "{{ file_error }}",
+                    v_if="file_error",
+                    type="error",
+                    dense=True,
+                    text=True,
+                    classes="mt-3 mb-0",
+                )
+            vuetify.VDivider()
+            with vuetify.VCardActions(classes="px-4 py-3"):
+                vuetify.VSpacer()
+                with vuetify.VBtn(text=True, click=ctrl.cancel_core_props):
+                    html.Span("Cancel")
+                with vuetify.VBtn(color="primary", click=ctrl.submit_core_props):
+                    html.Span("Load File")

@@ -3,27 +3,31 @@ import numpy as np
 import os
 from scipy.interpolate import make_interp_spline
 from .vera_tools.VERAout import VERAout
-from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, build_core_dtypes, VeraOutCore, VeraOutState
+from .vera_data import VeraDataSource, VeraDataset, VeraDtype, VeraAxes, DerivationMethod, build_core_dtypes, VeraOutCore, VeraOutState, CorePropMissing
 class VeraOutFile(VeraDataSource):
     
-    def __init__(self, filename):
+    def __init__(self, filename : str, core_overrides: dict = {}):
         """Open a VERA output file and build its core and state objects.
 
         Opens two handles on the file (a direct h5py.File and a VERAout
         for averaging). 
         It eagerly caches the core, and validates that the core shape agrees with pin_volumes and pin_powers.
         """
+        self._file_path = filename
         self.f = h5py.File(filename, "r", locking=False)
         try:
-            self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+            try:
+                self.vera_calculator = VERAout(filename=filename) # from pyvera, use this for calculating avgs
+            except Exception as e:
+                self.vera_calculator = None
+            self._states = []
+            self._core = VeraOutCore(self.f, overrides=core_overrides)
+            self._create_states()
+            self.active_state_index = 0
+            self._determine_time_axes()
         except Exception as e:
-            self.vera_calculator = None
-        self._states = []
-        self._core = VeraOutCore(self.f)
-        self._core._cache_all()
-        self._create_states()
-        self.active_state_index = 0
-        self._determine_time_axes()
+            self.f.close()
+            raise e
 
     def _determine_time_axes(self):
         self._time_axes = {}
@@ -35,13 +39,18 @@ class VeraOutFile(VeraDataSource):
         self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
     
     @property
+    def file_path(self) -> str:
+        return self._file_path
+
+    @property
     def core(self) -> VeraOutCore:
         """Reference to this h5 files core data"""
         return self._core
 
     def close(self):
         self.f.close()
-        self.vera_calculator.h5f.close()
+        if self.vera_calculator is not None:
+            self.vera_calculator.h5f.close()
 
     def _create_states(self):
         """Build a VeraOutState for every STATE_ group found in the file."""
@@ -51,7 +60,8 @@ class VeraOutFile(VeraDataSource):
 
     def default_datasets(self):
         categorized_ds_names = self.active_state.categorized_ds_names
-        default_names = {category.title : sorted(categorized_ds_names[category])[0] for category in categorized_ds_names if len(categorized_ds_names[category]) > 0}
+        default_names = {category.title : sorted(categorized_ds_names[category])[0] 
+                         for category in categorized_ds_names if category != VeraDtype.UNKNOWN and len(categorized_ds_names[category]) > 0}
         if not default_names:
             return {}
         if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, "none"):
@@ -99,7 +109,17 @@ class VeraOutFile(VeraDataSource):
         self._active_state_index = index
         self.active_state._cache_all()
     
-    def add_new_diff_dataset(self, ref_dataset_name: str, comp_src : VeraDataSource, comp_dataset_name: str, new_diff_name: str, interpolation_order : int = 1):
+    def add_new_diff_dataset(self, 
+                             ref_dataset_name: str, 
+                             comp_src : "VeraDataSource", 
+                             comp_dataset_name: str, 
+                             new_diff_name: str, 
+                             interpolation_order : int = 1,
+                             ref_scale : float = 1.0,
+                             comp_scale : float = 1.0,
+                             units : str = "unitless",
+    ):
+        produced = 0
         for idx, state in enumerate(self._states):
             if idx >= len(comp_src.states):
                 return
@@ -114,12 +134,18 @@ class VeraOutFile(VeraDataSource):
                 continue
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
                 diff = ref_data - comp_data
-            else:
-                # data is (py, px, nax, nass) shape. py, px, and nass must match between the two dataset
-                spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=2)
+            elif ref_data.dataset_type.has_axial_dim():
+                # all data dimensions that are not the axial dim must match between the two dataset
+                spl = make_interp_spline(comp_axial_mesh_means, comp_data, k=interpolation_order, axis=ref_data.dataset_type.axial_dim_idx)
                 comp_data_on_ref_mesh = spl(ref_axial_mesh_means, extrapolate=False)
-                diff = ref_data - comp_data_on_ref_mesh
+                diff : VeraDataset = ref_data - comp_data_on_ref_mesh
+            else:
+                continue
+            diff.physical_units = units
             state.add_diff_dataset(new_diff_name, diff)
+            produced += 1
+        if produced == 0:
+            raise ValueError(f"No overlapping/compatible states to diff for '{new_diff_name}'")
     
     def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
         """Reduce data over the given axes using the VERAout calculator.
@@ -130,7 +156,7 @@ class VeraOutFile(VeraDataSource):
         """
         match axes:
             case VeraAxes.ASSEMBLY:
-                der = VeraDataset(self.vera_calculator.Assembly(data), VeraDtype.ASSEMBLY)
+                der = VeraDataset(self.vera_calculator.Assembly(data)[np.newaxis, ...], VeraDtype.ASSEMBLY)
             case VeraAxes.AXIAL:
                 der = VeraDataset(self.vera_calculator.Axial(data), VeraDtype.AXIAL)
             case VeraAxes.CORE:
@@ -145,7 +171,7 @@ class VeraOutFile(VeraDataSource):
                 raise ValueError(f"Derivation: {axes} not implemented")
         return der
     
-    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes):
+    def add_new_derived_dataset(self, source_array_name: str, new_dataset_name: str, der_method : DerivationMethod, axes: VeraAxes, use_factors : bool = True):
         if not self.vera_calculator:
             return
         for state in self._states:

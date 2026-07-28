@@ -44,6 +44,10 @@ export class LookupTable {
 
     return offset + 4;
   }
+  getRGB(value) {
+    this.lookupTable.getColor(value, this.rgba);
+    return [this.rgba[0], this.rgba[1], this.rgba[2]];
+  }
   setNanColor(r, g, b, a) {
     this.lookupTable.setNanColor(r, g, b, a);
   }

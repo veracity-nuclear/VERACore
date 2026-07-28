@@ -53,8 +53,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_array_key,
         selected_src_key,
-        "selected_assembly",
-        "selected_comp_assembly",
+        "selected_assembly_ij",
         "selected_layer",
         f"grid_view_{view_id}",
         lock_flag,
@@ -63,9 +62,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_assembly_surface_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = get_safe_idxs(
-            view_id, state, registry
-        )
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
         array = vera_source.array(selected_array)
         array_dtype = array.dataset_type
@@ -145,6 +145,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
                                     color_preset="jet",
+                                    units=(f"color_units_{view_id}",)
                                 )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"

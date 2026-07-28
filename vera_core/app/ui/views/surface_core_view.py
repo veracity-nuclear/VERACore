@@ -80,9 +80,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_core_surface_view(**kwargs):
         if is_non_active_view(state, view_id, option):
             return
-        _, _, selected_layer, _, selected_src_id, selected_array = get_safe_idxs(
-            view_id, state, registry
-        )
+        indices = get_safe_idxs(view_id, state, registry)
+        if not indices:
+            return
+        _, _, selected_layer, _, selected_src_id, selected_array = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
         core = vera_source.core
         state[aspect_ratio_key] = core.aspect_ratio
@@ -168,6 +169,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
                                     color_preset="jet",
+                                    units=(f"color_units_{view_id}",)
                                 )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"

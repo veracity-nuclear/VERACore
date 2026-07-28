@@ -63,7 +63,7 @@ class VeraOutFile(VeraDataSource):
         default_names = {category.title : sorted(categorized_ds_names[category])[0] 
                          for category in categorized_ds_names if category != VeraDtype.UNKNOWN and len(categorized_ds_names[category]) > 0}
         if not default_names:
-            return {}
+            return None
         if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, "none"):
             default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
@@ -123,13 +123,12 @@ class VeraOutFile(VeraDataSource):
         for idx, state in enumerate(self._states):
             if idx >= len(comp_src.states):
                 return
-            comp_state = comp_src.states[idx]
-            if not state.has_dataset(ref_dataset_name) or not comp_state.has_dataset(comp_dataset_name):
+            if not state.has_dataset(ref_dataset_name) or not state.has_dataset(comp_dataset_name):
                 continue
-            ref_data = getattr(state, ref_dataset_name)
-            comp_data = getattr(comp_state, comp_dataset_name)
-            ref_axial_mesh_means = self.core.axial_mesh_means
-            comp_axial_mesh_means = comp_src.core.axial_mesh_means
+            ref_data : VeraDataset = getattr(state, ref_dataset_name) * ref_scale
+            comp_data : VeraDataset = getattr(comp_src.states[idx], comp_dataset_name) * comp_scale
+            ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
+            comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
             if ref_data.dataset_type != comp_data.dataset_type:
                 continue
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):

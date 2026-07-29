@@ -12,7 +12,7 @@
       <div
         v-for="tick in yTicks"
         :key="'t' + tick.value"
-        class="vera-axial-label vera-axial-label-y"
+        class="vera-axial-label"
         :style="tickLabelStyle(tick.y)"
       >
         {{ tick.text }}
@@ -28,7 +28,7 @@
       <div
         v-for="j in visibleRows"
         :key="'y' + j"
-        class="vera-axial-label vera-axial-label-y"
+        class="vera-axial-label"
         :style="yLabelStyle(j)"
       >
         {{ yLabels[j] }}
@@ -58,15 +58,8 @@
 
 <style scoped>
 .vera-axial-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   white-space: nowrap;
   pointer-events: none;
-}
-
-.vera-axial-label-y {
-  justify-content: flex-end;
 }
 
 .vera-axial-tick {

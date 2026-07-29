@@ -131,10 +131,6 @@ export default {
       type: Number,
       default: 11,
     },
-    letterSpacing: {
-      type: Number,
-      default: 0.5,
-    },
     labelPadding: {
       type: Number,
       default: 6,
@@ -178,8 +174,10 @@ export default {
     columnCount() {
       return this.xSizes.length;
     },
+    // NaN cells are drawn just off the panel background so an absent assembly
+    // reads as an empty cell rather than as a hole in the grid.
     nanColor() {
-      const level = this.dark ? 30 / 255 : 1;
+      const level = this.dark ? 45 / 255 : 0.93;
       return [level, level, level, 1];
     },
     colorMap() {
@@ -209,6 +207,19 @@ export default {
     lineHeight() {
       return Math.ceil(this.fontSize * 1.4);
     },
+    widestXLabel() {
+      let width = 0;
+      for (let i = 0; i < this.columnCount; i += 1) {
+        width = Math.max(width, this.textWidth(this.xLabels[i]));
+      }
+      return Math.ceil(width);
+    },
+    xSlack() {
+      return Math.ceil(this.widestXLabel / 2);
+    },
+    ySlack() {
+      return Math.ceil(this.lineHeight / 2);
+    },
     gutterWidth() {
       let width = 0;
       for (let j = 0; j < this.yLabels.length; j += 1) {
@@ -220,27 +231,19 @@ export default {
       return width ? Math.ceil(width) + this.labelPadding : 0;
     },
     headerHeight() {
-      let width = 0;
-      for (let i = 0; i < this.columnCount; i += 1) {
-        width = Math.max(width, this.textWidth(this.xLabels[i]));
-      }
-      return width ? this.lineHeight : 0;
+      return this.widestXLabel ? this.lineHeight : 0;
     },
     xLabelGap() {
-      let width = 0;
-      for (let i = 0; i < this.columnCount; i += 1) {
-        width = Math.max(width, this.textWidth(this.xLabels[i]));
-      }
-      return Math.ceil(width) + this.labelPadding;
+      return this.widestXLabel + this.labelPadding;
     },
     yLabelGap() {
       return this.lineHeight + 4;
     },
     availWidth() {
-      return Math.max(0, this.boxWidth - this.gutterWidth);
+      return Math.max(0, this.boxWidth - this.gutterWidth - this.xSlack * 2);
     },
     availHeight() {
-      return Math.max(0, this.boxHeight - this.headerHeight);
+      return Math.max(0, this.boxHeight - this.headerHeight - this.ySlack * 2);
     },
     unitWidth() {
       return this.xSizes.reduce((sum, size) => sum + size * this.xScale, 0);
@@ -297,10 +300,16 @@ export default {
       return ticks;
     },
     frameLeft() {
-      return Math.round((this.boxWidth - (this.gutterWidth + this.dataWidth)) / 2);
+      const total = this.gutterWidth + this.dataWidth;
+      const centered = Math.round((this.boxWidth - total) / 2);
+      const maxLeft = this.boxWidth - total - this.xSlack;
+      return Math.max(0, Math.min(centered, maxLeft));
     },
     frameTop() {
-      return Math.round((this.boxHeight - (this.headerHeight + this.dataHeight)) / 2);
+      const total = this.headerHeight + this.dataHeight;
+      const centered = Math.round((this.boxHeight - total) / 2);
+      const maxTop = this.boxHeight - total - this.ySlack;
+      return Math.max(this.ySlack, Math.min(centered, maxTop));
     },
     frameStyle() {
       return {
@@ -310,7 +319,6 @@ export default {
         width: `${this.gutterWidth + this.dataWidth}px`,
         height: `${this.headerHeight + this.dataHeight}px`,
         fontSize: `${this.fontSize}px`,
-        letterSpacing: `${this.letterSpacing}px`,
         lineHeight: `${this.lineHeight}px`,
       };
     },
@@ -345,8 +353,6 @@ export default {
       }
       const x = this.frameLeft + this.gutterWidth + this.hover.x;
       const y = this.frameTop + this.headerHeight + this.hover.y;
-      // Flip to the left of the cursor when near the right edge so the readout
-      // stays on-panel for narrow (single-rod) frames.
       const flip = x > this.boxWidth * 0.6;
       return {
         position: 'absolute',
@@ -368,7 +374,8 @@ export default {
   },
   created() {
     this.lookupTable = new LookupTable(this.colorPreset, this.colorRange);
-    this.measureContext = document.createElement('canvas').getContext('2d');
+    this.measureContext = null;
+    this.measureWarned = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
   },
   mounted() {
@@ -392,14 +399,33 @@ export default {
       this.boxWidth = width;
       this.boxHeight = height;
     },
+    ctx() {
+      if (!this.measureContext) {
+        try {
+          this.measureContext = document.createElement('canvas').getContext('2d');
+        } catch (e) {
+          this.measureContext = null;
+        }
+      }
+      return this.measureContext;
+    },
     textWidth(text) {
       this.measureNonce;
       const value = text == null ? '' : String(text);
       if (!value) {
         return 0;
       }
-      this.measureContext.font = `${this.fontSize}px ${this.fontFamily}`;
-      return this.measureContext.measureText(value).width + this.letterSpacing * value.length;
+      const context = this.ctx();
+      if (!context) {
+        if (!this.measureWarned) {
+          this.measureWarned = true;
+          // eslint-disable-next-line no-console
+          console.warn('VeraAxial: canvas measure unavailable, using width estimate');
+        }
+        return value.length * this.fontSize * 0.6;
+      }
+      context.font = `${this.fontSize}px ${this.fontFamily}`;
+      return context.measureText(value).width;
     },
     pixelForCm(v) {
       const b = this.yBounds;
@@ -415,13 +441,33 @@ export default {
       }
       return e[e.length - 1];
     },
+    xLabelStyle(i) {
+      const center = (this.xEdges[i] + this.xEdges[i + 1]) / 2;
+      return {
+        position: 'absolute',
+        left: `${this.gutterWidth + center}px`,
+        top: 0,
+        height: `${this.headerHeight}px`,
+        display: 'flex',
+        alignItems: 'center',
+        transform: 'translateX(-50%)',
+      };
+    },
+    yLabelStyle(j) {
+      const center = (this.yEdges[j] + this.yEdges[j + 1]) / 2;
+      return {
+        position: 'absolute',
+        right: `${this.dataWidth + this.labelPadding}px`,
+        top: `${this.headerHeight + center}px`,
+        transform: 'translateY(-50%)',
+      };
+    },
     tickLabelStyle(y) {
       return {
         position: 'absolute',
-        left: 0,
-        top: `${this.headerHeight + y - this.lineHeight / 2}px`,
-        width: `${Math.max(0, this.gutterWidth - this.labelPadding)}px`,
-        height: `${this.lineHeight}px`,
+        right: `${this.dataWidth + this.labelPadding}px`,
+        top: `${this.headerHeight + y}px`,
+        transform: 'translateY(-50%)',
       };
     },
     tickMarkStyle(y) {
@@ -442,24 +488,6 @@ export default {
         height: `${this.yEdges[j + 1] - this.yEdges[j]}px`,
         display: 'block',
         pointerEvents: 'none',
-      };
-    },
-    xLabelStyle(i) {
-      return {
-        position: 'absolute',
-        left: `${this.gutterWidth + this.xEdges[i]}px`,
-        top: 0,
-        width: `${this.xEdges[i + 1] - this.xEdges[i]}px`,
-        height: `${this.headerHeight}px`,
-      };
-    },
-    yLabelStyle(j) {
-      return {
-        position: 'absolute',
-        left: 0,
-        top: `${this.headerHeight + this.yEdges[j]}px`,
-        width: `${Math.max(0, this.gutterWidth - this.labelPadding)}px`,
-        height: `${this.yEdges[j + 1] - this.yEdges[j]}px`,
       };
     },
     locate(event) {

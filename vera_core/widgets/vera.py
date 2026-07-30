@@ -185,3 +185,29 @@ class VerticalColorMapEditor(HtmlElement):
         self._event_names += [
             "input",
         ]
+
+class CipsCoreView(HtmlElement):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "vera-cips-view", 
+            **kwargs
+        )
+        self._attr_names += [
+            "metrics", 
+            ("color_ranges", "colorRanges"), 
+            ("color_preset", "colorPreset"),
+            ("color_mode", "colorMode"), 
+            ("primary_index", "primaryIndex"),
+            ("selected_i", "selectedI"), 
+            ("selected_j", "selectedJ"),
+            ("x_labels", "xLabels"), 
+            ("y_labels", "yLabels"), 
+            ("core_cols", "coreCols"),
+            ("aspect_ratio", "aspectRatio"), 
+            "decimals", 
+            "dark", 
+            "busy",
+        ]
+        self._event_names += [
+            "click"
+        ]

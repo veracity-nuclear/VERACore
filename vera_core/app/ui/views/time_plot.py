@@ -96,7 +96,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     surface_label = f" {Surface(state.selected_surface).str}"
                     identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case _:
-                    raise RuntimeError(f"Time plot cannot visualize datasets of type {str(array_dtype)}")
+                    continue
             for idx_n, indices in enumerate(indices_list):
                 group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
                 values = [getattr(x, array_name)[indices] for x in src.states]

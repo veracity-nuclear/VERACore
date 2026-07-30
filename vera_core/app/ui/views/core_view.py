@@ -1,4 +1,3 @@
-import math
 from typing import Sequence
 import numpy as np
 
@@ -9,6 +8,7 @@ from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS, NUM_NODES
 from vera_core.app.core.thresholds import apply_thresholds, ThresholdCondition
 from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
+from ._core_grid import nan_out_non_fuel_locs, assembly_side, format_for_vis, core_labels
 
 
 ALLOWED_DTYPES : list[VeraDtype] = [
@@ -35,48 +35,6 @@ def option_for(view_id):
         "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES]
     }
 
-def _nan_out_non_fuel_locs(array : np.ndarray, src : VeraDataSource, selected_layer : int, is_radial : bool):
-    non_fuel_locs = src.core.non_fuel_locs
-    if non_fuel_locs is None:
-        return array
-    rod_rows, rod_cols, layers, assy_id = non_fuel_locs
-    keep = slice(None) if is_radial else (layers == selected_layer)
-    idx = (assy_id[keep], rod_rows[keep], rod_cols[keep])
-    new_array = array.copy()
-    new_array[idx] = np.nan
-    return new_array
-
-def _assembly_side(n: int) -> int:
-    """Pin-side length for a cell of n values. n must be a perfect square."""
-    if n <= 0:
-        return 0
-    side = math.isqrt(n)
-    if side * side != n:
-        raise ValueError(f"assembly cell length {n} is not a perfect square")
-    return side
-
-def _format_for_vis(src : VeraDataSource, dataset : VeraDataset):
-    cm = src.core.get_map(dataset)
-    is_assembly_avg = dataset.is_assembly()
-    core_width = cm.shape[0]
-    result = []
-    labels = []
-    for i in range(core_width):
-        line = [None] * core_width
-        result.append(line)
-        if is_assembly_avg:
-            labels_line = [None] * core_width
-            labels.append(labels_line)
-        for j in range(core_width):
-            index = cm[i, j] - 1
-            if index == -1:
-                continue
-            if is_assembly_avg:
-                line[j] = [float(dataset[index])]
-                labels_line[j] = float(dataset[index])
-            else:
-                line[j] = np.ravel(dataset[index]).tolist()
-    return result, labels    
 
 def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, thresholds : Sequence[ThresholdCondition] = []):
     if z < 0:
@@ -84,7 +42,7 @@ def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, 
     dataset = vera_source.array(dataset_name)
     ds_dtype = dataset.dataset_type
     if ds_dtype not in ALLOWED_DTYPES:
-        raise RuntimeError(f"Core View cannot visualize datasets of type {str(ds_dtype)}")
+        return tuple()
     is_comp = ds_dtype.is_computational()
     layer_list = []
     match ds_dtype:
@@ -115,18 +73,16 @@ def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, 
     result_assembly_labels = []
     for layer in layer_list:
         if ds_dtype.has_fuel_pins():
-            layer = _nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype==VeraDtype.RADIAL)
+            layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype==VeraDtype.RADIAL)
         if thresholds:
             layer = apply_thresholds(layer, thresholds)    
-        formatted_result, assy_labels = _format_for_vis(src=vera_source, dataset=layer)
+        formatted_result, assy_labels = format_for_vis(src=vera_source, dataset=layer)
         results.append(formatted_result)
         result_assembly_labels.append(assy_labels)
 
     sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
-    assembly_side_size =  _assembly_side(len(sample)) if sample else 0
-    x_labels = core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
-    y_labels = core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
-    max_core_cols =  core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
+    assembly_side_size =  assembly_side(len(sample)) if sample else 0
+    x_labels, y_labels, max_core_cols = core_labels(core, is_comp)
     return results, result_assembly_labels, assembly_side_size, x_labels, y_labels, max_core_cols
 
 
@@ -186,7 +142,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         vera_source : VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
         vis_state = create_core_view(vera_source, selected_array, selected_layer, thresholds_to_apply)
-        if vis_state is None:
+        if not vis_state:
             return
         results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
         has_assembly_labels = assy_labels and len(assy_labels) > 0 and any(cell is not None for row in assy_labels[0] for cell in row)

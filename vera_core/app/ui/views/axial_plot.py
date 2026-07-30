@@ -105,7 +105,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     axial_arrays.append(full_array[:, assy])
                     identifier = f" | {assembly_label} Detector"
                 case _:
-                    raise RuntimeError(f"Axial Plot cannot visualize datasets of type {str(array_dtype)}")
+                    continue
             axial_mesh_means = src.core.get_axial_mesh_means(dataset_type=array_dtype)
             for idx, axial_array in enumerate(axial_arrays):
                 group_label = "" if len(axial_arrays) <= 1 else f" GROUP {idx + 1}"

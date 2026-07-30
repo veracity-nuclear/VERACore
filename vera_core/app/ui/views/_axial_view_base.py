@@ -94,9 +94,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             assembly_j = clicked_idx
         src_id = state[selected_src_key]
         array_dtype = registry.get_ds_dtype(src_id, state[selected_array_key])
-        state.selected_layer = registry.src_axial_idx_to_global_idx(
-            src_id, array_dtype, layer
-        )
+        state.selected_layer = registry.src_axial_idx_to_global_idx(src_id, array_dtype, layer)
         state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}
 
     @state.change("selected_layer")
@@ -159,15 +157,11 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                 sel = np.transpose(sel, (1, 2, 0))
                 image_data = sel.reshape(sel.shape[0], -1)
         else:
-            raise RuntimeError(
-                f"Axial view cannot visualize datasets of type {str(array_dtype)}"
-            )
+            raise RuntimeError(f"Axial view cannot visualize datasets of type {str(array_dtype)}")
 
         image_data = image_data[::-1, :]  # axial level 0 at the bottom
         nb_lines = image_data.shape[0]
-        nb_cols = (
-            image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
-        )
+        nb_cols = image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
         nb_cols = len(assembly_indices)
         grid = []
         for j in range(nb_lines):
@@ -227,13 +221,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             return
 
         if is_x:
-            assembly_indices = core.row_assembly_indices(
-                selected_assembly, is_comp, is_detector
-            )
+            assembly_indices = core.row_assembly_indices(selected_assembly, is_comp, is_detector)
         else:
-            assembly_indices = core.col_assembly_indices(
-                selected_assembly, is_comp, is_detector
-            )
+            assembly_indices = core.col_assembly_indices(selected_assembly, is_comp, is_detector)
 
         if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.COMP_ASSY_ENERGY):
             num_groups = array.shape[0]
@@ -276,15 +266,11 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         if is_x:
             state[label_x_key] = (
-                core.comp_core_map_column_labels
-                if is_comp
-                else core.reduced_core_map_column_labels
+                core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
             )
         else:
             start_x = (
-                core.comp_map_start_index
-                if is_comp
-                else core.reduced_core_map_start_index
+                core.comp_map_start_index if is_comp else core.reduced_core_map_start_index
             ) + 1
             state[label_x_key] = list(range(start_x, nb_cols + start_x + 1))
 
@@ -293,13 +279,10 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
             with html.Div(
                 style=(
-                    "flex: 1; min-height: 0;"
-                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                    "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
                 for g in range(MAX_VIS_GROUPS):
@@ -317,10 +300,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                             style="flex: 0 0 auto;",
                         )
                         with html.Div(
-                            style=(
-                                "flex: 1; min-height: 0;"
-                                "display: flex; flex-direction: row;"
-                            )
+                            style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
                         ):
                             with html.Div(
                                 style="flex: 1; min-width: 0; min-height: 0; position: relative;"
@@ -333,9 +313,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                     y_sizes=(size_y_key, []),
                                     x_labels=(label_x_key, []),
                                     y_labels=(label_y_key, []),
-                                    selected_i=(
-                                        f"selected_assembly_ij.{'i' if is_x else 'j'}",
-                                    ),
+                                    selected_i=(f"selected_assembly_ij.{'i' if is_x else 'j'}",),
                                     selected_j=(
                                         f"{label_y_key}.length - {selected_layer_key} - 1",
                                     ),

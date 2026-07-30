@@ -115,13 +115,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state[group_keys[g]] = []
 
         state[x_label_key] = (
-            core.comp_core_map_column_labels
-            if is_comp
-            else core.reduced_core_map_column_labels
+            core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
         )
-        start_idx = (
-            core.comp_map_start_index if is_comp else core.reduced_core_map_start_index
-        )
+        start_idx = core.comp_map_start_index if is_comp else core.reduced_core_map_start_index
         state[y_label_key] = [start_idx + row + 1 for row in range(core_map.shape[0])]
 
         state[n_groups_key] = n_energy
@@ -129,13 +125,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
             with html.Div(
                 style=(
-                    "flex: 1; min-height: 0;"
-                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                    "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
                 for g in range(MAX_NUM_GROUPS):
@@ -154,10 +147,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         )
                         # Surface view + its own colorbar, side by side.
                         with html.Div(
-                            style=(
-                                "flex: 1; min-height: 0;"
-                                "display: flex; flex-direction: row;"
-                            )
+                            style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
                         ):
                             with html.Div(
                                 style="flex: 1; min-width: 0; min-height: 0; position: relative;"

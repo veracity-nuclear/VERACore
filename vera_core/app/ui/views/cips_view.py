@@ -84,13 +84,9 @@ def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresho
         case VeraDtype.ASSEMBLY:
             layer = dataset[0, z, :]
         case _:
-            raise RuntimeError(
-                f"CIPS View cannot visualize datasets of type {str(ds_dtype)}"
-            )
+            raise RuntimeError(f"CIPS View cannot visualize datasets of type {str(ds_dtype)}")
     if ds_dtype.has_fuel_pins():
-        layer = nan_out_non_fuel_locs(
-            layer, vera_source, z, ds_dtype == VeraDtype.RADIAL_ASSEMBLY
-        )
+        layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype == VeraDtype.RADIAL_ASSEMBLY)
     if thresholds:
         layer = apply_thresholds(layer, thresholds)
     _, values = format_for_vis(src=vera_source, dataset=layer)
@@ -99,9 +95,7 @@ def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresho
     return values, array_range(layer)
 
 
-def create_cips_view(
-    registry: VeraDataRegistry, tokens, z: int, thresholds_state: dict
-):
+def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_state: dict):
     """Build the full widget payload. Returns None when nothing is selectable."""
     if z < 0:
         raise RuntimeError(f"z must be >= 0, z = {z}")
@@ -110,10 +104,7 @@ def create_cips_view(
     source = None
     for src_id, array_name in _ordered_pairs(tokens):
         vera_source = registry.get(src_id)
-        if (
-            vera_source is None
-            or vera_source.array_dtype(array_name) not in ALLOWED_DTYPES
-        ):
+        if vera_source is None or vera_source.array_dtype(array_name) not in ALLOWED_DTYPES:
             continue
         thresholds = thresholds_state.get(format_label(src_id, array_name), [])
         values, value_range = _metric_values(vera_source, array_name, z, thresholds)
@@ -188,9 +179,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def update_info(**kwargs):
         set_info(view_id, state, registry)
 
-    @state.change(
-        multi_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag
-    )
+    @state.change(multi_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_cips_view(**kwargs):
         if is_non_active_view(state, view_id, option):
@@ -199,9 +188,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if not indices:
             return
         _, _, selected_layer, _, _, _ = indices
-        payload = create_cips_view(
-            registry, state[multi_key], selected_layer, state["thresholds"]
-        )
+        payload = create_cips_view(registry, state[multi_key], selected_layer, state["thresholds"])
         if payload is None:
             return
         metrics = payload["metrics"]
@@ -210,9 +197,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             for g, value_range in enumerate(payload["ranges"]):
                 state[range_keys[g]] = value_range
         for g in range(MAX_METRICS):
-            state[units_keys[g]] = (
-                metrics[g]["units"] if g < len(metrics) else "unitless"
-            )
+            state[units_keys[g]] = metrics[g]["units"] if g < len(metrics) else "unitless"
         state[metrics_key] = metrics
         state[n_metrics_key] = len(metrics)
         if state[primary_key] >= len(metrics):
@@ -225,15 +210,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
-            with html.Div(
-                style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
-            ):
-                with html.Div(
-                    style="flex: 1; min-width: 0; min-height: 0; position: relative;"
-                ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
+            with html.Div(style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")):
+                with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
                     vera.CipsCoreView(
                         metrics=(metrics_key, []),
                         color_ranges=("[" + ", ".join(range_keys) + "]",),

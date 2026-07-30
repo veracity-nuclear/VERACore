@@ -22,9 +22,7 @@ class ThresholdCondition(TypedDict):
     value: float
 
 
-def apply_thresholds(
-    array: VeraDataset, conditions: Sequence[ThresholdCondition]
-) -> VeraDataset:
+def apply_thresholds(array: VeraDataset, conditions: Sequence[ThresholdCondition]) -> VeraDataset:
     keep = np.ones(array.shape, dtype=bool)
     dtype = array.dataset_type
     for c in conditions:

@@ -5,6 +5,7 @@ from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
 from vera_core.app.core import CorePropMissing, VeraDataRegistry, VeraOutFile
+from vera_core.app.core.types import CoreOverride, FileOverrides
 
 from .appdata import load_prefs, save_prefs
 from .DatasetPicker import refresh_src_tree
@@ -15,7 +16,7 @@ file_menu_state_initialized = False
 
 def register_file_menu_state_ctrl(
     state: State, ctrl: Controller, registry: VeraDataRegistry
-):
+) -> None:
     """
     Register trame state for file menu
 
@@ -33,15 +34,17 @@ def register_file_menu_state_ctrl(
     state.core_none_npin = False
     state.core_answer_nax = None
     state.show_core_dialog = False
-    state.recent_file_paths, state.core_overrides = load_prefs()
+    recent_file_paths, file_overrides = load_prefs()
+    state.recent_file_paths = recent_file_paths
+    state.file_overrides = file_overrides
 
     @ctrl.set("open_file_dialog")
-    def open_file_dialog():
+    def open_file_dialog() -> None:
         state.file_error = ""
         state.show_file_dialog = True
 
     @ctrl.set("pick_file")
-    async def pick_file():
+    async def pick_file() -> None:
         state.file_error = ""
         try:
             path = await launch_picker(
@@ -59,12 +62,12 @@ def register_file_menu_state_ctrl(
         load_file()
 
     @ctrl.set("load_recent")
-    def load_recent(path):
+    def load_recent(path: str) -> None:
         state.file_path = path
         load_file()
 
     @ctrl.set("load_file")
-    def load_file():
+    def load_file() -> None:
         raw_path = (state.file_path or "").strip()
         if not raw_path:
             state.file_error = "Enter a path."
@@ -75,10 +78,9 @@ def register_file_menu_state_ctrl(
             return
         try:
             was_empty = registry.default_src_id is None
+            file_overrides: FileOverrides = state.file_overrides
             try:
-                src = VeraOutFile(
-                    raw_path, core_overrides=state.core_overrides.get(raw_path, {})
-                )
+                src = VeraOutFile(raw_path, core_overrides=file_overrides.get(raw_path, {}))
             except CorePropMissing as e:
                 state.core_prompt = {
                     "path": raw_path,
@@ -91,12 +93,12 @@ def register_file_menu_state_ctrl(
                 state.show_core_dialog = True
                 return
             if not src.default_datasets():
-                had_override = raw_path in state.core_overrides
+                had_override = raw_path in state.file_overrides
                 if had_override:
-                    state.core_overrides = {
-                        k: v for k, v in state.core_overrides.items() if k != raw_path
+                    state.file_overrides = {
+                        k: v for k, v in state.file_overrides.items() if k != raw_path
                     }
-                    save_prefs(state.recent_file_paths, state.core_overrides)
+                    save_prefs(state.recent_file_paths, state.file_overrides)
                     state.file_error = (
                         "No datasets match the core properties you entered. "
                         "Please check the values and try again."
@@ -113,7 +115,7 @@ def register_file_menu_state_ctrl(
             state.max_layer = len(registry.global_axial_mesh) - 1
             recent = [raw_path] + [p for p in state.recent_file_paths if p != raw_path]
             state.recent_file_paths = recent[:10]
-            save_prefs(state.recent_file_paths, state.core_overrides)
+            save_prefs(state.recent_file_paths, state.file_overrides)
             refresh_src_tree(state, registry)
             state.file_path = ""
             state.file_error = ""
@@ -126,7 +128,7 @@ def register_file_menu_state_ctrl(
             raise e
 
     @ctrl.set("close_file")
-    def close_file(file_id):
+    def close_file(file_id: str) -> None:
         try:
             ctrl.remove_source(file_id)
         except Exception as e:
@@ -134,18 +136,18 @@ def register_file_menu_state_ctrl(
             state.file_error = f"Could not remove file: {file_id}"
 
     @ctrl.set("cancel_core_props")
-    def cancel_core_props():
+    def cancel_core_props() -> None:
         _reset_core_prompt()
         state.file_path = ""
 
     @ctrl.set("submit_core_props")
-    def submit_core_props():
+    def submit_core_props() -> None:
         path = state.core_prompt.get("path")
         missing = state.core_prompt.get("missing", {})
         if not path:
             return
 
-        overrides = {}
+        overrides: CoreOverride = {}
         if "npin" in missing:
             if state.core_none_npin:
                 overrides["npin"] = 0
@@ -164,12 +166,12 @@ def register_file_menu_state_ctrl(
                 return
             overrides["nax"] = val
 
-        state.core_overrides = {**state.core_overrides, path: overrides}
+        state.file_overrides = {**state.file_overrides, path: overrides}
         _reset_core_prompt()
         state.file_path = path
         load_file()
 
-    def _parse_positive_int(raw, label, allow_zero):
+    def _parse_positive_int(raw: object, label: str, allow_zero: bool) -> int | None:
         if raw is None or str(raw).strip() == "":
             state.file_error = f"Enter a value for {label}."
             return None
@@ -183,7 +185,7 @@ def register_file_menu_state_ctrl(
             return None
         return val
 
-    def _reset_core_prompt():
+    def _reset_core_prompt() -> None:
         state.core_answer_npin = None
         state.core_none_npin = False
         state.core_answer_nax = None
@@ -191,12 +193,10 @@ def register_file_menu_state_ctrl(
         state.core_prompt = {}
         state.file_error = ""
 
-    @ctrl.set("clear_core_override")
-    def clear_core_override(path):
-        state.core_overrides = {
-            k: v for k, v in state.core_overrides.items() if k != path
-        }
-        save_prefs(state.recent_file_paths, state.core_overrides)
+    @ctrl.set("clear_file_override")
+    def clear_file_override(path: str) -> None:
+        state.file_overrides = {k: v for k, v in state.file_overrides.items() if k != path}
+        save_prefs(state.recent_file_paths, state.file_overrides)
         src_id = Path(path).stem
         if src_id in registry:
             ctrl.remove_source(src_id)
@@ -207,11 +207,11 @@ def register_file_menu_state_ctrl(
     file_menu_state_initialized = True
 
 
-def register_session_state_ctrl(state, ctrl: Controller, registry: VeraDataRegistry):
+def register_session_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry) -> None:
     state.session_error = ""
 
     @ctrl.set("pick_session")
-    async def pick_session():
+    async def pick_session() -> None:
         state.session_error = ""
         try:
             path = await launch_picker(
@@ -232,7 +232,7 @@ def register_session_state_ctrl(state, ctrl: Controller, registry: VeraDataRegis
             state.session_error = f"Could not load session: {e}"
 
 
-def build_file_menu_dialog(ctrl: Controller):
+def build_file_menu_dialog(ctrl: Controller) -> None:
     """Build the file menu UI"""
     global file_menu_state_initialized
     if not file_menu_state_initialized:
@@ -289,16 +289,12 @@ def build_file_menu_dialog(ctrl: Controller):
                     ):
                         vuetify.VListItemTitle("{{ p }}")
                 html.Div(
-                    "Saved core properties:",
+                    "Saved file overrides:",
                     classes="text-caption mt-3 mb-1",
-                    v_if="Object.keys(core_overrides).length",
+                    v_if="Object.keys(file_overrides).length",
                 )
-                with vuetify.VList(
-                    dense=True, v_if="Object.keys(core_overrides).length"
-                ):
-                    with vuetify.VListItem(
-                        v_for="(vals, path) in core_overrides", key="path"
-                    ):
+                with vuetify.VList(dense=True, v_if="Object.keys(file_overrides).length"):
+                    with vuetify.VListItem(v_for="(vals, path) in file_overrides", key="path"):
                         with vuetify.VListItemContent():
                             vuetify.VListItemTitle("{{ path }}")
                             vuetify.VListItemSubtitle("{{ JSON.stringify(vals) }}")
@@ -306,7 +302,7 @@ def build_file_menu_dialog(ctrl: Controller):
                             with vuetify.VBtn(
                                 icon=True,
                                 x_small=True,
-                                click=(ctrl.clear_core_override, "[path]"),
+                                click=(ctrl.clear_file_override, "[path]"),
                             ):
                                 vuetify.VIcon("mdi-close", small=True)
 
@@ -323,9 +319,7 @@ def build_file_menu_dialog(ctrl: Controller):
                 with vuetify.VBtn(color="primary", click=ctrl.pick_file):
                     vuetify.VIcon("mdi-file-upload", left=True)
                     html.Span("Upload H5 Output File")
-                with vuetify.VBtn(
-                    color="secondary", click=ctrl.pick_session, classes="ml-2"
-                ):
+                with vuetify.VBtn(color="secondary", click=ctrl.pick_session, classes="ml-2"):
                     vuetify.VIcon("mdi-folder-open", left=True)
                     html.Span("Load Session")
                 vuetify.VSpacer()
@@ -333,7 +327,7 @@ def build_file_menu_dialog(ctrl: Controller):
                     html.Span("Close")
 
 
-def build_core_prompt_dialog(ctrl: Controller):
+def build_core_prompt_dialog(ctrl: Controller) -> None:
     with vuetify.VDialog(v_model=("show_core_dialog",), max_width=560, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Core Properties", classes="text-subtitle-1")
@@ -354,9 +348,7 @@ def build_core_prompt_dialog(ctrl: Controller):
                     dense=True, v_if="Object.keys(core_prompt.inferred || {}).length"
                 ):
                     with html.Tbody():
-                        with html.Tr(
-                            v_for="(item, key) in core_prompt.inferred", key="key"
-                        ):
+                        with html.Tr(v_for="(item, key) in core_prompt.inferred", key="key"):
                             html.Td("{{ key }}")
                             html.Td("{{ item.value }}")
                             html.Td("{{ item.source }}", classes="text--secondary")
@@ -364,9 +356,7 @@ def build_core_prompt_dialog(ctrl: Controller):
                 vuetify.VDivider(classes="my-3")
 
                 with html.Div(v_if="core_prompt.missing && core_prompt.missing.npin"):
-                    html.Div(
-                        "Pins across an assembly:", classes="text-caption mb-1 mt-2"
-                    )
+                    html.Div("Pins across an assembly:", classes="text-caption mb-1 mt-2")
                     with html.Div(classes="d-flex align-center", style="gap: 16px;"):
                         vuetify.VTextField(
                             v_model=("core_answer_npin",),
@@ -385,9 +375,7 @@ def build_core_prompt_dialog(ctrl: Controller):
                         )
 
                 with html.Div(v_if="core_prompt.missing && core_prompt.missing.nax"):
-                    html.Div(
-                        "Number of axial layers:", classes="text-caption mb-1 mt-2"
-                    )
+                    html.Div("Number of axial layers:", classes="text-caption mb-1 mt-2")
                     vuetify.VTextField(
                         v_model=("core_answer_nax",),
                         type="number",

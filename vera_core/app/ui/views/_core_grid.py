@@ -55,15 +55,7 @@ def format_for_vis(src: VeraDataSource, dataset: VeraDataset):
 
 def core_labels(core: VeraOutCore, is_comp: bool):
     """Return (x_labels, y_labels, max_core_cols) for the requested map."""
-    x_labels = (
-        core.comp_core_map_column_labels
-        if is_comp
-        else core.reduced_core_map_column_labels
-    )
-    y_labels = (
-        core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
-    )
-    max_core_cols = (
-        core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
-    )
+    x_labels = core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
+    y_labels = core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
+    max_core_cols = core.comp_core_map.shape[0] if is_comp else core.reduced_core_map.shape[0]
     return x_labels, y_labels, max_core_cols

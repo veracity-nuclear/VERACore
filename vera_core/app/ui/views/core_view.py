@@ -83,26 +83,20 @@ def create_core_view(
             for energy_group in range(num_energy_groups):
                 layer_list.append(dataset[energy_group, :, z, :].swapaxes(0, 1))
         case _:
-            raise RuntimeError(
-                f"Core View cannot visualize a dataset of type {str(ds_dtype)} "
-            )
+            raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
     core = vera_source.core
     results = []
     result_assembly_labels = []
     for layer in layer_list:
         if ds_dtype.has_fuel_pins():
-            layer = nan_out_non_fuel_locs(
-                layer, vera_source, z, ds_dtype == VeraDtype.RADIAL
-            )
+            layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype == VeraDtype.RADIAL)
         if thresholds:
             layer = apply_thresholds(layer, thresholds)
         formatted_result, assy_labels = format_for_vis(src=vera_source, dataset=layer)
         results.append(formatted_result)
         result_assembly_labels.append(assy_labels)
 
-    sample = next(
-        (c for row in formatted_result for c in row if isinstance(c, list) and c), None
-    )
+    sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
     assembly_side_size = assembly_side(len(sample)) if sample else 0
     x_labels, y_labels, max_core_cols = core_labels(core, is_comp)
     return (
@@ -182,9 +176,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
         if not vis_state:
             return
-        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = (
-            vis_state
-        )
+        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
         has_assembly_labels = (
             assy_labels
             and len(assy_labels) > 0
@@ -192,12 +184,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
         num_groups = len(results)
         for idx in range(MAX_NUM_GROUPS):
-            state[f"core_assemblies_{view_id}_{idx}"] = (
-                [] if idx >= num_groups else results[idx]
-            )
-            state[f"core_labels_{view_id}_{idx}"] = (
-                [] if idx >= num_groups else assy_labels[idx]
-            )
+            state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx]
+            state[f"core_labels_{view_id}_{idx}"] = [] if idx >= num_groups else assy_labels[idx]
         state[n_groups_key] = num_groups
         state[assembly_size_key] = assembly_side_size
         state[x_label_key] = xlabels
@@ -208,14 +196,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
             # Row of up to 4 group views; wraps to a 2x2 grid when >2 groups.
             with html.Div(
                 style=(
-                    "flex: 1; min-height: 0;"
-                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                    "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
                 for g in range(MAX_NUM_GROUPS):
@@ -234,10 +219,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         )
                         # Core + its own colorbar, side by side.
                         with html.Div(
-                            style=(
-                                "flex: 1; min-height: 0;"
-                                "display: flex; flex-direction: row;"
-                            )
+                            style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
                         ):
                             with html.Div(
                                 style="flex: 1; min-width: 0; min-height: 0; position: relative;"

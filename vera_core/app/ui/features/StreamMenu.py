@@ -84,9 +84,7 @@ def build_stream_dialog(ctrl: Controller):
     global stream_menu_state_initialized
     if not stream_menu_state_initialized:
         raise RuntimeError("register_stream_menu_state_ctrl() must be called first")
-    with vuetify.VDialog(
-        v_model=("show_stream_dialog",), max_width=480, persistent=True
-    ):
+    with vuetify.VDialog(v_model=("show_stream_dialog",), max_width=480, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Connect Data Stream", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -96,9 +94,7 @@ def build_stream_dialog(ctrl: Controller):
                     classes="d-flex flex-column align-center justify-center py-6",
                     style="gap: 12px;",
                 ):
-                    vuetify.VProgressCircular(
-                        indeterminate=True, color="primary", size=40
-                    )
+                    vuetify.VProgressCircular(indeterminate=True, color="primary", size=40)
                     html.Div(
                         "Waiting for data on stream...",
                         classes="text-caption text--secondary",
@@ -139,7 +135,5 @@ def build_stream_dialog(ctrl: Controller):
                     "Connect",
                     color="primary",
                     click=(ctrl.connect_stream, "[stream_port, stream_source_name]"),
-                    disabled=(
-                        "!stream_port || !stream_source_name || stream_connecting",
-                    ),
+                    disabled=("!stream_port || !stream_source_name || stream_connecting",),
                 )

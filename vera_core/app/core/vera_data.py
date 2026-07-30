@@ -7,6 +7,8 @@ from typing import Union
 import h5py
 import numpy as np
 
+from .types import CoreOverride
+
 NUM_ENERGY_GROUPS = 2
 MAX_NUM_GROUPS = 8
 NUM_DF = 6
@@ -114,9 +116,7 @@ _INFO = {
     VeraDtype.UNKNOWN: _Info(),
     VeraDtype.COMP_NODAL: _Info(axial_idx=1, computational=True, nodal=True),
     VeraDtype.COMP_NODAL_ENERGY: _Info(axial_idx=2, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_SURFACE: _Info(
-        axial_idx=3, computational=True, nodal=True, surface=True
-    ),
+    VeraDtype.COMP_NODAL_SURFACE: _Info(axial_idx=3, computational=True, nodal=True, surface=True),
     VeraDtype.COMP_ASSY: _Info(axial_idx=1, computational=True, assembly=True),
     VeraDtype.COMP_ASSY_ENERGY: _Info(axial_idx=2, computational=True, assembly=True),
     VeraDtype.COMP_ASSY_SURFACE: _Info(
@@ -186,7 +186,7 @@ class VeraDataset(np.ndarray):
         return self.dataset_type.is_assembly()
 
 
-def nan_out_reflected(cm, core_sym, array):
+def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
     """Nans out reflected region if dataset has quarter core symmetry"""
     ax, ay = cm.shape
     dtype = array.dataset_type
@@ -218,15 +218,15 @@ def nan_out_reflected(cm, core_sym, array):
 
 
 def build_core_dtypes(
-    npiny=None,
-    npinx=None,
-    nax=None,
-    nass=None,
-    comp_nax=None,
-    comp_nass=None,
-    ndet=None,
-    ndax=None,
-    continous_det=False,
+    npiny: int | None = None,
+    npinx: int | None = None,
+    nax: int | None = None,
+    nass: int | None = None,
+    comp_nax: int | None = None,
+    comp_nass: int | None = None,
+    ndet: int | None = None,
+    ndax: int | None = None,
+    continous_det: int | None = None,
 ) -> dict[tuple[int, ...], VeraDtype]:
     """Creates and returns a dict mapping dataset shapes to dataset identifier (enums)"""
     shape_to_dtype = {}
@@ -456,16 +456,16 @@ class VeraOutCore(LazyHDF5Loader):
     than lazily.
     """
 
-    axial_mesh: H5_ARRAY_TYPE = None
-    core_map: H5_ARRAY_TYPE = None
-    core_sym: H5_ARRAY_TYPE = None
-    pin_volumes: H5_ARRAY_TYPE = None
+    axial_mesh: H5_ARRAY_TYPE | None = None
+    core_map: H5_ARRAY_TYPE | None = None
+    core_sym: H5_ARRAY_TYPE | None = None
+    pin_volumes: H5_ARRAY_TYPE | None = None
 
     def __init__(
         self,
         f: "h5py.File",
         aspect_ratio: float | None = None,
-        overrides: dict[str, int] | None = None,
+        overrides: CoreOverride | None = None,
     ):
         """Build the core from an open h5 file.
 
@@ -485,10 +485,8 @@ class VeraOutCore(LazyHDF5Loader):
         )  # dx / dy
         self._cache_all()
         if not hasattr(self, "core_map") or self.core_map is None:
-            raise RuntimeError(
-                "[ERROR] core_map not found in h5 file, unable to visualize data"
-            )
-        self._determine_core_shape(overrides)
+            raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
+        self._determine_core_shape(self.core_map, overrides)
         self._check_missing()
         if not self.has_axial_mesh():
             self.axial_mesh = FALLBACK_AXIAL_MESH
@@ -512,10 +510,9 @@ class VeraOutCore(LazyHDF5Loader):
         self._compute_non_fuel_locs()
         self._compute_axial_mesh_means()
 
-    def _determine_core_shape(self, overrides: dict[str, int] | None = None):
+    def _determine_core_shape(self, cm: np.ndarray, overrides: CoreOverride | None = None):
         if overrides is None:
             overrides = {}
-        cm = self.core_map
         self.nass = int(np.count_nonzero(np.unique(cm[~np.isnan(cm)])))
         self.nax = None
         self.npy = None
@@ -537,18 +534,14 @@ class VeraOutCore(LazyHDF5Loader):
             self.npy, self.npx, self.nax, self.nass = core_group["pin_factors"].shape
             self._npin_src = self._nax_src = "/CORE/pin_factors"
         elif "pin_heated_surface_area" in core_group:
-            self.npy, self.npx, self.nax, self.nass = core_group[
-                "pin_heated_surface_area"
-            ].shape
+            self.npy, self.npx, self.nax, self.nass = core_group["pin_heated_surface_area"].shape
             self._npin_src = self._nax_src = "/CORE/pin_heated_surface_area"
         elif hasattr(self, "pin_volumes") and self.pin_volumes is not None:
             self.npy, self.npx, self.nax, self.nass = np.shape(self.pin_volumes)
             self._npin_src = self._nax_src = "/CORE/pin_volumes"
         elif "STATE_0001/pin_powers" in self.f:
             # if no pin_volumes see if state contains pin_powers as a source for core_shape
-            self.npy, self.npx, self.nax, self.nass = np.shape(
-                self.f["STATE_0001/pin_powers"]
-            )
+            self.npy, self.npx, self.nax, self.nass = np.shape(self.f["STATE_0001/pin_powers"])
             self._npin_src = self._nax_src = "/STATE_0001/pin_powers"
 
         if "npin" in overrides:
@@ -557,9 +550,7 @@ class VeraOutCore(LazyHDF5Loader):
         if "nax" in overrides:
             nax = overrides["nax"]
             self.nax = nax
-            self.axial_mesh = np.linspace(
-                0, (nax + 1) * DEFAULT_AXIAL_MESH_STEP, nax + 1
-            )
+            self.axial_mesh = np.linspace(0, (nax + 1) * DEFAULT_AXIAL_MESH_STEP, nax + 1)
             self._nax_src = "Overrides"
         elif self.has_axial_mesh():
             self.nax = len(self.axial_mesh) - 1
@@ -570,9 +561,7 @@ class VeraOutCore(LazyHDF5Loader):
             print("found pin pitch")
 
         if not self.has_axial_mesh() and self.nax:
-            self.axial_mesh = np.linspace(
-                0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1
-            )
+            self.axial_mesh = np.linspace(0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
 
     def _check_missing(self):
         missing = {}
@@ -606,8 +595,8 @@ class VeraOutCore(LazyHDF5Loader):
             )
             return
         self.comp_core_map = self.f["CORE/computational_core_map"][()]
-        self.comp_nass = np.count_nonzero(
-            np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)])
+        self.comp_nass = int(
+            np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
         )
         self.comp_axial_mesh = comp_axial_mesh[()]
         self.comp_nax = len(self.comp_axial_mesh) - 1
@@ -684,17 +673,13 @@ class VeraOutCore(LazyHDF5Loader):
         alphabet = [*string.ascii_uppercase]
 
         if "xlabel" in self.f["CORE"]:
-            xlabels = [
-                char.decode() for char in self.f["CORE/xlabel"][()][start_index:]
-            ]
+            xlabels = [char.decode() for char in self.f["CORE/xlabel"][()][start_index:]]
         else:
             xlabels = list(reversed(alphabet[:num_cols]))
         self.reduced_core_map_column_labels = xlabels
 
         if "ylabel" in self.f["CORE"]:
-            ylabels = [
-                char.decode() for char in self.f["CORE/ylabel"][()][start_index:]
-            ]
+            ylabels = [char.decode() for char in self.f["CORE/ylabel"][()][start_index:]]
         else:
             ylabels = list(range(start_index + 1, start_index + num_rows + 1))
         self.reduced_core_map_row_labels = ylabels
@@ -703,9 +688,7 @@ class VeraOutCore(LazyHDF5Loader):
             return
         comp_num_rows, comp_num_cols = self.comp_core_map.shape
         self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
-        self.comp_core_map_row_labels = list(
-            range(start_index, start_index + comp_num_rows + 1)
-        )
+        self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
 
     def _compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -724,9 +707,7 @@ class VeraOutCore(LazyHDF5Loader):
             comp_diff_array = np.diff(self.comp_axial_mesh)
             comp_pixel_height = np.min(comp_diff_array) / MIN_DIFF_PIXELS_HEIGHT
             comp_pixel_height_array = comp_diff_array / comp_pixel_height
-            self.comp_axial_mesh_pixels = np.round(comp_pixel_height_array).astype(
-                np.int64
-            )
+            self.comp_axial_mesh_pixels = np.round(comp_pixel_height_array).astype(np.int64)
 
     def _compute_non_fuel_locs(self) -> None:
         """Locate non-fuel positions as the pins with zero volume."""
@@ -741,13 +722,9 @@ class VeraOutCore(LazyHDF5Loader):
         self.gross_axial_mesh = self.axial_mesh_means
         if self.has_comp_axial_mesh():
             self.comp_axial_mesh_means = self._midpoints(self.comp_axial_mesh)
-            self.gross_axial_mesh = np.union1d(
-                self.gross_axial_mesh, self.comp_axial_mesh_means
-            )
+            self.gross_axial_mesh = np.union1d(self.gross_axial_mesh, self.comp_axial_mesh_means)
         if self.det_axial_mesh_means is not None:
-            self.gross_axial_mesh = np.union1d(
-                self.gross_axial_mesh, self.det_axial_mesh_means
-            )
+            self.gross_axial_mesh = np.union1d(self.gross_axial_mesh, self.det_axial_mesh_means)
         else:
             # no detector axial mesh means were found in the core, use axial_mesh as reference
             self.det_axial_mesh_means = self.axial_mesh_means
@@ -779,35 +756,21 @@ class VeraOutCore(LazyHDF5Loader):
         """Shape of core (num_piny, num_pinx, num_axial_levels, num_assemblys).
         npy/npx are 0 when the core has no pin lattice."""
         if self.npy is None or self.npx is None or self.nax is None:
-            raise RuntimeError(
-                "Core pin lattice is undetermined; complete characteristics first"
-            )
+            raise RuntimeError("Core pin lattice is undetermined; complete characteristics first")
         return (self.npy, self.npx, self.nax, self.nass)
 
     @property
     def comp_core_shape(self) -> tuple[int, ...]:
         """Shape of computational core (num_piny, num_pinx, num_computational_axial_levels, num_computational_assemblys)
         npy/npx are 0 when the core has no pin lattice."""
-        if (
-            self.npy is None
-            or self.npx is None
-            or self.comp_nax is None
-            or self.comp_nass is None
-        ):
-            raise RuntimeError(
-                "Core pin lattice is undetermined; complete characteristics first"
-            )
+        if self.npy is None or self.npx is None or self.comp_nax is None or self.comp_nass is None:
+            raise RuntimeError("Core pin lattice is undetermined; complete characteristics first")
         return (self.npy, self.npx, self.comp_nax, self.comp_nass)
 
     @property
     def detector_shape(self) -> tuple[int, ...]:
         """Shape of detector shape (ndax, ndet)"""
-        if (
-            self.npy is None
-            or self.npx is None
-            or self.ndax is None
-            or self.ndet is None
-        ):
+        if self.npy is None or self.npx is None or self.ndax is None or self.ndet is None:
             raise RuntimeError("Detector shape is undetermined")
         return (self.npy, self.npx, self.ndax, self.ndet)
 
@@ -837,12 +800,12 @@ class VeraOutCore(LazyHDF5Loader):
         elif dtype != VeraDtype.UNKNOWN:
             return self.core_shape
         else:
-            raise RuntimeError(
-                f"Could not find core shape for dataset of type {str(dtype)}"
-            )
+            raise RuntimeError(f"Could not find core shape for dataset of type {str(dtype)}")
 
     def get_map(
-        self, dataset: VeraDataset = None, dataset_type: VeraDtype = VeraDtype.UNKNOWN
+        self,
+        dataset: VeraDataset | None = None,
+        dataset_type: VeraDtype = VeraDtype.UNKNOWN,
     ):
         """get corresponding core map for `dataset`"""
         dtype = dataset.dataset_type if dataset is not None else dataset_type
@@ -865,9 +828,7 @@ class VeraOutCore(LazyHDF5Loader):
         elif dtype != VeraDtype.UNKNOWN:
             return self.axial_mesh
         else:
-            raise RuntimeError(
-                f"Could not find axial mesh for dataset of type {str(dtype)}"
-            )
+            raise RuntimeError(f"Could not find axial mesh for dataset of type {str(dtype)}")
 
     def get_axial_mesh_means(
         self, dataset: VeraDataset = None, dataset_type: VeraDtype = VeraDtype.UNKNOWN
@@ -881,9 +842,7 @@ class VeraOutCore(LazyHDF5Loader):
         elif dtype != VeraDtype.UNKNOWN:
             return self.axial_mesh_means
         else:
-            raise RuntimeError(
-                f"Could not find axial mesh means for dataset of type {str(dtype)}"
-            )
+            raise RuntimeError(f"Could not find axial mesh means for dataset of type {str(dtype)}")
 
     def get_axial_mesh_pixels(
         self, dataset: VeraDataset = None, dataset_type: VeraDtype = VeraDtype.UNKNOWN
@@ -895,39 +854,25 @@ class VeraOutCore(LazyHDF5Loader):
         elif dtype != VeraDtype.UNKNOWN:
             return self.axial_mesh_pixels
         else:
-            raise RuntimeError(
-                f"Could not find axial mesh means for dataset of type {str(dtype)}"
-            )
+            raise RuntimeError(f"Could not find axial mesh means for dataset of type {str(dtype)}")
 
-    def row_assembly_indices(
-        self, assembly_idx, is_comp=False, is_detector=False
-    ) -> np.ndarray:
+    def row_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same row as this assembly"""
         # The core map and reduced core map use 1-based indexing
         if is_comp and is_detector:
             raise RuntimeError("No comp detector map currently")
-        cm = (
-            self.comp_core_map
-            if is_comp and self.has_comp_core()
-            else self.reduced_core_map
-        )
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
         cm = cm if not is_detector else self.detector_map
         row = np.where(cm == assembly_idx + 1)[0][0]
         ids = cm[row]
         # Remove any zeros
         return ids - 1
 
-    def col_assembly_indices(
-        self, assembly_idx, is_comp=False, is_detector=False
-    ) -> np.ndarray:
+    def col_assembly_indices(self, assembly_idx, is_comp=False, is_detector=False) -> np.ndarray:
         """Get indices of all assemblies in the same column as this assembly"""
         if is_comp and is_detector:
             raise RuntimeError("No comp detector map currently")
-        cm = (
-            self.comp_core_map
-            if is_comp and self.has_comp_core()
-            else self.reduced_core_map
-        )
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
         cm = cm if not is_detector else self.detector_map
         col = np.where(cm == assembly_idx + 1)[1][0]
         ids = cm[:, col]
@@ -943,11 +888,7 @@ class VeraOutCore(LazyHDF5Loader):
         """
         if is_comp and is_detector:
             raise RuntimeError("No comp detector map currently")
-        cm = (
-            self.comp_core_map
-            if is_comp and self.has_comp_core()
-            else self.reduced_core_map
-        )
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
         cm = cm if not is_detector else self.detector_map
         j, i = _make_ji_safe(j, i, cm)
         snapped = _nearest_nonzero_ij(cm, j, i)
@@ -959,11 +900,7 @@ class VeraOutCore(LazyHDF5Loader):
     def reduced_core_map_ij(self, assembly_idx, is_comp=False) -> tuple[int, int]:
         """Return the (column, row) position of an assembly in the reduced map."""
         target = assembly_idx + 1
-        cm = (
-            self.comp_core_map
-            if is_comp and self.has_comp_core()
-            else self.reduced_core_map
-        )
+        cm = self.comp_core_map if is_comp and self.has_comp_core() else self.reduced_core_map
         rows, cols = np.where(cm == target)
         if len(rows) == 0:
             raise ValueError(
@@ -1031,9 +968,7 @@ class VeraOutState(LazyHDF5Loader):
         state = f[f"/STATE_{idx:04}"]
         self._search_for_datasets(state)
         self.all_datasets = [
-            dataset
-            for category in self.categorized_ds_names.values()
-            for dataset in category
+            dataset for category in self.categorized_ds_names.values() for dataset in category
         ]
 
         super().__init__(
@@ -1074,10 +1009,7 @@ class VeraOutState(LazyHDF5Loader):
 
     def _search_for_datasets(self, data):
         """Find all datasets with known shape and categorize them by VeraDdtype for one state."""
-        if (
-            "pin_powers" in data
-            and np.shape(data["pin_powers"]) != self.core.core_shape
-        ):
+        if "pin_powers" in data and np.shape(data["pin_powers"]) != self.core.core_shape:
             raise RuntimeError(
                 f"Mismatch between the shape of STATE_{self._index:04}'s data and the core shape"
             )
@@ -1190,9 +1122,7 @@ class VeraDataSource(ABC):
         arrays_on_core = [
             "pin_volumes",
         ]
-        if ds_name in arrays_on_core and isinstance(
-            getattr(self.core, ds_name), VeraDataset
-        ):
+        if ds_name in arrays_on_core and isinstance(getattr(self.core, ds_name), VeraDataset):
             # This one is on the core
             return getattr(self.core, ds_name)
         if self.active_state.has_dataset(ds_name) and isinstance(
@@ -1243,6 +1173,10 @@ class VeraDataSource(ABC):
         """
         ds = self._get_dataset(array_name)
         return tuple(np.shape(ds)) if ds is not None else tuple()
+
+    @abstractmethod
+    def default_datasets(self) -> dict[str, str]:
+        pass
 
     @abstractmethod
     def add_new_diff_dataset(

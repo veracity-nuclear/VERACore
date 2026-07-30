@@ -16,9 +16,7 @@ FILTERS = {
 def _osascript(script):
     """Run AppleScript; return trimmed stdout, or '' on cancel/error."""
     try:
-        out = subprocess.run(
-            ["osascript", "-e", script], capture_output=True, text=True
-        )
+        out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     except Exception:
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
@@ -101,9 +99,7 @@ def run_picker(argv=None):
             else _save_tk(prompt, default_name, label, exts)
         )
     else:
-        path = (
-            _open_macos(prompt, mac_types) if is_mac else _open_tk(prompt, label, exts)
-        )
+        path = _open_macos(prompt, mac_types) if is_mac else _open_tk(prompt, label, exts)
 
     sys.stdout.write(path)
     sys.stdout.flush()

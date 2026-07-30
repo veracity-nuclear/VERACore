@@ -80,9 +80,7 @@ def _axial_mesh(src, dtype):
         return np.column_stack((mesh[:, 0], mesh[:, -1]))
 
     if mesh.ndim != 1:
-        raise RuntimeError(
-            f"{dtype.title} mesh must be 1d elevations, got shape {mesh.shape}"
-        )
+        raise RuntimeError(f"{dtype.title} mesh must be 1d elevations, got shape {mesh.shape}")
     return mesh
 
 
@@ -175,14 +173,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         state[f"color_range_{view_id}_0"] = [min(means), max(means)]
         is_comp = dtype.is_computational()
         state[xlabels_key] = (
-            core.comp_core_map_column_labels
-            if is_comp
-            else core.reduced_core_map_column_labels
+            core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
         )
         state[ylabels_key] = (
-            core.comp_core_map_row_labels
-            if is_comp
-            else core.reduced_core_map_row_labels
+            core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
         )
         state[mesh_key] = _mesh_geometry(dtype, mesh)
         state[core_axials_key] = grid
@@ -192,9 +186,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style="flex: 1; min-width: 0; display: flex; flex-direction: column;"
-        ):
+        with html.Div(style="flex: 1; min-width: 0; display: flex; flex-direction: column;"):
             with html.Div(style="flex: 1; min-height: 0; position: relative;"):
                 vera.CoreAxialView(
                     v_if=(

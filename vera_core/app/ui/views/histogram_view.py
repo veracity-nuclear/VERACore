@@ -56,22 +56,14 @@ def group_arrays(full_array, dtype: VeraDtype, surface: int):
     match dtype:
         case VeraDtype.PIN | VeraDtype.CHANNEL:
             return [("", full_array, PIN4)]
-        case (
-            VeraDtype.ASSEMBLY
-            | VeraDtype.COMP_ASSY
-            | VeraDtype.NODAL
-            | VeraDtype.COMP_NODAL
-        ):
+        case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY | VeraDtype.NODAL | VeraDtype.COMP_NODAL:
             return [("", full_array, NODE3)]
         case VeraDtype.POINT_DETECTOR | VeraDtype.CONTINOUS_DETECTOR:
             return [("", full_array, FLAT2)]
         case VeraDtype.AXIAL:
             return [("", full_array, AXIAL1)]
         case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:
-            return [
-                (f" GROUP {g + 1}", full_array[g], NODE3)
-                for g in range(full_array.shape[0])
-            ]
+            return [(f" GROUP {g + 1}", full_array[g], NODE3) for g in range(full_array.shape[0])]
         case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
             return [
                 (f" GROUP {g + 1}", full_array[surface, g], NODE3)
@@ -81,9 +73,7 @@ def group_arrays(full_array, dtype: VeraDtype, surface: int):
             return []
 
 
-def scoped(
-    arr: VeraDataset, layout, radial, axial, j: int, i: int, assy: int, layer: int
-):
+def scoped(arr: VeraDataset, layout, radial, axial, j: int, i: int, assy: int, layer: int):
     z = slice(None) if axial == ALL else layer
     match layout:
         case "axial1":
@@ -152,9 +142,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         x_title = f"{array_name.replace('_', ' ').title()}{units_label}"
         if array_dtype != VeraDtype.AXIAL:
-            assembly_label = src.core.reduced_core_map_label(
-                assy, array_dtype.is_computational()
-            )
+            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
             region = {
                 ALL_ASSEMBLIES: "All assemblies",
                 ASSEMBLY: f"{assembly_label}",
@@ -190,9 +178,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             xaxis_title=x_title,
             yaxis_title="Frequency (%)",
             showlegend=len(figure.data) > 1,
-            legend=dict(
-                orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5
-            ),
+            legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
         )
         return figure
 

@@ -72,9 +72,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             if not indices:
                 continue
             j, i, layer, assy, _, _ = indices
-            assembly_label = src.core.reduced_core_map_label(
-                assy, array_dtype.is_computational()
-            )
+            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
             identifier: str = ""
             mode = "lines"
             axial_arrays = []
@@ -122,9 +120,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             full_array[selected_surface, group_n, nodal_idx, :, assy]
                         )
                     surface_label = f" {Surface(state.selected_surface).str}"
-                    identifier = (
-                        f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
-                    )
+                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case VeraDtype.CONTINOUS_DETECTOR:
                     axial_arrays.append(full_array[:, assy])
                     identifier = f" | {assembly_label} Detector"

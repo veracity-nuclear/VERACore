@@ -10,9 +10,7 @@ def _picker_cmd(*args):
 
 async def launch_picker(*args):
     """Run the picker subprocess and return the chosen path (or '')."""
-    proc = await asyncio.create_subprocess_exec(
-        *_picker_cmd(*args), stdout=asyncio.subprocess.PIPE
-    )
+    proc = await asyncio.create_subprocess_exec(*_picker_cmd(*args), stdout=asyncio.subprocess.PIPE)
     try:
         out, _ = await proc.communicate()
     except asyncio.CancelledError:

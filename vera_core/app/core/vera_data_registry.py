@@ -35,9 +35,7 @@ class VeraDataRegistry:
             self.default_src_id = src_id
             self.global_axial_mesh = core.gross_axial_mesh
         else:
-            self.global_axial_mesh = np.union1d(
-                self.global_axial_mesh, core.gross_axial_mesh
-            )
+            self.global_axial_mesh = np.union1d(self.global_axial_mesh, core.gross_axial_mesh)
 
     @property
     def default_src(self) -> VeraDataSource | None:
@@ -56,9 +54,7 @@ class VeraDataRegistry:
     def get_axial_index(self, z: np.float64):
         return int(np.searchsorted(self.global_axial_mesh, z))
 
-    def src_axial_idx_to_global_idx(
-        self, src_id: str, ds_dtype: VeraDtype, idx: int
-    ) -> int:
+    def src_axial_idx_to_global_idx(self, src_id: str, ds_dtype: VeraDtype, idx: int) -> int:
         if src_id not in self._srcs:
             raise ValueError("src_id not in stored src_ids")
         core = self._srcs[src_id].core
@@ -115,8 +111,7 @@ class VeraDataRegistry:
     def full_core_keys(self) -> dict[str, list[str]]:
         """Map each source id to its active state's full-core dataset names."""
         full_core_keys = {
-            src_id: self._srcs[src_id].active_state_full_core_keys
-            for src_id in self._srcs.keys()
+            src_id: self._srcs[src_id].active_state_full_core_keys for src_id in self._srcs.keys()
         }
         return full_core_keys
 

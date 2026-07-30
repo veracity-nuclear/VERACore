@@ -69,9 +69,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = (
-            indices
-        )
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         selected_time = state["selected_time"]
         vera_source: VeraDataSource = registry.get(selected_src_id)
         thres_key = format_label(selected_src_id, selected_array)
@@ -104,9 +102,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 return
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    images_dataset = [
-                        array[:, :, selected_layer, selected_assembly].copy()
-                    ]
+                    images_dataset = [array[:, :, selected_layer, selected_assembly].copy()]
                 case VeraDtype.RADIAL:
                     images_dataset = [array[:, :, selected_assembly].copy()]
                 case VeraDtype.COMP_NODAL:
@@ -151,13 +147,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
             with html.Div(
                 style=(
-                    "flex: 1; min-height: 0;"
-                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                    "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
                 for g in range(MAX_NUM_GROUPS):
@@ -176,10 +169,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         )
                         # Assembly view + its own colorbar, side by side.
                         with html.Div(
-                            style=(
-                                "flex: 1; min-height: 0;"
-                                "display: flex; flex-direction: row;"
-                            )
+                            style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
                         ):
                             with html.Div(
                                 style="flex: 1; min-width: 0; min-height: 0; position: relative;"

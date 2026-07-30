@@ -1,18 +1,20 @@
-# session_menu.py
-import json
-from dataclasses import asdict
-from pathlib import Path
-
 from trame.widgets import html, vuetify
+from trame_server.core import Controller, State
 
-from vera_core.app.core import build_session
+from vera_core.app.core import VeraDataRegistry
+from vera_core.app.core import save_session as write_session
 
 from .file_picker_entry import launch_picker
 
 session_menu_state_initialized = False
 
 
-def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids: list):
+def register_session_menu_state_ctrl(
+    state: State,
+    ctrl: Controller,
+    registry: VeraDataRegistry,
+    all_view_ids: list[str],
+) -> None:
     global session_menu_state_initialized
 
     state.setdefault("show_session_dialog", False)
@@ -20,7 +22,7 @@ def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids: list):
     state.setdefault("session_saved_path", "")
 
     @ctrl.set("save_session")
-    async def save_session():
+    async def save_session() -> None:
         state.session_error = ""
         state.session_saved_path = ""
         try:
@@ -43,8 +45,7 @@ def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids: list):
             path += ".json"
         try:
             ctrl.snapshot_volume_cameras()
-            session = build_session(state, registry, all_view_ids)
-            Path(path).write_text(json.dumps(asdict(session), indent=2))
+            write_session(state, registry, all_view_ids, path)
             state.session_saved_path = path
             state.show_session_dialog = False
         except Exception as e:
@@ -53,12 +54,10 @@ def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids: list):
     session_menu_state_initialized = True
 
 
-def build_session_menu_dialog(ctrl):
+def build_session_menu_dialog(ctrl: Controller) -> None:
     if not session_menu_state_initialized:
         raise RuntimeError("register_session_menu_state_ctrl() must be called first")
-    with vuetify.VDialog(
-        v_model=("show_session_dialog",), max_width=480, persistent=True
-    ):
+    with vuetify.VDialog(v_model=("show_session_dialog",), max_width=480, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Save Session", classes="text-subtitle-1")
             vuetify.VDivider()

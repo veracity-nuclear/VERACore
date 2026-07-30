@@ -25,9 +25,7 @@ DERIVATION_METHODS = [
 ]  # list of derivations methods in str
 
 
-def register_derived_state_ctrl(
-    state: State, ctrl: Controller, registry: VeraDataRegistry
-):
+def register_derived_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry):
     """
     Register trame state for derived menu
 
@@ -110,9 +108,7 @@ def register_derived_state_ctrl(
 
 
 def build_derived_dialog(state, ctrl, registry):
-    with vuetify.VDialog(
-        v_model=("show_derived_dialog",), max_width=620, persistent=True
-    ):
+    with vuetify.VDialog(v_model=("show_derived_dialog",), max_width=620, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Create Derived Dataset", classes="text-subtitle-1")
             vuetify.VDivider()

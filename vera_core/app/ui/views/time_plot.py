@@ -16,9 +16,7 @@ def option_for(view_id):
         "label": "Time Plot",
         "multi_picker": True,
         "icon": "mdi-chart-line",
-        "allowed_categories": [
-            dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN
-        ],
+        "allowed_categories": [dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN],
     }
 
 
@@ -58,9 +56,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     indices_list.append((ny, nx, nax, nass))
-                    identifier = (
-                        f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
-                    )
+                    identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
                 case VeraDtype.POINT_DETECTOR:
                     indices_list.append((nax, nass))
                     identifier = f" | {assembly_label} z = {axial_label}"
@@ -105,13 +101,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         else convert_ji_to_node(ny, nx)
                     )
                     for group_n in range(num_energy_groups):
-                        indices_list.append(
-                            (selected_surface, group_n, nodal_idx, nax, nass)
-                        )
+                        indices_list.append((selected_surface, group_n, nodal_idx, nax, nass))
                     surface_label = f" {Surface(state.selected_surface).str}"
-                    identifier = (
-                        f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
-                    )
+                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case _:
                     continue
             for idx_n, indices in enumerate(indices_list):
@@ -179,9 +171,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             update_fn(create_line())
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = (
-            "height: 100%; width: 100%;display: flex; flex-direction: column;"
-        )
+        layout.root.style = "height: 100%; width: 100%;display: flex; flex-direction: column;"
         style = "; ".join(
             [
                 "width: 100%",

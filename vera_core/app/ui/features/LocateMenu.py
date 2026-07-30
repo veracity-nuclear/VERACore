@@ -14,9 +14,7 @@ from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker
 
 
-def register_locate_state_ctrl(
-    state: State, ctrl: Controller, registry: VeraDataRegistry
-):
+def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry):
     state.show_locate_dialog = False
     state.locate_source_file = registry.default_src_id
     state.locate_source_array = "pin_powers"
@@ -65,10 +63,7 @@ def register_locate_state_ctrl(
 
         if time_scope == "all":
             for state_idx, state in enumerate(src.states):
-                if (
-                    not state.has_dataset(array_name)
-                    or getattr(state, array_name) is None
-                ):
+                if not state.has_dataset(array_name) or getattr(state, array_name) is None:
                     continue
                 vera_array = getattr(state, array_name)
                 vera_array = nan_out_reflected(reduced_core_map, core_sym, vera_array)
@@ -101,9 +96,7 @@ def register_locate_state_ctrl(
         if has_data and state.locate_source_file is None:
             state.locate_source_file = registry.default_src_id
             state.locate_source_array = "pin_powers"
-            state.locate_source_label = format_label(
-                registry.default_src_id, "pin_powers"
-            )
+            state.locate_source_label = format_label(registry.default_src_id, "pin_powers")
 
     @ctrl.set("set_locate_source")
     def set_locate_source(file, array):
@@ -132,9 +125,7 @@ def register_locate_state_ctrl(
             is_assembly_scoped = assembly_scope == "current"
 
             if mode not in ("max", "min"):
-                raise RuntimeError(
-                    f"Unknown mode: {mode}. Cannot find extremum for this mode."
-                )
+                raise RuntimeError(f"Unknown mode: {mode}. Cannot find extremum for this mode.")
 
             vera_array = src.array(array_name)
             vera_dtype = vera_array.dataset_type
@@ -144,9 +135,7 @@ def register_locate_state_ctrl(
 
             # FIXME vvvvv, implement max/min for other veradtypes
             if vera_dtype not in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.ASSEMBLY):
-                raise RuntimeError(
-                    f"Max/min not implemented for dataset type {vera_dtype}."
-                )
+                raise RuntimeError(f"Max/min not implemented for dataset type {vera_dtype}.")
 
             indices, state_idx = _find_extremum(
                 mode, time_scope, src, array_name, is_assembly_scoped, assy_id
@@ -182,9 +171,7 @@ def register_locate_state_ctrl(
 
 
 def build_locate_dialog(state, ctrl, registry):
-    with vuetify.VDialog(
-        v_model=("show_locate_dialog",), max_width=560, persistent=True
-    ):
+    with vuetify.VDialog(v_model=("show_locate_dialog",), max_width=560, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Locate Extremum", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -244,9 +231,7 @@ def build_locate_dialog(state, ctrl, registry):
 
             vuetify.VDivider()
             with vuetify.VCardActions():
-                with vuetify.VBtn(
-                    color="primary", click=(ctrl.locate_extremum, "['max']")
-                ):
+                with vuetify.VBtn(color="primary", click=(ctrl.locate_extremum, "['max']")):
                     vuetify.VIcon("mdi-arrow-up-bold", left=True)
                     html.Span("Find Maximum")
                 with vuetify.VBtn(text=True, click=(ctrl.locate_extremum, "['min']")):

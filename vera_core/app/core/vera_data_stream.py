@@ -23,9 +23,7 @@ def generate_stream_identifier(stream_id: str | int | float) -> str:
 
 
 class VeraDataStream(VeraDataSource):
-    def __init__(
-        self, stream_name: str, port_to_listen_on, state_queue: StateQueue = None
-    ):
+    def __init__(self, stream_name: str, port_to_listen_on, state_queue: StateQueue = None):
         context = zmq.Context()
         self.subscriber = context.socket(zmq.SUB)
         self.subscriber.connect(f"tcp://127.0.0.1:{port_to_listen_on}")
@@ -54,9 +52,7 @@ class VeraDataStream(VeraDataSource):
         while True:
             message = msgpack.unpackb(self.subscriber.recv(), raw=False)
             if self._core is None:
-                self._setup_core_data(
-                    VeraOutCore.from_data(**message["core"], aspect_ratio=1)
-                )
+                self._setup_core_data(VeraOutCore.from_data(**message["core"], aspect_ratio=1))
             with self._lock:
                 self._states.append(VeraOutState.from_data(message["datasets"]))
                 if self._queue is not None:

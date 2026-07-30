@@ -40,9 +40,7 @@ def is_view_locked(state, view_id):
 
 
 def is_non_active_view(state: State, view_id: int, option: dict[str, str]) -> bool:
-    return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(
-        state, view_id
-    )
+    return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
 
 
 def _layer_elevation(axial_mesh, layer):
@@ -67,9 +65,7 @@ def set_info(view_id: int, state: State, registry: VeraDataRegistry):
     if vera_source.active_state.has_dataset("exposure"):
         exposure = vera_source.active_state.exposure[0]
     state[f"label_info_{view_id}"] = {
-        "Exposure": np.round(exposure, decimals=3)
-        if exposure is not None
-        else "not recorded",
+        "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
         "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
         "Layer": _layer_elevation(axial_mesh, layer),
         "Pin_x": int(i),
@@ -81,9 +77,7 @@ def _get_assy_idx(ds_dtype: VeraDtype, state: State, src_core: VeraOutCore):
     is_comp = ds_dtype.is_computational()
     is_detector = ds_dtype.is_detector()
     i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
-    assy = src_core.reduced_core_map_assembly(
-        i, j, is_comp=is_comp, is_detector=is_detector
-    )
+    assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp, is_detector=is_detector)
     return assy
 
 
@@ -95,9 +89,7 @@ def get_safe_idxs(
     sel_dataset_name: str | None = None,
 ) -> tuple | None:
     """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name)"""
-    dataset_name = (
-        state[f"selected_array_{view_id}"] if not sel_dataset_name else sel_dataset_name
-    )
+    dataset_name = state[f"selected_array_{view_id}"] if not sel_dataset_name else sel_dataset_name
     src_id = state[f"selected_src_id_{view_id}"] if not sel_src_id else sel_src_id
     vera_source = registry.get(src_id)
     if vera_source is None:
@@ -111,9 +103,7 @@ def get_safe_idxs(
         return None
     sel_j = int(state.selected_j)
     sel_i = int(state.selected_i)
-    sel_layer = registry.global_axial_idx_to_src_idx(
-        src_id, vdtype, int(state.selected_layer)
-    )
+    sel_layer = registry.global_axial_idx_to_src_idx(src_id, vdtype, int(state.selected_layer))
 
     core_shape = core.get_core_shape(dataset_type=vdtype)
     if len(core_shape) != 4:

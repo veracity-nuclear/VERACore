@@ -18,9 +18,7 @@ def option_for(view_id):
         "label": "Table View",
         "multi_picker": False,
         "icon": "mdi-table",
-        "allowed_categories": [
-            dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN
-        ],
+        "allowed_categories": [dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN],
     }
 
 
@@ -70,9 +68,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices_list = []
         match array_dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
-                indices_list.append(
-                    (selected_j, selected_i, selected_layer, selected_assembly)
-                )
+                indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
             case VeraDtype.POINT_DETECTOR:
                 indices_list.append((selected_layer, selected_assembly))
             case VeraDtype.NODAL:
@@ -84,9 +80,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     )
                 )
             case VeraDtype.RADIAL_NODE:
-                indices_list.append(
-                    (convert_ji_to_node(selected_j, selected_i), selected_assembly)
-                )
+                indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_assembly))
             case VeraDtype.COMP_ASSY | VeraDtype.ASSEMBLY:
                 indices_list.append((0, selected_layer, selected_assembly))
             case VeraDtype.AXIAL:
@@ -113,9 +107,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     else 0
                 )
                 for group_n in range(num_energy_groups):
-                    indices_list.append(
-                        (group_n, idx, selected_layer, selected_assembly)
-                    )
+                    indices_list.append((group_n, idx, selected_layer, selected_assembly))
             case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
                 selected_surface = state.selected_surface
                 num_energy_groups = array.shape[1]
@@ -157,20 +149,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         }
         is_comp = array_dtype.is_computational()
 
-        axial_value = src.core.get_axial_mesh_means(dataset_type=array_dtype)[
-            selected_layer
-        ]
+        axial_value = src.core.get_axial_mesh_means(dataset_type=array_dtype)[selected_layer]
         assembly_label = src.core.reduced_core_map_label(selected_assembly, is_comp)
         pin_label = f"Pin ({selected_i + 1}, {selected_j + 1})"
         surface_label = f" {Surface(state.selected_surface).str}"
         node_label = f"Node {convert_ji_to_node(selected_j, selected_i) + 1}"
         is_node = array_dtype.is_nodal()
         is_surface = array_dtype.is_surface()
-        label = (
-            pin_label
-            if not is_node
-            else (node_label + (surface_label if is_surface else ""))
-        )
+        label = pin_label if not is_node else (node_label + (surface_label if is_surface else ""))
         columns = [
             "Dataset",
             f"Assembly {assembly_label}; Axial {axial_value:0.6g} cm; {label}",

@@ -50,30 +50,22 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click=ctrl.open_file_dialog):
         vuetify.VIcon("mdi-folder-open")
 
-    with vuetify.VBtn(
-        icon=True, click="show_session_dialog = true", disabled=("!has_data",)
-    ):
+    with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-content-save")
 
     # with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
     #     vuetify.VIcon("mdi-access-point")
 
-    with vuetify.VBtn(
-        icon=True, click="show_derived_dialog = true", disabled=("!has_data",)
-    ):
+    with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
 
     # with vuetify.VBtn(icon=True, click="show_locate_dialog = true", disabled=("!has_data",)):   # add
     #     vuetify.VIcon("mdi-crosshairs-gps")
 
-    with vuetify.VBtn(
-        icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)
-    ):
+    with vuetify.VBtn(icon=True, click="show_threshold_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-table-filter")
 
-    with vuetify.VBtn(
-        icon=True, click="show_diff_dialog = true", disabled=("!has_data",)
-    ):
+    with vuetify.VBtn(icon=True, click="show_diff_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-delta")
 
     with vuetify.VBtn(icon=True, click=ctrl.grid_add_view, disabled=("!has_data",)):
@@ -95,9 +87,7 @@ def build_grid_card(ctrl: Controller):
             with vuetify.VCardTitle(classes="py-1 px-1", style="flex: 0 0 auto;"):
                 with vuetify.VMenu(offset_y=True):
                     with vuetify.Template(v_slot_activator="{ on, attrs }"):
-                        with vuetify.VBtn(
-                            icon=True, small=True, v_bind="attrs", v_on="on"
-                        ):
+                        with vuetify.VBtn(icon=True, small=True, v_bind="attrs", v_on="on"):
                             vuetify.VIcon(v_text="get(`grid_view_${item.i}`).icon")
                         html.Div(
                             "{{ get(`grid_view_${item.i}`).label }}",
@@ -117,9 +107,7 @@ def build_grid_card(ctrl: Controller):
 
                 vuetify.VSpacer()
 
-                with vuetify.Template(
-                    v_if=("!get(`grid_view_${item.i}`).multi_picker",)
-                ):
+                with vuetify.Template(v_if=("!get(`grid_view_${item.i}`).multi_picker",)):
                     DatasetPicker.build_dataset_picker(
                         ctrl,
                         "selected_label_${item.i}",
@@ -127,9 +115,7 @@ def build_grid_card(ctrl: Controller):
                         "[item.i, src, entry.value]",
                         "get(`grid_view_${item.i}`).allowed_categories",
                     )
-                with vuetify.Template(
-                    v_if=("get(`grid_view_${item.i}`).multi_picker",)
-                ):
+                with vuetify.Template(v_if=("get(`grid_view_${item.i}`).multi_picker",)):
                     DatasetPicker.build_dataset_multi_picker(
                         ctrl,
                         "multi_label_${item.i}",
@@ -185,9 +171,7 @@ def build_content(layout, state: State, ctrl: Controller, registry: VeraDataRegi
     StreamMenu.build_stream_dialog(ctrl)
     LocateMenu.build_locate_dialog(state, ctrl, registry)
     build_axial_slider()
-    with vuetify.VContainer(
-        fluid=True, classes="pa-0 fill-height", style="user-select: none;"
-    ):
+    with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
         # Empty state: prompt the user to open a file.
         with html.Div(
             v_if=("!has_data",),
@@ -280,11 +264,7 @@ def build_axial_slider():
         html.Div("Axial", classes="text-caption mb-1")
         with html.Div(
             style=(
-                "flex: 1 1 0;"
-                " min-height: 0;"
-                " width: 100%;"
-                " display: flex;"
-                " justify-content: center;"
+                "flex: 1 1 0; min-height: 0; width: 100%; display: flex; justify-content: center;"
             )
         ):
             html.Input(
@@ -324,9 +304,7 @@ def build_axial_slider():
         )
 
 
-def build_layout(
-    server: Server, state: State, ctrl: Controller, registry: VeraDataRegistry
-):
+def build_layout(server: Server, state: State, ctrl: Controller, registry: VeraDataRegistry):
     with SinglePageLayout(server) as layout:
         layout.root.classes = "{ busy: trame__busy }"
         client.ClientTriggers(mounted="$vuetify.theme.dark = dark_mode")

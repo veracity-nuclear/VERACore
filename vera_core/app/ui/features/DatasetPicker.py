@@ -23,9 +23,7 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
             {
                 "key": cat,
                 "category": cat.replace("_", " ").title(),
-                "entries": [
-                    {"text": k.replace("_", " ").title(), "value": k} for k in names
-                ],
+                "entries": [{"text": k.replace("_", " ").title(), "value": k} for k in names],
             }
             for cat, names in registry.get(fid).active_state_grouped_keys
         ]
@@ -49,12 +47,7 @@ def _make_label(selected_label_arg: str):
     """helper method for creating a JS span that shows selected_label_arg, truncating with an ellipsis when it's too long for the picker button"""
     return html.Span(
         f"{{{{ get(`{selected_label_arg}`) }}}}",
-        style=(
-            "max-width: 26ch;"
-            "overflow: hidden;"
-            "text-overflow: ellipsis;"
-            "white-space: nowrap;"
-        ),
+        style=("max-width: 26ch;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;"),
     )
 
 
@@ -80,12 +73,8 @@ def build_dataset_picker(
     """
     groups_expr = "groups"
     if allowed_arg:
-        groups_expr = (
-            f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
-        )
-    with vuetify.VMenu(
-        offset_y=True, close_on_content_click=False, max_height=MENU_MAX_HEIGHT
-    ):
+        groups_expr = f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
+    with vuetify.VMenu(offset_y=True, close_on_content_click=False, max_height=MENU_MAX_HEIGHT):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
             with vuetify.VBtn(
                 small=True,
@@ -160,9 +149,7 @@ def build_dataset_multi_picker(
     """
     groups_expr = "groups"
     if allowed_arg:
-        groups_expr = (
-            f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
-        )
+        groups_expr = f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
     with vuetify.VMenu(offset_y=True, close_on_content_click=False):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
             with vuetify.VBtn(

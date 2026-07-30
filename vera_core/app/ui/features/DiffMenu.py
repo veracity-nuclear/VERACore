@@ -187,9 +187,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Reference operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-2"):
-                    html.Div(
-                        "Reference (A)", classes="text-caption font-weight-medium mb-2"
-                    )
+                    html.Div("Reference (A)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(
@@ -232,9 +230,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Comparison operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div(
-                        "Comparison (B)", classes="text-caption font-weight-medium mb-2"
-                    )
+                    html.Div("Comparison (B)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(

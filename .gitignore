@@ -2,6 +2,8 @@
 node_modules
 pyvera_lite
 .venv
+.pytest_cache
+.ruff_cache
 venv
 build
 .ipynb_checkpoints

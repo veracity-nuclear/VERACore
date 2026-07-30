@@ -2,6 +2,7 @@ import h5py
 import numpy as np
 from scipy.interpolate import make_interp_spline
 
+from .types import CoreOverride
 from .vera_data import (
     DerivationMethod,
     VeraAxes,
@@ -15,7 +16,7 @@ from .vera_tools.VERAout import VERAout
 
 
 class VeraOutFile(VeraDataSource):
-    def __init__(self, filename: str, core_overrides: dict = None):
+    def __init__(self, filename: str, core_overrides: CoreOverride | None = None):
         """Open a VERA output file and build its core and state objects.
 
         Opens two handles on the file (a direct h5py.File and a VERAout
@@ -57,9 +58,7 @@ class VeraOutFile(VeraDataSource):
             ):
                 continue
             self._time_axes[time_data_point] = time_axis
-        self._time_axes["state_count"] = [
-            state_num for state_num in range(len(self.states))
-        ]
+        self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
 
     @property
     def file_path(self) -> str:
@@ -81,16 +80,16 @@ class VeraOutFile(VeraDataSource):
         indices = [int(key.split("_")[1]) for key in state_keys]
         self._states = [VeraOutState(self.f, idx, self.core) for idx in indices]
 
-    def default_datasets(self):
+    def default_datasets(self) -> dict[str, str]:
         categorized_ds_names = self.active_state.categorized_ds_names
         default_names = {
-            category.title: sorted(categorized_ds_names[category])[0]
-            for category in categorized_ds_names
-            if category != VeraDtype.UNKNOWN and len(categorized_ds_names[category]) > 0
+            category.title: sorted(names)[0]
+            for category, names in categorized_ds_names.items()
+            if category != VeraDtype.UNKNOWN and names
         }
         if not default_names:
-            return None
-        if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, "none"):
+            return {}
+        if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, ()):
             default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
 
@@ -158,9 +157,7 @@ class VeraOutFile(VeraDataSource):
             ref_data: VeraDataset = getattr(state, ref_dataset_name) * ref_scale
             comp_data: VeraDataset = getattr(comp_state, comp_dataset_name) * comp_scale
             ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
-            comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(
-                dataset=comp_data
-            )
+            comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
             if ref_data.dataset_type != comp_data.dataset_type:
                 continue
             if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
@@ -181,9 +178,7 @@ class VeraOutFile(VeraDataSource):
             state.add_diff_dataset(new_diff_name, diff)
             produced += 1
         if produced == 0:
-            raise ValueError(
-                f"No overlapping/compatible states to diff for '{new_diff_name}'"
-            )
+            raise ValueError(f"No overlapping/compatible states to diff for '{new_diff_name}'")
 
     def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
         """Reduce data over the given axes using the VERAout calculator.
@@ -201,9 +196,7 @@ class VeraOutFile(VeraDataSource):
             case VeraAxes.AXIAL:
                 der = VeraDataset(self.vera_calculator.Axial(data), VeraDtype.AXIAL)
             case VeraAxes.CORE:
-                der = VeraDataset(
-                    np.array([self.vera_calculator.Average(data)]), VeraDtype.SCALAR
-                )
+                der = VeraDataset(np.array([self.vera_calculator.Average(data)]), VeraDtype.SCALAR)
             case VeraAxes.NODE:
                 der = VeraDataset(self.vera_calculator.Node(data), VeraDtype.NODE)
             case VeraAxes.RADIAL:

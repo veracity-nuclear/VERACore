@@ -8,9 +8,7 @@ from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker
 
 
-def register_threshold_state_ctrl(
-    state: State, ctrl: Controller, registry: VeraDataRegistry
-):
+def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry):
     """
     Register trame state for threshold menu
 
@@ -44,10 +42,7 @@ def register_threshold_state_ctrl(
     @ctrl.set("add_threshold")
     def add_threshold():
         try:
-            if (
-                registry.get(state.threshold_src_id) is None
-                or state.threshold_dataset == ""
-            ):
+            if registry.get(state.threshold_src_id) is None or state.threshold_dataset == "":
                 state.threshold_error = "Please select a dataset to threshold first"
                 return
             if state.threshold_value is None:
@@ -75,9 +70,7 @@ def register_threshold_state_ctrl(
 
     @ctrl.set("remove_threshold")
     def remove_threshold(name: str, index: int):
-        remaining = [
-            c for i, c in enumerate(state.thresholds.get(name, [])) if i != index
-        ]
+        remaining = [c for i, c in enumerate(state.thresholds.get(name, [])) if i != index]
         if remaining:
             state.thresholds = {**state.thresholds, name: remaining}
         else:
@@ -85,9 +78,7 @@ def register_threshold_state_ctrl(
 
 
 def build_threshold_dialog(ctrl: Controller):
-    with vuetify.VDialog(
-        v_model=("show_threshold_dialog",), max_width=580, persistent=True
-    ):
+    with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=580, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Dataset Thresholds", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -142,23 +133,15 @@ def build_threshold_dialog(ctrl: Controller):
                     v_show=("Object.keys(thresholds).length === 0",),
                     classes="text-caption text--secondary",
                 )
-                with vuetify.VList(
-                    dense=True, v_show=("Object.keys(thresholds).length > 0",)
-                ):
-                    with html.Template(
-                        v_for="(condition_list, name) in thresholds", key="name"
-                    ):
-                        vuetify.VSubheader(
-                            "{{ name }}", classes="px-2", style="height: 24px;"
-                        )
+                with vuetify.VList(dense=True, v_show=("Object.keys(thresholds).length > 0",)):
+                    with html.Template(v_for="(condition_list, name) in thresholds", key="name"):
+                        vuetify.VSubheader("{{ name }}", classes="px-2", style="height: 24px;")
                         with vuetify.VListItem(
                             v_for="(condition, index) in condition_list",
                             key="index",
                         ):
                             with vuetify.VListItemContent():
-                                vuetify.VListItemTitle(
-                                    "{{ condition.op }} {{ condition.value }}"
-                                )
+                                vuetify.VListItemTitle("{{ condition.op }} {{ condition.value }}")
                             with vuetify.VListItemAction():
                                 with vuetify.VBtn(
                                     icon=True,
@@ -170,6 +153,4 @@ def build_threshold_dialog(ctrl: Controller):
                 vuetify.VDivider()
                 with vuetify.VCardActions():
                     vuetify.VSpacer()
-                    vuetify.VBtn(
-                        "Close", text=True, click="show_threshold_dialog = false"
-                    )
+                    vuetify.VBtn("Close", text=True, click="show_threshold_dialog = false")

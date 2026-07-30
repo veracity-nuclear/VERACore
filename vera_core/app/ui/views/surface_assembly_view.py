@@ -70,9 +70,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = (
-            indices
-        )
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
         array = vera_source.array(selected_array)
         array_dtype = array.dataset_type
@@ -86,9 +84,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         for g in range(n_energy):
             # (4_faces, n_nodes) for this assembly, group, layer
-            radial = np.asarray(
-                array[LATERAL_FACE_SLICE, g, :, selected_layer, selected_assembly]
-            )
+            radial = np.asarray(array[LATERAL_FACE_SLICE, g, :, selected_layer, selected_assembly])
             cells = _build_cells(radial, n_nodes, side)
             state[group_keys[g]] = cells
 
@@ -106,13 +102,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(
-            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
-        ):
+        with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
             with html.Div(
                 style=(
-                    "flex: 1; min-height: 0;"
-                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                    "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
                 for g in range(MAX_NUM_GROUPS):
@@ -131,10 +124,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         )
                         # Assembly surface view + its own colorbar, side by side.
                         with html.Div(
-                            style=(
-                                "flex: 1; min-height: 0;"
-                                "display: flex; flex-direction: row;"
-                            )
+                            style=("flex: 1; min-height: 0;display: flex; flex-direction: row;")
                         ):
                             with html.Div(
                                 style="flex: 1; min-width: 0; min-height: 0; position: relative;"

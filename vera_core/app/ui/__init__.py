@@ -27,6 +27,7 @@ from .features import (
     StreamMenu,
     ThresholdMenu,
 )
+from .features.appdata import validate_file_overrides
 from .helpers import (
     array_range,
     default_dataset_name,
@@ -209,9 +210,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
 
     def _set_multi_selection(view_id, pairs):
         state[f"multi_selected_{view_id}"] = _encode_tokens(pairs)
-        state[f"multi_label_{view_id}"] = (
-            f"{len(pairs)} selected" if pairs else NO_SELECTION_LABEL
-        )
+        state[f"multi_label_{view_id}"] = f"{len(pairs)} selected" if pairs else NO_SELECTION_LABEL
 
     @ctrl.set("select_dataset")
     def select_dataset(view_id, src_id, array_name):
@@ -381,9 +380,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         """Fan the selected state index out to every view."""
         selected_time = int(selected_time)
         registry.change_all_active_state(selected_time)
-        ctrl.on_vera_out_active_state_index_changed(
-            selected_time=selected_time, **kwargs
-        )
+        ctrl.on_vera_out_active_state_index_changed(selected_time=selected_time, **kwargs)
         for view_id in all_view_ids:
             if not is_view_locked(state, view_id):
                 _recompute_card_range(view_id)
@@ -420,9 +417,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         if view_id not in available_view_ids:
             available_view_ids.append(view_id)
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
-        state.grid_layout = [
-            item for item in state.grid_layout if item.get("i") != view_id
-        ]
+        state.grid_layout = [item for item in state.grid_layout if item.get("i") != view_id]
         state.grid_rebuild_key += 1
 
     def _place(module, src_id, x, y, w, h):
@@ -458,9 +453,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
 
             if state[f"selected_src_id_{view_id}"] != src_id:
                 continue
-            array_name = _default_array_for_option(
-                fallback_id, state[f"grid_view_{view_id}"]
-            )
+            array_name = _default_array_for_option(fallback_id, state[f"grid_view_{view_id}"])
             if array_name is None:
                 _clear_view_source(view_id)
             else:
@@ -482,9 +475,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         for recipe in recipes:
             missing = recipe_sources(recipe) - present_src_ids
             if missing:
-                errors.append(
-                    f"{recipe['name']}: missing source(s) {', '.join(missing)}"
-                )
+                errors.append(f"{recipe['name']}: missing source(s) {', '.join(missing)}")
                 continue
             try:
                 registry.apply_recipe(recipe)
@@ -496,13 +487,30 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     @ctrl.set("load_session")
     def load_session(in_path: str):
         nonlocal activation_done
-        data = json.loads(Path(in_path).read_text())
+        raw_data: object = json.loads(Path(in_path).read_text(encoding="utf-8"))
+        if not isinstance(raw_data, dict):
+            raise ValueError("Session file must contain a JSON object")
+
+        raw_views = raw_data.get("views")
+        if not isinstance(raw_views, list):
+            raise ValueError("Session file is missing a valid views list")
+
+        views = [ViewSession(**view) for view in raw_views if isinstance(view, dict)]
+        if len(views) != len(raw_views):
+            raise ValueError("Session file contains an invalid view entry")
+
+        # Accept the old key for sessions saved before the rename.
+        raw_file_overrides = raw_data.get("file_overrides", raw_data.get("core_overrides", {}))
+        file_overrides = validate_file_overrides(raw_file_overrides)
+
         session = Session(
-            **{
-                **data,
-                "views": [ViewSession(**v) for v in data["views"]],
-                "recipes": data.get("recipes", []),
-            }
+            version=int(raw_data.get("version", 1)),
+            file_paths=dict(raw_data.get("file_paths", {})),
+            file_overrides=file_overrides,
+            default_src_id=raw_data.get("default_src_id"),
+            globals=dict(raw_data.get("globals", {})),
+            views=views,
+            recipes=list(raw_data.get("recipes", [])),
         )
         for path in session.file_paths.values():
             if not Path(path).is_file():
@@ -510,10 +518,10 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                 return
 
         registry.clear()
-        core_overrides = session.core_overrides or {}
+        file_overrides = session.file_overrides
         for src_id, path in session.file_paths.items():
             registry.add_src(
-                VeraOutFile(path, core_overrides=core_overrides.get(path, {})),
+                VeraOutFile(path, core_overrides=file_overrides.get(path, {})),
                 src_id=src_id,
             )
         if session.default_src_id in registry:

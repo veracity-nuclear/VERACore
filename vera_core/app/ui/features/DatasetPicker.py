@@ -1,16 +1,18 @@
-from trame.widgets import vuetify, html
+from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
+
 from vera_core.app.core import VeraDataRegistry
 
 MENU_MAX_HEIGHT = "60vh"
 
+
 def refresh_src_tree(state: State, registry: VeraDataRegistry):
     """
-    Defines and refreshes state for tracking what datasets are avaliable in each opened source
-    
-    state.src_tree : state that tracks each sources' (in the src registry) avaliable datasets by category
+    Defines and refreshes state for tracking what datasets are available in each opened source
+
+    state.src_tree : state that tracks each sources' (in the src registry) available datasets by category
         each src has a list of dicts, each dict corresponds to a VeraDtype category
-        each category dict contains a list of the names of datasets in this category, 
+        each category dict contains a list of the names of datasets in this category,
         the names are stores as key:value pairs to map user selection from dataset picker to raw h5 dataset name
 
     state.src_tree_meta : state that tracks the number of states and core shape of each source in the registry
@@ -26,7 +28,7 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
                 ],
             }
             for cat, names in registry.get(fid).active_state_grouped_keys
-        ]   
+        ]
         for fid in registry.src_ids()
     }
     state.src_tree_meta = {
@@ -37,9 +39,11 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
         for fid in registry.src_ids()
     }
 
-def register_dataset_picker_state(state : State, registry : VeraDataRegistry):
+
+def register_dataset_picker_state(state: State, registry: VeraDataRegistry):
     """Init dataset picker state"""
     refresh_src_tree(state, registry)
+
 
 def _make_label(selected_label_arg: str):
     """helper method for creating a JS span that shows selected_label_arg, truncating with an ellipsis when it's too long for the picker button"""
@@ -53,14 +57,21 @@ def _make_label(selected_label_arg: str):
         ),
     )
 
-def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: str = "_noop", ctrl_func_args: str = "[]", allowed_arg=None):
+
+def build_dataset_picker(
+    ctrl: Controller,
+    selected_label_arg: str,
+    ctrl_func: str = "_noop",
+    ctrl_func_args: str = "[]",
+    allowed_arg=None,
+):
     """Create trame UI for selecting a single dataset to be visualized
-    
+
     Args:
-        ctrl : refrence to trame controller
+        ctrl : reference to trame controller
         selected_label_arg: string to appear as default on the picker
         ctrl_func : str name of trame controller function to call when a user clicks a dataset
-            defaults to a "_noop" which will trigger no ctrl action/functino.
+            defaults to a "_noop" which will trigger no ctrl action/function.
         ctrl_func_args : str represnting which JS variables to pass into the ctrl_func, this is what determines what JS values are sent
         to the python function as parameters, for example ctrl_func_args="[item.i, src, entry.value]" will pass these JS vars to the python
         func as parameters.
@@ -69,11 +80,18 @@ def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: s
     """
     groups_expr = "groups"
     if allowed_arg:
-        groups_expr = f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"    
-    with vuetify.VMenu( offset_y=True, close_on_content_click=False, max_height=MENU_MAX_HEIGHT):
+        groups_expr = (
+            f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
+        )
+    with vuetify.VMenu(
+        offset_y=True, close_on_content_click=False, max_height=MENU_MAX_HEIGHT
+    ):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
             with vuetify.VBtn(
-                small=True, text=True, v_bind="attrs", v_on="on",
+                small=True,
+                text=True,
+                v_bind="attrs",
+                v_on="on",
                 style=(
                     "border-bottom: 1px solid rgba(0,0,0,0.42);"
                     "border-radius: 0;"
@@ -118,14 +136,22 @@ def build_dataset_picker(ctrl: Controller, selected_label_arg: str, ctrl_func: s
                             ):
                                 vuetify.VListItemTitle("{{ entry.text }}")
 
-def build_dataset_multi_picker(ctrl: Controller, label_arg: str, selected_arg: str, ctrl_func: str = "_noop", ctrl_func_args: str = "[src, entry.value]", allowed_arg=None):
+
+def build_dataset_multi_picker(
+    ctrl: Controller,
+    label_arg: str,
+    selected_arg: str,
+    ctrl_func: str = "_noop",
+    ctrl_func_args: str = "[src, entry.value]",
+    allowed_arg=None,
+):
     """Create trame UI for selecting multiple dataset to be visualized
-    
+
     Args:
-        ctrl : refrence to trame controller
+        ctrl : reference to trame controller
         selected_label_arg: string to appear as default on the picker
         ctrl_func : str name of trame controller function to call when a user clicks a dataset
-            defaults to a "_noop" which will trigger no ctrl action/functino.
+            defaults to a "_noop" which will trigger no ctrl action/function.
         ctrl_func_args : str represnting which JS variables to pass into the ctrl_func, this is what determines what JS values are sent
         to the python function as parameters, for example ctrl_func_args="[item.i, src, entry.value]" will pass these JS vars to the python
         func as parameters.
@@ -134,11 +160,16 @@ def build_dataset_multi_picker(ctrl: Controller, label_arg: str, selected_arg: s
     """
     groups_expr = "groups"
     if allowed_arg:
-        groups_expr = f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"  
+        groups_expr = (
+            f"groups.filter(g => !{allowed_arg} || {allowed_arg}.includes(g.key))"
+        )
     with vuetify.VMenu(offset_y=True, close_on_content_click=False):
         with vuetify.Template(v_slot_activator="{ on, attrs }"):
             with vuetify.VBtn(
-                small=True, text=True, v_bind="attrs", v_on="on",
+                small=True,
+                text=True,
+                v_bind="attrs",
+                v_on="on",
                 style=(
                     "border-bottom: 1px solid rgba(0,0,0,0.42);"
                     "border-radius: 0;"

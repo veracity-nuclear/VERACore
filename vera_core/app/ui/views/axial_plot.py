@@ -1,37 +1,42 @@
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
-
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, NUM_NODES, Surface
-from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
+from vera_core.app.core import (
+    Surface,
+    VeraDataRegistry,
+    VeraDtype,
+)
+
+from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
 SEP = "\x1f"
+
 
 def option_for(view_id):
     return {
         "name": f"axial_plot_{view_id}",
         "label": "Axial Plot",
-        "multi_picker" : True,
+        "multi_picker": True,
         "icon": "mdi-align-horizontal-center",
         "allowed_categories": [
-            VeraDtype.PIN.title, 
-            VeraDtype.CHANNEL.title, 
-            VeraDtype.AXIAL.title, 
+            VeraDtype.PIN.title,
+            VeraDtype.CHANNEL.title,
+            VeraDtype.AXIAL.title,
             VeraDtype.ASSEMBLY.title,
-            VeraDtype.COMP_NODAL.title, 
+            VeraDtype.COMP_NODAL.title,
             VeraDtype.COMP_NODAL_ENERGY.title,
-            VeraDtype.COMP_NODAL_SURFACE.title, 
+            VeraDtype.COMP_NODAL_SURFACE.title,
             VeraDtype.COMP_ASSY_SURFACE.title,
-            VeraDtype.COMP_ASSY.title, 
+            VeraDtype.COMP_ASSY.title,
             VeraDtype.COMP_ASSY_ENERGY.title,
             VeraDtype.NODAL.title,
             VeraDtype.POINT_DETECTOR.title,
             VeraDtype.CONTINOUS_DETECTOR.title,
-        ]
+        ],
     }
+
 
 def region_segments(values, intervals):
     n = values.size
@@ -42,6 +47,7 @@ def region_segments(values, intervals):
     y[0::3] = intervals[:, 0]
     y[1::3] = intervals[:, 1]
     return x, y
+
 
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
@@ -61,20 +67,22 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             full_array = src.array(array_name)
             units = full_array.physical_units
             units_label = f" ({units}) " if units != "unitless" else ""
-            array_dtype : VeraDtype = full_array.dataset_type
+            array_dtype: VeraDtype = full_array.dataset_type
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
                 continue
             j, i, layer, assy, _, _ = indices
-            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
-            identifier : str = ""
+            assembly_label = src.core.reduced_core_map_label(
+                assy, array_dtype.is_computational()
+            )
+            identifier: str = ""
             mode = "lines"
             axial_arrays = []
             match array_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     axial_arrays.append(full_array[j, i, :, assy])
                     identifier = f" | {assembly_label} @({i + 1},{j + 1})"
-                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY: 
+                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
                     axial_arrays.append(full_array[0, :, assy])
                     identifier = f" | {assembly_label}"
                 case VeraDtype.POINT_DETECTOR:
@@ -88,19 +96,35 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     axial_arrays.append(full_array[node_idx, :, assy])
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
                 case VeraDtype.COMP_NODAL_ENERGY | VeraDtype.COMP_ASSY_ENERGY:
-                    idx = convert_ji_to_node(j, i) if array_dtype == VeraDtype.COMP_NODAL_ENERGY else 0
+                    idx = (
+                        convert_ji_to_node(j, i)
+                        if array_dtype == VeraDtype.COMP_NODAL_ENERGY
+                        else 0
+                    )
                     num_energy_groups = full_array.shape[0]
                     for n_group in range(num_energy_groups):
                         axial_arrays.append(full_array[n_group, idx, :, assy])
-                    identifier = f" | {assembly_label} @(NODE {idx + 1})" if array_dtype == VeraDtype.COMP_NODAL_ENERGY else f" | {assembly_label}"
+                    identifier = (
+                        f" | {assembly_label} @(NODE {idx + 1})"
+                        if array_dtype == VeraDtype.COMP_NODAL_ENERGY
+                        else f" | {assembly_label}"
+                    )
                 case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
                     selected_surface = state.selected_surface
                     num_energy_groups = full_array.shape[1]
-                    nodal_idx = 0 if array_dtype == VeraDtype.COMP_ASSY_SURFACE else convert_ji_to_node(j, i)
+                    nodal_idx = (
+                        0
+                        if array_dtype == VeraDtype.COMP_ASSY_SURFACE
+                        else convert_ji_to_node(j, i)
+                    )
                     for group_n in range(num_energy_groups):
-                        axial_arrays.append(full_array[selected_surface, group_n, nodal_idx, :, assy])
+                        axial_arrays.append(
+                            full_array[selected_surface, group_n, nodal_idx, :, assy]
+                        )
                     surface_label = f" {Surface(state.selected_surface).str}"
-                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
+                    identifier = (
+                        f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
+                    )
                 case VeraDtype.CONTINOUS_DETECTOR:
                     axial_arrays.append(full_array[:, assy])
                     identifier = f" | {assembly_label} Detector"
@@ -109,7 +133,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             axial_mesh_means = src.core.get_axial_mesh_means(dataset_type=array_dtype)
             for idx, axial_array in enumerate(axial_arrays):
                 group_label = "" if len(axial_arrays) <= 1 else f" GROUP {idx + 1}"
-                x, y = (axial_array, axial_mesh_means) if axial_mesh_means.ndim != 2 else region_segments(axial_array, axial_mesh_means)
+                x, y = (
+                    (axial_array, axial_mesh_means)
+                    if axial_mesh_means.ndim != 2
+                    else region_segments(axial_array, axial_mesh_means)
+                )
                 figure.add_trace(
                     go.Scatter(
                         x=x,
@@ -131,14 +159,17 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             )
         )
 
-        figure.update_layout(margin=dict(t=0, b=0, l=0, r=0), 
-                             template="plotly_dark" if state["dark_mode"] else "plotly",
-                             legend=dict(orientation="h",
-                                         yanchor="top",
-                                         y=-0.1,
-                                         xanchor="center",
-                                         x=0.5,)
-                            ,)
+        figure.update_layout(
+            margin=dict(t=0, b=0, l=0, r=0),
+            template="plotly_dark" if state["dark_mode"] else "plotly",
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.1,
+                xanchor="center",
+                x=0.5,
+            ),
+        )
         return figure
 
     @state.change(
@@ -150,7 +181,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         f"grid_view_{view_id}",
         f"locked_{view_id}",
         "dark_mode",
-        "selected_surface"
+        "selected_surface",
     )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def on_cell_change(**kwargs):
@@ -162,11 +193,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; width: 100%;"
-        style = "; ".join([
-            "width: 100%",
-            "height: 100%",
-            "user-select: none",
-        ])
+        style = "; ".join(
+            [
+                "width: 100%",
+                "height: 100%",
+                "user-select: none",
+            ]
+        )
         figure = plotly.Figure(
             display_logo=False,
             display_mode_bar=False,

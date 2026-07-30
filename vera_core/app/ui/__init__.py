@@ -3,53 +3,53 @@ import json
 from pathlib import Path
 
 import numpy as np
-
-from trame_server.core import Server
 from trame.app.asynchronous import StateQueue
+from trame_server.core import Server
+
 from vera_core.app.core import (
+    LATERAL_SURFACES,
+    MAX_NUM_GROUPS,
+    Session,
     VeraDataRegistry,
     VeraDtype,
     VeraOutFile,
-    MAX_NUM_GROUPS,
-    LATERAL_SURFACES,
-    Session,
     ViewSession,
     recipe_sources,
 )
 
 from .features import (
+    DatasetPicker,
     DeriveMenu,
     DiffMenu,
-    ThresholdMenu,
     FileMenu,
-    StreamMenu,
-    DatasetPicker,
     LocateMenu,
     SaveSession,
+    StreamMenu,
+    ThresholdMenu,
 )
-from .layout import build_layout
 from .helpers import (
+    array_range,
+    default_dataset_name,
     format_label,
     get_next_y_from_layout,
-    array_range,
     is_view_locked,
-    default_dataset_name,
 )
+from .layout import build_layout
 from .views import (
-    surface_core_view,
     assembly_view,
     axial_plot,
+    cips_view,
+    core_axial_view,
     core_view,
     empty,
+    histogram_view,
+    surface_assembly_view,
+    surface_core_view,
     table_view,
     time_plot,
+    volume_view,
     x_axial_view,
     y_axial_view,
-    volume_view,
-    core_axial_view,
-    surface_assembly_view,
-    histogram_view,
-    cips_view,
 )
 
 DEFAULT_NB_ROWS = 8
@@ -154,9 +154,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     available_view_ids = list(all_view_ids)
     activation_done = False
 
-
     def requires_src(func):
         """No-op the wrapped callback while the registry is empty."""
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if not registry.has_src():
@@ -482,7 +482,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         for recipe in recipes:
             missing = recipe_sources(recipe) - present_src_ids
             if missing:
-                errors.append(f"{recipe['name']}: missing source(s) {', '.join(missing)}")
+                errors.append(
+                    f"{recipe['name']}: missing source(s) {', '.join(missing)}"
+                )
                 continue
             try:
                 registry.apply_recipe(recipe)

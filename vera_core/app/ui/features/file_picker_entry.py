@@ -1,9 +1,12 @@
-import asyncio, sys
+import asyncio
+import sys
+
 
 def _picker_cmd(*args):
     if getattr(sys, "frozen", False):
         return [sys.executable, "--pick-file", *args]
     return [sys.executable, "-m", "vera_core.app.file_picker", *args]
+
 
 async def launch_picker(*args):
     """Run the picker subprocess and return the chosen path (or '')."""

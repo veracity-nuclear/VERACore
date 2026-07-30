@@ -1,32 +1,39 @@
 # session_menu.py
 import json
-import subprocess
-import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from trame.widgets import vuetify, html
+from trame.widgets import html, vuetify
 
 from vera_core.app.core import build_session
+
 from .file_picker_entry import launch_picker
 
 session_menu_state_initialized = False
 
-def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids : list):
+
+def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids: list):
     global session_menu_state_initialized
 
     state.setdefault("show_session_dialog", False)
     state.setdefault("session_error", "")
     state.setdefault("session_saved_path", "")
 
-
     @ctrl.set("save_session")
     async def save_session():
         state.session_error = ""
         state.session_saved_path = ""
         try:
-            path = await launch_picker("--mode", "save", "--filter", "json",
-                                    "--prompt", "Save Session", "--name", "session.json")
+            path = await launch_picker(
+                "--mode",
+                "save",
+                "--filter",
+                "json",
+                "--prompt",
+                "Save Session",
+                "--name",
+                "session.json",
+            )
         except Exception as e:
             state.session_error = f"Could not open save dialog: {e}"
             return
@@ -49,7 +56,9 @@ def register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids : list)
 def build_session_menu_dialog(ctrl):
     if not session_menu_state_initialized:
         raise RuntimeError("register_session_menu_state_ctrl() must be called first")
-    with vuetify.VDialog(v_model=("show_session_dialog",), max_width=480, persistent=True):
+    with vuetify.VDialog(
+        v_model=("show_session_dialog",), max_width=480, persistent=True
+    ):
         with vuetify.VCard():
             vuetify.VCardTitle("Save Session", classes="text-subtitle-1")
             vuetify.VDivider()

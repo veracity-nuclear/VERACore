@@ -1,9 +1,10 @@
-from dataclasses import asdict
 from trame.widgets import html, vuetify
-from trame_server.core import State, Controller
-from vera_core.app.core import VeraDataRegistry, VeraAxes, DerivationMethod, derive_recipe
+from trame_server.core import Controller, State
+
+from vera_core.app.core import DerivationMethod, VeraDataRegistry, derive_recipe
+
+from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
-from ..helpers import format_label, default_dataset_name
 
 """
 Commented out derivation presets and methods need to be implemented
@@ -19,9 +20,14 @@ DERIVATION_PRESETS = [
     # {"text": "Radial Node", "value": "RADIAL_NODE"},
 ]
 
-DERIVATION_METHODS = [method.value for method in DerivationMethod] # list of derivations methods in str
+DERIVATION_METHODS = [
+    method.value for method in DerivationMethod
+]  # list of derivations methods in str
 
-def register_derived_state_ctrl(state : State, ctrl : Controller, registry: VeraDataRegistry):
+
+def register_derived_state_ctrl(
+    state: State, ctrl: Controller, registry: VeraDataRegistry
+):
     """
     Register trame state for derived menu
 
@@ -30,7 +36,7 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     state.derivation_src_id : the id of the source in registry to pull dataset from (two or more sources could have datasets with same name)
     state.axes_to_derive : the axes the derived dataset will have i.e. takes pin_powers -> assembly averaged power
     state.derivation_source_label : label to show on dataset picker after dataset is selected
-    state.derivation_use_factors : FIXME state that will track whether to use factors in derivation or not, not 
+    state.derivation_use_factors : FIXME state that will track whether to use factors in derivation or not, not
         currently implemented, here so UI matches veraview
     state.derivation_exclude_non_fuel : FIXME similar to state.derivation_use_factors
     state.derived_name : state the stores what the name of the derived dataset will be
@@ -43,7 +49,7 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
     state.derivation_src_dataset = ""
     state.derivation_src_id = None
     state.derivation_source_label = "Select dataset"
-    
+
     state.axes_to_derive = "ASSEMBLY"
     state.derivation_method = "Average"
     state.derivation_use_factors = True
@@ -59,7 +65,7 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
         state.derivation_src_dataset = array
         state.derivation_source_label = format_label(file, array)
         state.derived_error = ""
-    
+
     def _add_derived_dataset_to_source() -> bool:
         """add a new derived dataset to selected source"""
         if state.derivation_src_dataset == "" or state.derivation_src_id is None:
@@ -104,16 +110,29 @@ def register_derived_state_ctrl(state : State, ctrl : Controller, registry: Vera
 
 
 def build_derived_dialog(state, ctrl, registry):
-    with vuetify.VDialog(v_model=("show_derived_dialog",), max_width=620, persistent=True):
+    with vuetify.VDialog(
+        v_model=("show_derived_dialog",), max_width=620, persistent=True
+    ):
         with vuetify.VCard():
             vuetify.VCardTitle("Create Derived Dataset", classes="text-subtitle-1")
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("1. Select Dataset", classes="text-caption font-weight-medium mb-2")
-                    build_dataset_picker(ctrl, "derivation_source_label", "set_derived_source", "[src, entry.value]")
+                    html.Div(
+                        "1. Select Dataset",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
+                    build_dataset_picker(
+                        ctrl,
+                        "derivation_source_label",
+                        "set_derived_source",
+                        "[src, entry.value]",
+                    )
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("2. Select Axes Over Which to Derive", classes="text-caption font-weight-medium mb-2")
+                    html.Div(
+                        "2. Select Axes Over Which to Derive",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
                     vuetify.VSelect(
                         v_model=("axes_to_derive",),
                         items=("derivation_axes_presets",),
@@ -121,7 +140,10 @@ def build_derived_dialog(state, ctrl, registry):
                         dense=True,
                     )
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("3. Select Derivation Method", classes="text-caption font-weight-medium mb-2")
+                    html.Div(
+                        "3. Select Derivation Method",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
                     with vuetify.VRow(classes="ma-0", align="center"):
                         with vuetify.VCol(cols="4", classes="pa-0"):
                             vuetify.VSelect(
@@ -147,7 +169,10 @@ def build_derived_dialog(state, ctrl, registry):
                                 disabled=True,
                             )
                 with vuetify.VCard(outlined=True, classes="pa-3"):
-                    html.Div("4. Enter New Dataset Name", classes="text-caption font-weight-medium mb-2")
+                    html.Div(
+                        "4. Enter New Dataset Name",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
                     vuetify.VTextField(
                         v_model=("derived_name",),
                         hide_details=True,
@@ -166,6 +191,10 @@ def build_derived_dialog(state, ctrl, registry):
             vuetify.VDivider()
             with vuetify.VCardActions():
                 vuetify.VBtn("Create", text=True, click=ctrl.create_derived_dataset)
-                vuetify.VBtn("Create and Close", color="primary", click=ctrl.create_derived_dataset_and_close)
+                vuetify.VBtn(
+                    "Create and Close",
+                    color="primary",
+                    click=ctrl.create_derived_dataset_and_close,
+                )
                 vuetify.VSpacer()
                 vuetify.VBtn("Close", text=True, click="show_derived_dialog = false")

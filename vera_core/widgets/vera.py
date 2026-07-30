@@ -1,4 +1,5 @@
 from trame_client.widgets.core import AbstractElement
+
 from .. import module
 
 
@@ -30,6 +31,7 @@ class AssemblyView(HtmlElement):
             "click",
         ]
 
+
 class SurfaceView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -53,6 +55,8 @@ class SurfaceView(HtmlElement):
         self._event_names += [
             "click",
         ]
+
+
 class AssemblySurfaceView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -74,6 +78,8 @@ class AssemblySurfaceView(HtmlElement):
         self._event_names += [
             "click",
         ]
+
+
 class CoreView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -102,6 +108,7 @@ class CoreView(HtmlElement):
             "click",
         ]
 
+
 class CoreAxialView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -128,6 +135,8 @@ class CoreAxialView(HtmlElement):
         self._event_names += [
             "click",
         ]
+
+
 class AxialView(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -170,6 +179,7 @@ class ColorMapEditor(HtmlElement):
             "input",
         ]
 
+
 class VerticalColorMapEditor(HtmlElement):
     def __init__(self, **kwargs):
         super().__init__(
@@ -186,28 +196,24 @@ class VerticalColorMapEditor(HtmlElement):
             "input",
         ]
 
+
 class CipsCoreView(HtmlElement):
     def __init__(self, **kwargs):
-        super().__init__(
-            "vera-cips-view", 
-            **kwargs
-        )
+        super().__init__("vera-cips-view", **kwargs)
         self._attr_names += [
-            "metrics", 
-            ("color_ranges", "colorRanges"), 
+            "metrics",
+            ("color_ranges", "colorRanges"),
             ("color_preset", "colorPreset"),
-            ("color_mode", "colorMode"), 
+            ("color_mode", "colorMode"),
             ("primary_index", "primaryIndex"),
-            ("selected_i", "selectedI"), 
+            ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
-            ("x_labels", "xLabels"), 
-            ("y_labels", "yLabels"), 
+            ("x_labels", "xLabels"),
+            ("y_labels", "yLabels"),
             ("core_cols", "coreCols"),
-            ("aspect_ratio", "aspectRatio"), 
-            "decimals", 
-            "dark", 
+            ("aspect_ratio", "aspectRatio"),
+            "decimals",
+            "dark",
             "busy",
         ]
-        self._event_names += [
-            "click"
-        ]
+        self._event_names += ["click"]

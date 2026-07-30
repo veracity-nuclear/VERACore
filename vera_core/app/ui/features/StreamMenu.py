@@ -1,16 +1,22 @@
 # StreamMenu.py
-from trame.widgets import vuetify, html
-from trame_server.core import State, Controller
 from trame.app.asynchronous import StateQueue
+from trame.widgets import html, vuetify
+from trame_server.core import Controller, State
 
-from vera_core.app.core import VeraDataRegistry
-from vera_core.app.core import VeraDataStream, generate_stream_identifier
+from vera_core.app.core import (
+    VeraDataRegistry,
+    VeraDataStream,
+    generate_stream_identifier,
+)
+
 from .DatasetPicker import refresh_src_tree
 
 stream_menu_state_initialized = False
 
 
-def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry, state_queue : StateQueue):
+def register_stream_menu_state_ctrl(
+    state: State, ctrl: Controller, registry: VeraDataRegistry, state_queue: StateQueue
+):
     """
     Register trame state for stream menu
 
@@ -34,7 +40,7 @@ def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: Ve
             if stream_source_name in registry.src_ids():
                 return
             was_empty = registry.default_src_id is None
-            registry.add_src(stream_source , stream_source_name)
+            registry.add_src(stream_source, stream_source_name)
             refresh_src_tree(state, registry)
             if was_empty:
                 ctrl.activate_src()
@@ -50,6 +56,7 @@ def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: Ve
                 return
             if registry.max_state > state.max_time:
                 state.max_time = registry.max_state
+
         return (_on_stream_data_ready, _on_state_recieved)
 
     @ctrl.set("open_stream_dialog")
@@ -62,13 +69,13 @@ def register_stream_menu_state_ctrl(state: State, ctrl: Controller, registry: Ve
         port = int(stream_port)
         stream_source = VeraDataStream(stream_source_name, port, state_queue)
         _make_stream_watcher(stream_source_name, stream_source)
-        stream_source.start() 
+        stream_source.start()
         state.stream_connecting = True
         state.stream_port = None
         state.stream_source_name = ""
         state.stream_error = ""
         # state.show_stream_dialog = False
-        
+
     global stream_menu_state_initialized
     stream_menu_state_initialized = True
 
@@ -77,7 +84,9 @@ def build_stream_dialog(ctrl: Controller):
     global stream_menu_state_initialized
     if not stream_menu_state_initialized:
         raise RuntimeError("register_stream_menu_state_ctrl() must be called first")
-    with vuetify.VDialog(v_model=("show_stream_dialog",), max_width=480, persistent=True):
+    with vuetify.VDialog(
+        v_model=("show_stream_dialog",), max_width=480, persistent=True
+    ):
         with vuetify.VCard():
             vuetify.VCardTitle("Connect Data Stream", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -87,8 +96,13 @@ def build_stream_dialog(ctrl: Controller):
                     classes="d-flex flex-column align-center justify-center py-6",
                     style="gap: 12px;",
                 ):
-                    vuetify.VProgressCircular(indeterminate=True, color="primary", size=40)
-                    html.Div("Waiting for data on stream...", classes="text-caption text--secondary")
+                    vuetify.VProgressCircular(
+                        indeterminate=True, color="primary", size=40
+                    )
+                    html.Div(
+                        "Waiting for data on stream...",
+                        classes="text-caption text--secondary",
+                    )
 
                 # Idle form
                 with html.Div(v_if=("!stream_connecting",)):
@@ -125,5 +139,7 @@ def build_stream_dialog(ctrl: Controller):
                     "Connect",
                     color="primary",
                     click=(ctrl.connect_stream, "[stream_port, stream_source_name]"),
-                    disabled=("!stream_port || !stream_source_name || stream_connecting",),
+                    disabled=(
+                        "!stream_port || !stream_source_name || stream_connecting",
+                    ),
                 )

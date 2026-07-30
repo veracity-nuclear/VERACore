@@ -4,43 +4,57 @@ import subprocess
 import sys
 
 FILTERS = {
-    "h5":   {"label": "HDF5 files",    "exts": ["h5", "hdf5"], "mac_types": ["h5", "hdf5"]},
-    "json": {"label": "Session files", "exts": ["json"],       "mac_types": ["public.json", "json"]},
+    "h5": {"label": "HDF5 files", "exts": ["h5", "hdf5"], "mac_types": ["h5", "hdf5"]},
+    "json": {
+        "label": "Session files",
+        "exts": ["json"],
+        "mac_types": ["public.json", "json"],
+    },
 }
+
 
 def _osascript(script):
     """Run AppleScript; return trimmed stdout, or '' on cancel/error."""
     try:
-        out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        out = subprocess.run(
+            ["osascript", "-e", script], capture_output=True, text=True
+        )
     except Exception:
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
 
+
 def _q(s):
     """Escape a string for an AppleScript double-quoted literal."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
+
 
 def _open_macos(prompt, mac_types):
     types = ", ".join(f'"{t}"' for t in mac_types)
     script = (
         'tell application "System Events" to activate\n'
         f'set f to choose file with prompt "{_q(prompt)}" of type {{{types}}}\n'
-        'POSIX path of f'
+        "POSIX path of f"
     )
     return _osascript(script)
+
 
 def _save_macos(prompt, default_name):
     script = (
         'tell application "System Events" to activate\n'
         f'set f to choose file name with prompt "{_q(prompt)}" default name "{_q(default_name)}"\n'
-        'POSIX path of f'
+        "POSIX path of f"
     )
     return _osascript(script)
+
 
 def _open_tk(prompt, label, exts):
     import tkinter as tk
     from tkinter import filedialog
-    root = tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
     patterns = " ".join(f"*.{e}" for e in exts)
     path = filedialog.askopenfilename(
         title=prompt, filetypes=[(label, patterns), ("All files", "*.*")]
@@ -48,16 +62,23 @@ def _open_tk(prompt, label, exts):
     root.destroy()
     return path or ""
 
+
 def _save_tk(prompt, default_name, label, exts):
     import tkinter as tk
     from tkinter import filedialog
-    root = tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
     path = filedialog.asksaveasfilename(
-        title=prompt, defaultextension=f".{exts[0]}",
-        initialfile=default_name, filetypes=[(label, f"*.{exts[0]}"), ("All files", "*.*")]
+        title=prompt,
+        defaultextension=f".{exts[0]}",
+        initialfile=default_name,
+        filetypes=[(label, f"*.{exts[0]}"), ("All files", "*.*")],
     )
     root.destroy()
     return path or ""
+
 
 def run_picker(argv=None):
     p = argparse.ArgumentParser()
@@ -74,13 +95,19 @@ def run_picker(argv=None):
 
     if args.mode == "save":
         default_name = args.name or f"session.{exts[0]}"
-        path = (_save_macos(prompt, default_name) if is_mac
-                else _save_tk(prompt, default_name, label, exts))
+        path = (
+            _save_macos(prompt, default_name)
+            if is_mac
+            else _save_tk(prompt, default_name, label, exts)
+        )
     else:
-        path = _open_macos(prompt, mac_types) if is_mac else _open_tk(prompt, label, exts)
+        path = (
+            _open_macos(prompt, mac_types) if is_mac else _open_tk(prompt, label, exts)
+        )
 
     sys.stdout.write(path)
     sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_picker()

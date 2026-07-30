@@ -1,5 +1,7 @@
 import numpy as np
-from .vera_data import VeraDataSource, VeraDtype, VeraAxes
+
+from .vera_data import VeraAxes, VeraDataSource, VeraDtype
+
 
 class VeraDataRegistry:
     """Holds the open data sources keyed by id, with one marked as default.
@@ -7,12 +9,13 @@ class VeraDataRegistry:
     Provides lookup, the shared maximum state index, and fan-out of the active
     state across all sources.
     """
+
     def __init__(self):
         """Create an empty registry with no default source."""
-        self._srcs : dict[str, VeraDataSource] = {}
-        self.default_src_id : str = None
+        self._srcs: dict[str, VeraDataSource] = {}
+        self.default_src_id: str = None
         self.gross_axial_mesh = np.asarray([], dtype=np.float64)
-    
+
     def _compose_global_axial_mesh(self):
         global_axial_mesh = np.asarray([], dtype=np.float64)
         for src in self._srcs.values():
@@ -20,19 +23,21 @@ class VeraDataRegistry:
             global_axial_mesh = np.union1d(global_axial_mesh, core.gross_axial_mesh)
         self.global_axial_mesh = global_axial_mesh
 
-    def add_src(self, src : VeraDataSource, src_id : str):
+    def add_src(self, src: VeraDataSource, src_id: str):
         """Register a source under src_id, making it default if it's the first.
         Raises ValueError if src_id is already registered.
         """
         if src_id in self._srcs:
-            raise ValueError(f"{src_id} already exsists in the registry, skipped adding")
+            raise ValueError(f"{src_id} already exists in the registry, skipped adding")
         self._srcs[src_id] = src
         core = src.core
         if self.default_src_id is None:
             self.default_src_id = src_id
             self.global_axial_mesh = core.gross_axial_mesh
         else:
-            self.global_axial_mesh = np.union1d(self.global_axial_mesh, core.gross_axial_mesh)
+            self.global_axial_mesh = np.union1d(
+                self.global_axial_mesh, core.gross_axial_mesh
+            )
 
     @property
     def default_src(self) -> VeraDataSource | None:
@@ -40,18 +45,20 @@ class VeraDataRegistry:
         if self.default_src_id is None:
             return None
         return self._srcs[self.default_src_id]
-    
+
     @property
     def max_state(self) -> int:
         """Largest valid state index across all sources, or 0 if none."""
         if not self._srcs:
             return 0
-        return max(max(len(src.states) for src in self._srcs.values()) - 1, 0) 
-    
-    def get_axial_index(self, z : np.float64):
+        return max(max(len(src.states) for src in self._srcs.values()) - 1, 0)
+
+    def get_axial_index(self, z: np.float64):
         return int(np.searchsorted(self.global_axial_mesh, z))
-    
-    def src_axial_idx_to_global_idx(self, src_id : str, ds_dtype : VeraDtype, idx : int) -> int:
+
+    def src_axial_idx_to_global_idx(
+        self, src_id: str, ds_dtype: VeraDtype, idx: int
+    ) -> int:
         if src_id not in self._srcs:
             raise ValueError("src_id not in stored src_ids")
         core = self._srcs[src_id].core
@@ -61,8 +68,8 @@ class VeraDataRegistry:
         assert self.global_axial_mesh[global_idx] == physical_layer
         global_idx = np.clip(global_idx, 0, len(self.global_axial_mesh) - 1)
         return int(global_idx)
-    
-    def global_axial_idx_to_src_idx(self, src_id : str, ds_dtype : VeraDtype, idx : int):
+
+    def global_axial_idx_to_src_idx(self, src_id: str, ds_dtype: VeraDtype, idx: int):
         if src_id not in self._srcs:
             # FIXME, should probably not return 0
             return 0
@@ -74,7 +81,7 @@ class VeraDataRegistry:
         src_idx = np.searchsorted(src_axial_mesh, physical_layer)
         src_idx = np.clip(src_idx, 0, len(src_axial_mesh) - 1)
         return int(src_idx)
-    
+
     def has_src(self):
         return self.default_src_id is not None
 
@@ -83,18 +90,18 @@ class VeraDataRegistry:
         if src_id is None:
             return None
         return self._srcs.get(src_id, None)
-    
-    def get_ds_dtype(self, src_id : str, ds_name : str) -> VeraDtype:
+
+    def get_ds_dtype(self, src_id: str, ds_name: str) -> VeraDtype:
         if src_id not in self._srcs:
             return VeraDtype.UNKNOWN
         src = self._srcs[src_id]
         return src.array_dtype(ds_name)
-    
+
     def src_ids(self):
         """Return a view of all registered source ids."""
         return self._srcs.keys()
-    
-    def change_active_state(self, src_id : str, nstate : int) -> None:
+
+    def change_active_state(self, src_id: str, nstate: int) -> None:
         """Set the active state index for one source. Raises ValueError if src_id isn't registered."""
         if src_id not in self._srcs:
             raise ValueError(f"Could not find {src_id} in registry")
@@ -104,12 +111,15 @@ class VeraDataRegistry:
         """Set the active state index on every registered source."""
         for src in self._srcs.values():
             src.active_state_index = nstate
-    
+
     def full_core_keys(self) -> dict[str, list[str]]:
         """Map each source id to its active state's full-core dataset names."""
-        full_core_keys = {src_id : self._srcs[src_id].active_state_full_core_keys for src_id in self._srcs.keys()}
+        full_core_keys = {
+            src_id: self._srcs[src_id].active_state_full_core_keys
+            for src_id in self._srcs.keys()
+        }
         return full_core_keys
-    
+
     def shared_time_axes(self):
         if not self._srcs:
             return
@@ -118,7 +128,7 @@ class VeraDataRegistry:
         for src in srcs:
             shared_axes &= set(src.time_axes())
         return sorted(shared_axes)
-    
+
     def time_axis_value(self, axis: str, state_index: int) -> float:
         """Value of `axis` at `state_index`, read from the source `selected_time`
         indexes against (the max-state source). Exact for that source; other
@@ -142,7 +152,7 @@ class VeraDataRegistry:
         if self.default_src_id == src_id:
             self.default_src_id = next(iter(self._srcs), None)
         self._compose_global_axial_mesh()
-    
+
     def all_sources(self) -> dict[str, str]:
         src_paths = {}
         for src_id, src in self._srcs.items():
@@ -154,8 +164,7 @@ class VeraDataRegistry:
             src.close()
         self._srcs = {}
         self.default_src_id = None
-    
-    
+
     def apply_recipe(self, recipe: dict):
         kind = recipe["kind"]
         if kind == "derive":
@@ -178,6 +187,6 @@ class VeraDataRegistry:
             )
         else:
             raise ValueError(f"Unknown recipe kind: {kind}")
-    
+
     def __contains__(self, src_id):
         return src_id in self._srcs

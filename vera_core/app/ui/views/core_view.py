@@ -1,42 +1,58 @@
 from typing import Sequence
-import numpy as np
 
+import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
+from vera_core.app.core import (
+    MAX_NUM_GROUPS,
+    VeraDataRegistry,
+    VeraDataSource,
+    VeraDtype,
+)
+from vera_core.app.core.thresholds import ThresholdCondition, apply_thresholds
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, MAX_NUM_GROUPS, NUM_NODES
-from vera_core.app.core.thresholds import apply_thresholds, ThresholdCondition
-from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
-from ._core_grid import nan_out_non_fuel_locs, assembly_side, format_for_vis, core_labels
 
+from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
+from ._core_grid import (
+    assembly_side,
+    core_labels,
+    format_for_vis,
+    nan_out_non_fuel_locs,
+)
 
-ALLOWED_DTYPES : list[VeraDtype] = [
-    VeraDtype.PIN, 
-    VeraDtype.CHANNEL, 
-    VeraDtype.ASSEMBLY, 
-    VeraDtype.RADIAL, 
-    VeraDtype.RADIAL_ASSEMBLY, 
+ALLOWED_DTYPES: list[VeraDtype] = [
+    VeraDtype.PIN,
+    VeraDtype.CHANNEL,
+    VeraDtype.ASSEMBLY,
+    VeraDtype.RADIAL,
+    VeraDtype.RADIAL_ASSEMBLY,
     VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY, 
+    VeraDtype.COMP_NODAL_ENERGY,
     VeraDtype.COMP_ASSY,
-    VeraDtype.COMP_ASSY_ENERGY, 
+    VeraDtype.COMP_ASSY_ENERGY,
     VeraDtype.NODAL,
     VeraDtype.POINT_DETECTOR,
-    VeraDtype.RADIAL_POINT_DETECTOR
+    VeraDtype.RADIAL_POINT_DETECTOR,
 ]
+
 
 def option_for(view_id):
     return {
         "name": f"core_view_{view_id}",
         "label": "Core View",
-        "multi_picker" : False,
+        "multi_picker": False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES]
+        "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES],
     }
 
 
-def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, thresholds : Sequence[ThresholdCondition] = []):
+def create_core_view(
+    vera_source: VeraDataSource,
+    dataset_name: str,
+    z: int,
+    thresholds: Sequence[ThresholdCondition] = [],
+):
     if z < 0:
         raise RuntimeError(f"z must be < 0, z = {z}")
     dataset = vera_source.array(dataset_name)
@@ -67,23 +83,36 @@ def create_core_view(vera_source : VeraDataSource, dataset_name : str, z : int, 
             for energy_group in range(num_energy_groups):
                 layer_list.append(dataset[energy_group, :, z, :].swapaxes(0, 1))
         case _:
-            raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
+            raise RuntimeError(
+                f"Core View cannot visualize a dataset of type {str(ds_dtype)} "
+            )
     core = vera_source.core
     results = []
     result_assembly_labels = []
     for layer in layer_list:
         if ds_dtype.has_fuel_pins():
-            layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype==VeraDtype.RADIAL)
+            layer = nan_out_non_fuel_locs(
+                layer, vera_source, z, ds_dtype == VeraDtype.RADIAL
+            )
         if thresholds:
-            layer = apply_thresholds(layer, thresholds)    
+            layer = apply_thresholds(layer, thresholds)
         formatted_result, assy_labels = format_for_vis(src=vera_source, dataset=layer)
         results.append(formatted_result)
         result_assembly_labels.append(assy_labels)
 
-    sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
-    assembly_side_size =  assembly_side(len(sample)) if sample else 0
+    sample = next(
+        (c for row in formatted_result for c in row if isinstance(c, list) and c), None
+    )
+    assembly_side_size = assembly_side(len(sample)) if sample else 0
     x_labels, y_labels, max_core_cols = core_labels(core, is_comp)
-    return results, result_assembly_labels, assembly_side_size, x_labels, y_labels, max_core_cols
+    return (
+        results,
+        result_assembly_labels,
+        assembly_side_size,
+        x_labels,
+        y_labels,
+        max_core_cols,
+    )
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -108,7 +137,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(decimals_key, 2)
     has_labels_key = f"has_assembly_labels_{view_id}"
     state.setdefault(has_labels_key, False)
-    
+
     for gk in group_keys:
         state.setdefault(gk, [])
     for lk in label_keys:
@@ -122,13 +151,20 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(x_label_key, [])
     state.setdefault(y_label_key, [])
     state.setdefault(core_cols_key, 1)
-    state.setdefault(assembly_size_key, 1)    
-    
+    state.setdefault(assembly_size_key, 1)
+
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
         set_info(view_id, state, registry)
 
-    @state.change(selected_array_key, selected_src_key, "selected_layer", "thresholds", f"grid_view_{view_id}", lock_flag)
+    @state.change(
+        selected_array_key,
+        selected_src_key,
+        "selected_layer",
+        "thresholds",
+        f"grid_view_{view_id}",
+        lock_flag,
+    )
     @ctrl.add("on_vera_out_active_state_index_changed")
     def update_core_view(**kwargs):
         if is_non_active_view(state, view_id, option):
@@ -139,17 +175,29 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         _, _, selected_layer, _, selected_src_id, selected_array = indices
         thres_key = format_label(selected_src_id, selected_array)
         thresholds_to_apply = state["thresholds"].get(thres_key, [])
-        vera_source : VeraDataSource = registry.get(selected_src_id)
+        vera_source: VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
-        vis_state = create_core_view(vera_source, selected_array, selected_layer, thresholds_to_apply)
+        vis_state = create_core_view(
+            vera_source, selected_array, selected_layer, thresholds_to_apply
+        )
         if not vis_state:
             return
-        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
-        has_assembly_labels = assy_labels and len(assy_labels) > 0 and any(cell is not None for row in assy_labels[0] for cell in row)
+        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = (
+            vis_state
+        )
+        has_assembly_labels = (
+            assy_labels
+            and len(assy_labels) > 0
+            and any(cell is not None for row in assy_labels[0] for cell in row)
+        )
         num_groups = len(results)
         for idx in range(MAX_NUM_GROUPS):
-            state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx]
-            state[f"core_labels_{view_id}_{idx}"] = [] if idx >= num_groups else assy_labels[idx]
+            state[f"core_assemblies_{view_id}_{idx}"] = (
+                [] if idx >= num_groups else results[idx]
+            )
+            state[f"core_labels_{view_id}_{idx}"] = (
+                [] if idx >= num_groups else assy_labels[idx]
+            )
         state[n_groups_key] = num_groups
         state[assembly_size_key] = assembly_side_size
         state[x_label_key] = xlabels
@@ -160,15 +208,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(style=(
-            "flex: 1; min-width: 0;"
-            "display: flex; flex-direction: column;"
-        )):
+        with html.Div(
+            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
+        ):
             # Row of up to 4 group views; wraps to a 2x2 grid when >2 groups.
-            with html.Div(style=(
-                "flex: 1; min-height: 0;"
-                "display: flex; flex-direction: row; flex-wrap: wrap;"
-            )):
+            with html.Div(
+                style=(
+                    "flex: 1; min-height: 0;"
+                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                )
+            ):
                 for g in range(MAX_NUM_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
@@ -184,11 +233,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             style="flex: 0 0 auto;",
                         )
                         # Core + its own colorbar, side by side.
-                        with html.Div(style=(
-                            "flex: 1; min-height: 0;"
-                            "display: flex; flex-direction: row;"
-                        )):
-                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                        with html.Div(
+                            style=(
+                                "flex: 1; min-height: 0;"
+                                "display: flex; flex-direction: row;"
+                            )
+                        ):
+                            with html.Div(
+                                style="flex: 1; min-width: 0; min-height: 0; position: relative;"
+                            ):
                                 vera.CoreView(
                                     value=(group_keys[g], []),
                                     labels=(label_keys[g], []),
@@ -206,21 +259,25 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     busy=("trame__busy",),
                                     decimals=(decimals_key, 2),
                                 )
-                            with html.Div(style=(
-                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-                                "display: flex; align-self: stretch;"
-                            )):
+                            with html.Div(
+                                style=(
+                                    "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                    "display: flex; align-self: stretch;"
+                                )
+                            ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
             # Footer: centered caption with the decimals selector pinned right.
-            with html.Div(style=(
-                "flex: 0 0 auto; position: relative;"
-                "display: flex; align-items: center; justify-content: center;"
-                "min-height: 44px; padding: 6px 16px;"
-            )):
+            with html.Div(
+                style=(
+                    "flex: 0 0 auto; position: relative;"
+                    "display: flex; align-items: center; justify-content: center;"
+                    "min-height: 44px; padding: 6px 16px;"
+                )
+            ):
                 html.Div(
                     "Exposure {{ " + info + ".Exposure }}"
                     " · ({{ " + info + ".Assembly }})"
@@ -235,6 +292,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         v_model=decimals_key,
                         items=("[0,1,2,3,4]",),
                         label="Decimals",
-                        dense=True, hide_details=True,
+                        dense=True,
+                        hide_details=True,
                         style="max-width: 90px;",
                     )

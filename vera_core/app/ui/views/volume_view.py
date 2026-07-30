@@ -1,7 +1,10 @@
 import asyncio
 
 import numpy as np
-
+import vtk.util.numpy_support as np_s
+from trame.app import asynchronous
+from trame.ui.html import DivLayout
+from trame.widgets import html, vtk, vuetify
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkPiecewiseFunction
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
@@ -14,17 +17,11 @@ from vtkmodules.vtkRenderingCore import (
 )
 from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkSmartVolumeMapper
 
-import vtk.util.numpy_support as np_s
-
-from trame.app import asynchronous
-from trame.ui.html import DivLayout
-from trame.widgets import vtk, vuetify, html
-
 from vera_core.app.core import VeraDataRegistry, VeraDtype
 from vera_core.app.core.thresholds import apply_thresholds
 from vera_core.widgets import vera
-from ..helpers import is_view_locked, format_label
 
+from ..helpers import format_label, is_view_locked
 
 _OPACITY_POINTS = [
     (-10.0, 1.0),
@@ -76,8 +73,10 @@ def _apply_camera(ctx, cam_dict):
         cam.SetParallelScale(cam_dict.get("parallel_scale", 1.0))
     ctx["ren"].ResetCameraClippingRange()
 
+
 def _size_is_real(size):
     return size[0] > 10 and size[1] > 10 and tuple(size) != (300, 300)
+
 
 def _schedule_fit(view_id):
     """Fit the camera once the client has synced its real canvas size"""
@@ -121,7 +120,7 @@ def option_for(view_id):
         "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title]
+        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title],
     }
 
 
@@ -186,29 +185,32 @@ def _build_view(server, view_id):
     _views[view_id] = ctx
     with DivLayout(server, template_name=f"volume_view_{view_id}") as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(style=(
-            "flex: 1; min-width: 0;"
-            "display: flex; flex-direction: column;"
-        )):
+        with html.Div(
+            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
+        ):
             with html.Div(style="flex: 1; min-height: 0; position: relative;"):
                 html_view = vtk.VtkRemoteView(
-                ren_win,
-                ref=f"volume_view_{view_id}",
-                interactive_ratio=2,
-                interactive_quality=40,
-                still_quality=90,
-            )
-                with html.Div(style=(
-                    "position: absolute; top: 4px; right: 4px;"
-                    "display: flex; gap: 2px;"
-                )):
+                    ren_win,
+                    ref=f"volume_view_{view_id}",
+                    interactive_ratio=2,
+                    interactive_quality=40,
+                    still_quality=90,
+                )
+                with html.Div(
+                    style=(
+                        "position: absolute; top: 4px; right: 4px;"
+                        "display: flex; gap: 2px;"
+                    )
+                ):
                     with vuetify.VMenu(offset_y=True, close_on_content_click=False):
                         with vuetify.Template(v_slot_activator="{ on, attrs }"):
                             with vuetify.VBtn(
                                 icon=True, small=True, v_bind="attrs", v_on="on"
                             ):
                                 vuetify.VIcon("mdi-box-cutter", small=True)
-                        with vuetify.VCard(style="padding: 8px 12px; min-width: 240px;"):
+                        with vuetify.VCard(
+                            style="padding: 8px 12px; min-width: 240px;"
+                        ):
                             vuetify.VSwitch(
                                 v_model=f"crop_enabled_{view_id}",
                                 label="Crop",
@@ -228,20 +230,32 @@ def _build_view(server, view_id):
                                     html.Span("Remove")
                             vuetify.VRangeSlider(
                                 v_model=f"crop_x_{view_id}",
-                                min=0, max=1, step=0.01,
-                                label="X", dense=True, hide_details=True,
+                                min=0,
+                                max=1,
+                                step=0.01,
+                                label="X",
+                                dense=True,
+                                hide_details=True,
                                 disabled=(f"!crop_enabled_{view_id}",),
                             )
                             vuetify.VRangeSlider(
                                 v_model=f"crop_y_{view_id}",
-                                min=0, max=1, step=0.01,
-                                label="Y", dense=True, hide_details=True,
+                                min=0,
+                                max=1,
+                                step=0.01,
+                                label="Y",
+                                dense=True,
+                                hide_details=True,
                                 disabled=(f"!crop_enabled_{view_id}",),
                             )
                             vuetify.VRangeSlider(
                                 v_model=f"crop_z_{view_id}",
-                                min=0, max=1, step=0.01,
-                                label="Z", dense=True, hide_details=True,
+                                min=0,
+                                max=1,
+                                step=0.01,
+                                label="Z",
+                                dense=True,
+                                hide_details=True,
                                 disabled=(f"!crop_enabled_{view_id}",),
                             )
                     with vuetify.VBtn(
@@ -251,14 +265,16 @@ def _build_view(server, view_id):
             ctx["view_update"] = html_view.update
             ctx["reset_camera"] = html_view.reset_camera
 
-        with html.Div(style=(
-            "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-            "display: flex; align-self: stretch;"
-        )):
+        with html.Div(
+            style=(
+                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                "display: flex; align-self: stretch;"
+            )
+        ):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}_0",
                 color_preset="jet",
-                units=(f"color_units_{view_id}",)
+                units=(f"color_units_{view_id}",),
             )
 
     return ctx
@@ -280,9 +296,12 @@ def _apply_crop(ctx, state, view_id):
         return lo + frac * (hi - lo)
 
     mapper.SetCroppingRegionPlanes(
-        span(xmin, xmax, fx[0]), span(xmin, xmax, fx[1]),
-        span(ymin, ymax, fy[0]), span(ymin, ymax, fy[1]),
-        span(zmin, zmax, fz[0]), span(zmin, zmax, fz[1]),
+        span(xmin, xmax, fx[0]),
+        span(xmin, xmax, fx[1]),
+        span(ymin, ymax, fy[0]),
+        span(ymin, ymax, fy[1]),
+        span(zmin, zmax, fz[0]),
+        span(zmin, zmax, fz[1]),
     )
     if state[f"crop_mode_{view_id}"] == "remove":
         mapper.SetCroppingRegionFlags(_CROP_INVERTED_SUBVOLUME)
@@ -301,7 +320,7 @@ def _update_crop(server, view_id):
     ctx["view_update"]()
 
 
-def _update_volume(server, registry : VeraDataRegistry, view_id):
+def _update_volume(server, registry: VeraDataRegistry, view_id):
     state = server.state
     ctx = _views.get(view_id)
     if ctx is None or not _is_active(state, view_id):
@@ -316,7 +335,7 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
         return
 
     thres_key = format_label(src_id, array_name)
-    if (thres := state["thresholds"].get(thres_key)):
+    if thres := state["thresholds"].get(thres_key):
         array = apply_thresholds(array, thres)
     core = vera_out_file.core
 
@@ -339,11 +358,17 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
                 f"reduced_core_map; expected one match, found {len(rows)}."
             )
         core_row, core_col = int(rows[0]), int(cols[0])
-        row_slice = slice(core_row * assembly_shape[0], (core_row + 1) * assembly_shape[0])
-        col_slice = slice(core_col * assembly_shape[1], (core_col + 1) * assembly_shape[1])
+        row_slice = slice(
+            core_row * assembly_shape[0], (core_row + 1) * assembly_shape[0]
+        )
+        col_slice = slice(
+            core_col * assembly_shape[1], (core_col + 1) * assembly_shape[1]
+        )
         volume_array[row_slice, col_slice] = array[:, :, :, assembly_id]
 
-    volume_array = np.repeat(volume_array, core.get_axial_mesh_pixels(dataset=array), axis=2)
+    volume_array = np.repeat(
+        volume_array, core.get_axial_mesh_pixels(dataset=array), axis=2
+    )
     for axis in range(3):
         if volume_array.shape[axis] < 2:
             volume_array = np.repeat(volume_array, 2, axis=axis)
@@ -355,7 +380,7 @@ def _update_volume(server, registry : VeraDataRegistry, view_id):
     cm_per_axial_pixel = float(axial_dim.sum() / volume_array.shape[2])
     spacing = (pin_pitch, pin_pitch, cm_per_axial_pixel)
 
-    scalars = volume_array.transpose(2, 1, 0).ravel()   # single contiguous copy
+    scalars = volume_array.transpose(2, 1, 0).ravel()  # single contiguous copy
     vtk_array = np_s.numpy_to_vtk(scalars, deep=True)
 
     volume_data = ctx["volume_data"]
@@ -396,8 +421,10 @@ def _update_color(server, view_id):
 DARK_BG = (30 / 255, 30 / 255, 30 / 255)
 LIGHT_BG = (1.0, 1.0, 1.0)
 
+
 def _bg_for_theme(is_dark):
     return DARK_BG if is_dark else LIGHT_BG
+
 
 def _update_background(server, view_id):
     state = server.state
@@ -408,6 +435,7 @@ def _update_background(server, view_id):
     if _is_active(state, view_id):
         ctx["ren_win"].Render()
         ctx["view_update"]()
+
 
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
@@ -470,7 +498,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if _is_active(state, view_id):
             _update_volume(server, registry, view_id)
 
-    @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}", "thresholds")
+    @state.change(
+        f"selected_array_{view_id}", f"selected_src_id_{view_id}", "thresholds"
+    )
     def _on_selection_changed(**kwargs):
         _update_volume(server, registry, view_id)
 

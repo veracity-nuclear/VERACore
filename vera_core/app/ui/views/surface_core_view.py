@@ -1,14 +1,20 @@
 import numpy as np
-
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
+from vera_core.app.core import (
+    MAX_NUM_GROUPS,
+    VeraDataRegistry,
+    VeraDataSource,
+    VeraDtype,
+)
 from vera_core.widgets import vera
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, MAX_NUM_GROUPS
-from ..helpers import format_label, is_non_active_view, set_info, get_safe_idxs
+
+from ..helpers import get_safe_idxs, is_non_active_view, set_info
 
 # Lateral faces are the first four of [W, N, E, S, T, B]
 LATERAL_FACE_SLICE = slice(0, 4)
+
 
 def option_for(view_id):
     return {
@@ -59,7 +65,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             for col in range(core_width):
                 assembly_idx = int(core_map[row, col]) - 1
                 if assembly_idx < 0:
-                    line.append([])            # empty position
+                    line.append([])  # empty position
                     continue
                 # Each node -> [w, n, e, s] as python floats.
                 nodes = []
@@ -109,7 +115,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state[group_keys[g]] = []
 
         state[x_label_key] = (
-            core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
+            core.comp_core_map_column_labels
+            if is_comp
+            else core.reduced_core_map_column_labels
         )
         start_idx = (
             core.comp_map_start_index if is_comp else core.reduced_core_map_start_index
@@ -121,14 +129,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(style=(
-            "flex: 1; min-width: 0;"
-            "display: flex; flex-direction: column;"
-        )):
-            with html.Div(style=(
-                "flex: 1; min-height: 0;"
-                "display: flex; flex-direction: row; flex-wrap: wrap;"
-            )):
+        with html.Div(
+            style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")
+        ):
+            with html.Div(
+                style=(
+                    "flex: 1; min-height: 0;"
+                    "display: flex; flex-direction: row; flex-wrap: wrap;"
+                )
+            ):
                 for g in range(MAX_NUM_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
@@ -144,11 +153,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             style="flex: 0 0 auto;",
                         )
                         # Surface view + its own colorbar, side by side.
-                        with html.Div(style=(
-                            "flex: 1; min-height: 0;"
-                            "display: flex; flex-direction: row;"
-                        )):
-                            with html.Div(style="flex: 1; min-width: 0; min-height: 0; position: relative;"):
+                        with html.Div(
+                            style=(
+                                "flex: 1; min-height: 0;"
+                                "display: flex; flex-direction: row;"
+                            )
+                        ):
+                            with html.Div(
+                                style="flex: 1; min-width: 0; min-height: 0; position: relative;"
+                            ):
                                 vera.SurfaceView(
                                     value=(group_keys[g], []),
                                     selected_i=("selected_assembly_ij.i",),
@@ -162,14 +175,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
                                 )
-                            with html.Div(style=(
-                                "flex: 0 0 auto; width: 70px; padding: 4px 0;"
-                                "display: flex; align-self: stretch;"
-                            )):
+                            with html.Div(
+                                style=(
+                                    "flex: 0 0 auto; width: 70px; padding: 4px 0;"
+                                    "display: flex; align-self: stretch;"
+                                )
+                            ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
                                     color_preset="jet",
-                                    units=(f"color_units_{view_id}",)
+                                    units=(f"color_units_{view_id}",),
                                 )
             html.Div(
                 "Exposure {{ " + info + ".Exposure }}"

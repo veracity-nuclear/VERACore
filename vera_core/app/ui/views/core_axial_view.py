@@ -1,10 +1,10 @@
 import numpy as np
-
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
-from vera_core.widgets import vera
 from vera_core.app.core import VeraDataRegistry, VeraDtype
+from vera_core.widgets import vera
+
 from ..helpers import is_non_active_view
 
 ALLOWED_DTYPES = [
@@ -12,6 +12,7 @@ ALLOWED_DTYPES = [
     VeraDtype.POINT_DETECTOR,
     VeraDtype.CONTINOUS_DETECTOR,
 ]
+
 
 def _wire(values):
     out = []
@@ -21,6 +22,7 @@ def _wire(values):
         else:
             out.append(float(value))
     return out
+
 
 def _mesh_geometry(dtype, mesh):
     if dtype is VeraDtype.CONTINOUS_DETECTOR:
@@ -97,9 +99,10 @@ def option_for(view_id):
         "label": "Core Axial View",
         "multi_picker": False,
         "icon": "mdi-chart-line-variant",
-        "owns_color_bar" : True,
+        "owns_color_bar": True,
         "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES],
     }
+
 
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
@@ -162,28 +165,41 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     row.append(None)
                     continue
                 values = data[:, assembly]
-                row.append({
-                    "x": _cell_x(dtype, values),
-                    "mean": _series_mean(dtype, values, mesh),
-                })
+                row.append(
+                    {
+                        "x": _cell_x(dtype, values),
+                        "mean": _series_mean(dtype, values, mesh),
+                    }
+                )
         means = [c["mean"] for row in grid for c in row if c and c["mean"] is not None]
         state[f"color_range_{view_id}_0"] = [min(means), max(means)]
         is_comp = dtype.is_computational()
-        state[xlabels_key] = core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
-        state[ylabels_key] = core.comp_core_map_row_labels if is_comp else core.reduced_core_map_row_labels
+        state[xlabels_key] = (
+            core.comp_core_map_column_labels
+            if is_comp
+            else core.reduced_core_map_column_labels
+        )
+        state[ylabels_key] = (
+            core.comp_core_map_row_labels
+            if is_comp
+            else core.reduced_core_map_row_labels
+        )
         state[mesh_key] = _mesh_geometry(dtype, mesh)
         state[core_axials_key] = grid
         state[xrange_key] = _finite_range(data)
         state[yrange_key] = _finite_range(mesh)
         state[aspect_ratio_key] = float(src.core.aspect_ratio)
-        
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
-        with html.Div(style="flex: 1; min-width: 0; display: flex; flex-direction: column;"):
+        with html.Div(
+            style="flex: 1; min-width: 0; display: flex; flex-direction: column;"
+        ):
             with html.Div(style="flex: 1; min-height: 0; position: relative;"):
                 vera.CoreAxialView(
-                    v_if=(f"{core_axials_key} && {core_axials_key}.length && {mesh_key} && {mesh_key}.y && {mesh_key}.y.length",),
+                    v_if=(
+                        f"{core_axials_key} && {core_axials_key}.length && {mesh_key} && {mesh_key}.y && {mesh_key}.y.length",
+                    ),
                     value=(core_axials_key, []),
                     x_range=(xrange_key, [0.0, 1.0]),
                     y_range=(yrange_key, [0.0, 1.0]),
@@ -200,11 +216,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     busy=("trame__busy",),
                 )
             html.Div(
-                "Exposure {{ " + info + ".Exposure }}"
-                " · ({{ " + info + ".Assembly }})",
-                classes="text-caption text-center", 
+                "Exposure {{ " + info + ".Exposure }} · ({{ " + info + ".Assembly }})",
+                classes="text-caption text-center",
             )
-        with html.Div(style="flex: 0 0 auto; width: 70px; padding: 4px 0; display: flex; align-self: stretch;"):
+        with html.Div(
+            style="flex: 0 0 auto; width: 70px; padding: 4px 0; display: flex; align-self: stretch;"
+        ):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}_0",
                 color_preset="jet",

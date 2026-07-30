@@ -1,11 +1,11 @@
 import numpy as np
 import plotly.graph_objects as go
-
 from trame.ui.html import DivLayout
-from trame.widgets import plotly, vuetify, html
+from trame.widgets import html, plotly, vuetify
 
-from vera_core.app.core import VeraDataRegistry, VeraDataset, VeraDtype, Surface
-from ..helpers import is_non_active_view, get_safe_idxs, convert_ji_to_node
+from vera_core.app.core import Surface, VeraDataRegistry, VeraDataset, VeraDtype
+
+from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
 ALL_ASSEMBLIES, ASSEMBLY, PIN = "all_assemblies", "assembly", "pin"
 LAYER, ALL = "layer", "all"
@@ -56,20 +56,34 @@ def group_arrays(full_array, dtype: VeraDtype, surface: int):
     match dtype:
         case VeraDtype.PIN | VeraDtype.CHANNEL:
             return [("", full_array, PIN4)]
-        case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY | VeraDtype.NODAL | VeraDtype.COMP_NODAL:
+        case (
+            VeraDtype.ASSEMBLY
+            | VeraDtype.COMP_ASSY
+            | VeraDtype.NODAL
+            | VeraDtype.COMP_NODAL
+        ):
             return [("", full_array, NODE3)]
         case VeraDtype.POINT_DETECTOR | VeraDtype.CONTINOUS_DETECTOR:
             return [("", full_array, FLAT2)]
         case VeraDtype.AXIAL:
             return [("", full_array, AXIAL1)]
         case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:
-            return [(f" GROUP {g + 1}", full_array[g], NODE3) for g in range(full_array.shape[0])]
+            return [
+                (f" GROUP {g + 1}", full_array[g], NODE3)
+                for g in range(full_array.shape[0])
+            ]
         case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
-            return [(f" GROUP {g + 1}", full_array[surface, g], NODE3) for g in range(full_array.shape[1])]
+            return [
+                (f" GROUP {g + 1}", full_array[surface, g], NODE3)
+                for g in range(full_array.shape[1])
+            ]
         case _:
             return []
 
-def scoped(arr : VeraDataset, layout, radial, axial, j : int, i : int, assy : int, layer : int):
+
+def scoped(
+    arr: VeraDataset, layout, radial, axial, j: int, i: int, assy: int, layer: int
+):
     z = slice(None) if axial == ALL else layer
     match layout:
         case "axial1":
@@ -138,7 +152,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         x_title = f"{array_name.replace('_', ' ').title()}{units_label}"
         if array_dtype != VeraDtype.AXIAL:
-            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
+            assembly_label = src.core.reduced_core_map_label(
+                assy, array_dtype.is_computational()
+            )
             region = {
                 ALL_ASSEMBLIES: "All assemblies",
                 ASSEMBLY: f"{assembly_label}",
@@ -150,7 +166,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 mesh = src.core.get_axial_mesh_means(dataset_type=array_dtype)
                 extent = f"{float(np.round(mesh[layer], decimals=2))} cm"
             surface_label = ""
-            if array_dtype in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE):
+            if array_dtype in (
+                VeraDtype.COMP_ASSY_SURFACE,
+                VeraDtype.COMP_NODAL_SURFACE,
+            ):
                 surface_label = f", {Surface(surface).str}"
             x_title = f"{x_title} - {region}, {extent}{surface_label}"
 
@@ -171,7 +190,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             xaxis_title=x_title,
             yaxis_title="Frequency (%)",
             showlegend=len(figure.data) > 1,
-            legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
+            legend=dict(
+                orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5
+            ),
         )
         return figure
 
@@ -198,12 +219,14 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             update_fn(create_histogram())
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "; ".join([
-            "height: 100%",
-            "width: 100%",
-            "display: flex",
-            "flex-direction: column",
-        ])
+        layout.root.style = "; ".join(
+            [
+                "height: 100%",
+                "width: 100%",
+                "display: flex",
+                "flex-direction: column",
+            ]
+        )
         with html.Div(classes="d-flex", style="flex: 0 0 auto; gap: 8px;"):
             vuetify.VSelect(
                 v_model=(f"hist_radial_{view_id}",),

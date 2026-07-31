@@ -96,7 +96,11 @@ def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresho
 
 
 def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_state: dict):
-    """Build the full widget payload. Returns None when nothing is selectable."""
+    """Build the full widget payload. Returns None when nothing is selectable.
+
+    metrics are ordered by CIPS_ROLES; the list index is the band position, top
+    band first, and is what the legend numbers.
+    """
     if z < 0:
         raise RuntimeError(f"z must be >= 0, z = {z}")
     metrics = []
@@ -143,7 +147,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     metrics_key = f"cips_metrics_{view_id}"
     n_metrics_key = f"cips_n_metrics_{view_id}"
     mode_key = f"cips_color_mode_{view_id}"
-    primary_key = f"cips_primary_{view_id}"
+    # Band the colorbar describes. In 'primary' mode it is also the band that
+    # colors the cell, so one control drives both.
+    focus_key = f"cips_primary_{view_id}"
     decimals_key = f"cips_decimals_{view_id}"
     x_label_key = f"core_view_x_labels_{view_id}"
     y_label_key = f"core_view_y_labels_{view_id}"
@@ -151,18 +157,20 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     aspect_ratio_key = f"aspect_ratio_{view_id}"
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
+    is_axial_key = f"cips_is_axial_{view_id}"
     range_keys = [f"color_range_{view_id}_{g}" for g in range(MAX_METRICS)]
     units_keys = [f"color_units_{view_id}_{g}" for g in range(MAX_METRICS)]
 
     state.setdefault(metrics_key, [])
     state.setdefault(n_metrics_key, 0)
     state.setdefault(mode_key, "primary")
-    state.setdefault(primary_key, 0)
+    state.setdefault(focus_key, 0)
     state.setdefault(decimals_key, 2)
     state.setdefault(x_label_key, [])
     state.setdefault(y_label_key, [])
     state.setdefault(core_cols_key, 1)
     state.setdefault(aspect_ratio_key, 1)
+    state.setdefault(is_axial_key, False)
     for key in units_keys:
         state.setdefault(key, "unitless")
 
@@ -200,8 +208,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state[units_keys[g]] = metrics[g]["units"] if g < len(metrics) else "unitless"
         state[metrics_key] = metrics
         state[n_metrics_key] = len(metrics)
-        if state[primary_key] >= len(metrics):
-            state[primary_key] = 0
+        if state[focus_key] >= len(metrics):
+            state[focus_key] = 0
         state[x_label_key] = payload["x_labels"]
         state[y_label_key] = payload["y_labels"]
         state[core_cols_key] = payload["core_cols"]
@@ -217,7 +225,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         metrics=(metrics_key, []),
                         color_ranges=("[" + ", ".join(range_keys) + "]",),
                         color_mode=(mode_key,),
-                        primary_index=(primary_key,),
+                        primary_index=(focus_key,),
                         color_preset="jet",
                         selected_i=("selected_assembly_ij.i",),
                         selected_j=("selected_assembly_ij.j",),
@@ -232,66 +240,92 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     )
                 with html.Div(
                     style=(
-                        "flex: 0 0 auto; width: 76px; padding: 4px 0;"
+                        "flex: 0 0 auto; width: 128px; padding: 4px 0;"
                         "display: flex; flex-direction: column;"
                     ),
                 ):
-                    html.Div(
-                        "{{ " + f"{metrics_key}[0].label" + " }}"
-                        if len(state[metrics_key]) > 0
-                        else "",
-                        classes="text-caption text-center font-weight-medium",
-                        style="flex: 0 0 auto;",
-                    )
                     with html.Div(
-                        style="flex: 1; min-height: 0; display: flex; align-self: stretch;"
+                        v_if=(f"{n_metrics_key} > 0",),
+                        style="flex: 0 0 auto; padding: 0 4px 6px 4px;",
                     ):
-                        vera.VerticalColorMapEditor(
-                            v_model=range_keys[0],
-                            color_preset="jet",
-                            units=(units_keys[0],),
+                        html.Div(
+                            "Band order",
+                            classes="text-caption text-center",
+                            style="opacity: 0.6;",
                         )
-            # Footer: centered caption, view controls pinned right.
+                        with html.Div(
+                            v_for=f"(metric, k) in {metrics_key}",
+                            key="k",
+                            click=f"{focus_key} = k",
+                            classes="text-caption",
+                            style=(
+                                "{"
+                                " display: 'flex', alignItems: 'center', gap: '6px',"
+                                " padding: '1px 4px', borderRadius: '3px', cursor: 'pointer',"
+                                f" outline: k === {focus_key} ? '1px solid currentColor' : 'none',"
+                                f" opacity: k === {focus_key} ? 1 : 0.6"
+                                "}",
+                            ),
+                            title=("metric.units",),
+                        ):
+                            html.Div(
+                                "{{ k + 1 }}",
+                                classes="text-overline",
+                                style="flex: 0 0 12px; text-align: center;",
+                            )
+                            html.Div(
+                                "{{ metric.label }}",
+                                style=(
+                                    "flex: 1; min-width: 0; white-space: nowrap;"
+                                    "overflow: hidden; text-overflow: ellipsis;"
+                                ),
+                            )
+                    # One editor per band; only the focused one is mounted.
+                    for g in range(MAX_METRICS):
+                        with html.Div(
+                            v_if=(f"{focus_key} === {g} && {n_metrics_key} > {g}",),
+                            style="flex: 1; min-height: 0; display: flex; align-self: stretch;",
+                        ):
+                            vera.VerticalColorMapEditor(
+                                v_model=range_keys[g],
+                                color_preset="jet",
+                                units=(units_keys[g],),
+                            )
+            # Footer: caption takes the slack, controls keep their intrinsic width.
             with html.Div(
                 style=(
-                    "flex: 0 0 auto; position: relative;"
-                    "display: flex; align-items: center; justify-content: center;"
-                    "min-height: 44px; padding: 6px 16px;"
+                    "flex: 0 0 auto;"
+                    "display: flex; align-items: center; gap: 12px;"
+                    "min-height: 40px; padding: 4px 12px;"
                 )
             ):
                 html.Div(
                     "Exposure {{ " + info + ".Exposure }}"
                     " · ({{ " + info + ".Assembly }})"
                     " · Axial - {{ " + info + ".Layer }}",
-                    classes="text-caption text-center",
+                    classes="text-caption",
+                    style=(
+                        "flex: 1 1 auto; min-width: 0; text-align: center;"
+                        "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                    ),
+                    title=(
+                        f"'Exposure ' + {info}.Exposure + ' · (' + {info}.Assembly"
+                        f" + ') · Axial - ' + {info}.Layer",
+                    ),
                 )
                 with html.Div(
-                    style=("display: flex; gap: 8px; align-items: center;"),
+                    style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px;"
                 ):
-                    vuetify.VSelect(
-                        v_model=mode_key,
-                        items=("['primary', 'banded']",),
-                        label="Color",
-                        dense=True,
-                        hide_details=True,
-                        style="max-width: 110px;",
-                    )
-                    vuetify.VSelect(
-                        v_model=primary_key,
-                        items=(metrics_key,),
-                        item_text="label",
-                        item_value="index",
-                        label="Color by",
-                        v_if=(f"{mode_key} === 'primary' && {n_metrics_key} > 1",),
-                        dense=True,
-                        hide_details=True,
-                        style="max-width: 140px;",
-                    )
+                    with vuetify.VBtnToggle(
+                        v_model=mode_key, dense=True, mandatory=True, borderless=True
+                    ):
+                        vuetify.VBtn("Primary", value="primary", small=True, classes="px-2")
+                        vuetify.VBtn("Banded", value="banded", small=True, classes="px-2")
+                    html.Div("Decimals", classes="text-caption", style="opacity: 0.7;")
                     vuetify.VSelect(
                         v_model=decimals_key,
                         items=("[0,1,2,3,4]",),
-                        label="Decimals",
                         dense=True,
                         hide_details=True,
-                        style="max-width: 90px;",
+                        style="max-width: 56px;",
                     )

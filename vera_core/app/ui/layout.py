@@ -14,13 +14,16 @@ from .features import (
     SaveSession,
     StreamMenu,
     ThresholdMenu,
+    VersionChecker,
 )
 
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
     tb.height = 36
-    html.Img(src=assets.LOGO, height=25)
+    html.Img(src=assets.LOGO, height=25, click=ctrl.open_version_dialog, style="cursor: pointer;")
+    VersionChecker.build_version_notice(ctrl)
+
     vuetify.VSpacer()
     with html.Div(style="width: 25px", classes="mr-2"):
         vuetify.VProgressCircular(
@@ -170,6 +173,8 @@ def build_content(layout, state: State, ctrl: Controller, registry: VeraDataRegi
     SaveSession.build_session_menu_dialog(ctrl)
     StreamMenu.build_stream_dialog(ctrl)
     LocateMenu.build_locate_dialog(state, ctrl, registry)
+    VersionChecker.build_version_dialog(ctrl)
+
     build_axial_slider()
     with vuetify.VContainer(fluid=True, classes="pa-0 fill-height", style="user-select: none;"):
         # Empty state: prompt the user to open a file.

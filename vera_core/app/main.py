@@ -93,6 +93,7 @@ def main(server: Server | None | str = None, **kwargs):
     @server.controller.add("on_server_ready")
     def start_stream(**kwargs):
         create_state_queue_monitor_task(server, raw_queue, delay=0.1)
+        server.controller.run_launch_version_check()
 
     # Start server
     kwargs.setdefault("disable_logging", False)

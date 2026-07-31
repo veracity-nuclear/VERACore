@@ -26,6 +26,7 @@ from .features import (
     SaveSession,
     StreamMenu,
     ThresholdMenu,
+    VersionChecker,
 )
 from .features.appdata import validate_file_overrides
 from .helpers import (
@@ -368,6 +369,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     SaveSession.register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids)
     StreamMenu.register_stream_menu_state_ctrl(state, ctrl, registry, state_queue)
     LocateMenu.register_locate_state_ctrl(state, ctrl, registry)
+    VersionChecker.register_version_check_ctrl(state, ctrl)
 
     for view_id in all_view_ids:
         _init_view_state(view_id)

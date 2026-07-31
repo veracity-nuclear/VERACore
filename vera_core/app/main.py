@@ -8,6 +8,8 @@ from trame.app import dev, get_server
 from trame.app.asynchronous import StateQueue, create_state_queue_monitor_task
 from trame_server.core import Server
 
+from vera_core.version import __version__
+
 from . import ui
 from .core import VeraDataRegistry, VeraOutFile
 from .core.vera_data_stream import VeraDataStream
@@ -25,7 +27,7 @@ def _reload(registry: VeraDataRegistry, state_queue: StateQueue):
 
 
 def main(server: Server | None | str = None, **kwargs):
-    print("Launching VERACore")
+    print("Launching VERACore", __version__)
     # Get or create server
     if server is None:
         server = get_server(client_type="vue2")

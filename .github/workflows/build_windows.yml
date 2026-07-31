@@ -20,11 +20,19 @@ jobs:
           - os: windows-2022
             name: windows-x64
 
-    env:
-      RELEASE_TAG: build-${{ github.sha }}
-
     steps:
       - uses: actions/checkout@v4
+
+      # ---------- Version ----------
+      - name: Read version
+        id: ver
+        shell: bash
+        run: |
+          V=$(grep -E '^version = ' setup.cfg | head -1 | sed 's/version = //' | tr -d ' ')
+          if [ -z "$V" ]; then echo "No version found in setup.cfg"; exit 1; fi
+          echo "clean=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V"  >> "$GITHUB_OUTPUT"
+          echo "Building version $V"
 
       # ---------- Vue components ----------
       - uses: actions/setup-node@v4
@@ -74,15 +82,44 @@ jobs:
       - name: Build installer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" VeraCoreInno.iss'
+        run: >
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          /DMyAppVersion=${{ steps.ver.outputs.clean }} VeraCoreInno.iss
 
-      # ========================= Package + upload =================================
-
+      # ========================= Release =================================
       - name: Upload installer to release (Windows)
         if: runner.os == 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" --repo "${{ github.repository }}" --title "$RELEASE_TAG" --notes "Automated build" 2>/dev/null || true
-          gh release upload "$RELEASE_TAG" "Output/VeraCoreSetup.exe" --repo "${{ github.repository }}" --clobber
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes "Release ${{ steps.ver.outputs.clean }}" 2>/dev/null || true
+          gh release upload "$TAG" "Output/VeraCoreSetup.exe" --repo "${{ github.repository }}" --clobber
+
+      # ========================= Publish update manifest =================================
+      - name: Publish version.json
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.UPDATES_REPO_TOKEN }}
+          V: ${{ steps.ver.outputs.clean }}
+        run: |
+          cat > version.json <<EOF
+          {
+            "version": "$V",
+            "url": "https://github.com/${{ github.repository }}/releases",
+            "mandatory": false,
+            "min_supported": "1.0.0",
+            "published": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "notes": ""
+          }
+          EOF
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/jsalem5/vera-core-updates-test.git" pub
+          cp version.json pub/version.json
+          cd pub
+          git config user.name  "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add version.json
+          git commit -m "release $V" --allow-empty
+          git push

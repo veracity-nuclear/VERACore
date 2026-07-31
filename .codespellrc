@@ -8,7 +8,8 @@ skip =
     *.egg-info,
     package-lock.json,
     bundles,
-    vue-components/node_modules
+    vue-components/node_modules,
+    VeraCore.spec,
 ignore-words-list =
     vera,
     veracore,

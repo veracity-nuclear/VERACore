@@ -110,7 +110,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(src_id)
         if src is None or not array_name:
             return figure
-        full_array = src.array(array_name)
+        full_array = src.get_dataset(array_name)
 
         units = full_array.physical_units
         units_label = f" ({units})" if units != "unitless" else ""

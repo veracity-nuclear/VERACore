@@ -91,7 +91,7 @@ class VeraDataRegistry:
         if src_id not in self._srcs:
             return VeraDtype.UNKNOWN
         src = self._srcs[src_id]
-        return src.array_dtype(ds_name)
+        return src.get_dataset_dtype(ds_name)
 
     def src_ids(self):
         """Return a view of all registered source ids."""
@@ -107,13 +107,6 @@ class VeraDataRegistry:
         """Set the active state index on every registered source."""
         for src in self._srcs.values():
             src.active_state_index = nstate
-
-    def full_core_keys(self) -> dict[str, list[str]]:
-        """Map each source id to its active state's full-core dataset names."""
-        full_core_keys = {
-            src_id: self._srcs[src_id].active_state_full_core_keys for src_id in self._srcs.keys()
-        }
-        return full_core_keys
 
     def shared_time_axes(self):
         if not self._srcs:

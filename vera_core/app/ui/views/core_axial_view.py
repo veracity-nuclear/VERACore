@@ -140,7 +140,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(state[selected_src_key])
         if src is None:
             return
-        array = src.array(state[selected_array_key])
+        array = src.get_dataset(state[selected_array_key])
         core = src.core
         dtype = array.dataset_type
         if dtype not in ALLOWED_DTYPES:

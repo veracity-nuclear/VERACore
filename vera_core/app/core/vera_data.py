@@ -192,7 +192,6 @@ def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
     dtype = array.dataset_type
     has_reflected_pins = dtype in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
     if has_reflected_pins and core_sym == 4:
-        array = array.copy()
         hpy = array.shape[0] // 2
         hpx = array.shape[1] // 2
         match array.dataset_type:
@@ -310,9 +309,7 @@ class LazyHDF5Loader:
     """Lazily exposes HDF5 datasets as attributes, reading on access.
 
     Datasets in _dataset_names are not held in memory by default. Accessing one
-    that isn't cached falls through to __getattr__, which reads it transiently.
-    _cache stores a dataset as an instance attribute. _uncache deletes
-    that attribute so access reverts to the lazy
+    that isn't cached loads it in from the h5 file.
     """
 
     def __init__(
@@ -334,8 +331,43 @@ class LazyHDF5Loader:
         self._path = path
         self._dataset_names = dataset_names
         self._dataset_dtypes = dataset_dtypes
+        self._cache: dict[str, VeraDataset] = {}
+        self._pinned: dict[str, VeraDataset] = {}
+        self.uncache_all()  # start lazy
 
-        self._uncache_all()  # start lazy
+    def __getitem__(self, key) -> VeraDataset:
+        if key in self._cache:
+            return self._cache[key]
+        elif key in self._pinned:
+            return self._pinned[key]
+        elif key in self._dataset_names:
+            ds = self._make_dataset(key)
+            if ds is None:
+                raise KeyError(f"{key} not found in HDF file")
+            return ds
+        else:
+            raise KeyError(f"{key} not found in HDF file")
+
+    def __contains__(self, key):
+        return (
+            key in self._pinned
+            or key in self._cache
+            or (key in self._dataset_names and self._in_h5(key))
+        )
+
+    def get(self, key: str, fallback: None | VeraDataset = None) -> VeraDataset | None:
+        if key in self._cache:
+            return self._cache[key]
+        elif key in self._pinned:
+            return self._pinned[key]
+        elif key in self._dataset_names:
+            ds = self._make_dataset(key)
+            return ds if ds is not None else fallback
+        else:
+            return fallback
+
+    def pin(self, key: str, dataset: VeraDataset):
+        self._pinned[key] = dataset
 
     def _in_h5(self, name: str) -> bool:
         return name in self._f[f"{self._path}"]
@@ -360,9 +392,10 @@ class LazyHDF5Loader:
         if self._dataset_dtypes and self._dataset_dtypes.get(shape) is not None:
             dtype = self._dataset_dtypes.get(shape)
         arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
-        return VeraDataset(arr, dtype, units)
+        ds = VeraDataset(arr, dtype, units)
+        return ds
 
-    def _cache(self, name) -> None:
+    def cache(self, name) -> None:
         """Read a dataset and store it as an instance attribute."""
         if self._f is None:
             return
@@ -370,44 +403,21 @@ class LazyHDF5Loader:
             raise AttributeError(name)
         if not self._in_h5(name):
             return
-        setattr(self, name, self._make_dataset(name))
+        self._cache[name] = self._make_dataset(name)
 
-    def _uncache(self, name) -> None:
+    def uncache(self, name) -> None:
         """Drop a dataset's resident attribute so access reverts to lazy."""
-        if self._f is None:
-            return
-        if name not in self._dataset_names:
-            raise AttributeError(name)
-        self.__dict__.pop(name, None)
+        self._cache.pop(name, None)
 
-    def _cache_all(self) -> None:
+    def cache_all(self) -> None:
         """Load every managed dataset in memory."""
         for name in self._dataset_names:
-            self._cache(name)
+            self.cache(name)
 
-    def _uncache_all(self) -> None:
+    def uncache_all(self) -> None:
         """Drop every managed dataset back to the lazy."""
         for name in self._dataset_names:
-            self._uncache(name)
-
-    def has_dataset(self, name):
-        """True if name is a managed dataset or an attribute.
-
-        This is here to avoids the disk read that hasattr
-        triggers via __getattr__
-        """
-        return name in self._dataset_names or name in self.__dict__
-
-    def __getattr__(self, name: str):
-        """Read a managed but uncached dataset transiently on attribute miss
-
-        Only fires when normal lookup fails. The result is returned, not stored.
-        """
-        # Runs only when normal lookup fails (name was uncached/deleted).
-        names = self.__dict__.get("_dataset_names")  # avoid recursion
-        if names and name in names:
-            return self._make_dataset(name)  # transient: not stored
-        raise AttributeError(name)
+            self.uncache(name)
 
 
 def _make_ji_safe(j: int, i: int, array: np.ndarray):
@@ -430,7 +440,7 @@ def _nearest_nonzero_ij(array, j, i):
 
 
 FALLBACK_AXIAL_MESH = np.array([0, 20, 40, 60])
-DEFAULT_AXIAL_MESH_STEP = 20
+DEFAULT_AXIAL_MESH_STEP = 10
 DEFAULT_PIN_PITCH = 1.26  # cm
 
 
@@ -483,8 +493,12 @@ class VeraOutCore(LazyHDF5Loader):
         self.aspect_ratio = (
             f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1
         )  # dx / dy
-        self._cache_all()
-        if not hasattr(self, "core_map") or self.core_map is None:
+        self.cache_all()
+        self.axial_mesh = self.get("axial_mesh")
+        self.core_map = self.get("core_map")
+        self.core_sym = self.get("core_sym")
+        self.pin_volumes = self.get("pin_volumes")
+        if self.core_map is None:
             raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
         self._determine_core_shape(self.core_map, overrides)
         self._check_missing()
@@ -536,7 +550,7 @@ class VeraOutCore(LazyHDF5Loader):
         elif "pin_heated_surface_area" in core_group:
             self.npy, self.npx, self.nax, self.nass = core_group["pin_heated_surface_area"].shape
             self._npin_src = self._nax_src = "/CORE/pin_heated_surface_area"
-        elif hasattr(self, "pin_volumes") and self.pin_volumes is not None:
+        elif self.pin_volumes is not None:
             self.npy, self.npx, self.nax, self.nass = np.shape(self.pin_volumes)
             self._npin_src = self._nax_src = "/CORE/pin_volumes"
         elif "STATE_0001/pin_powers" in self.f:
@@ -655,7 +669,7 @@ class VeraOutCore(LazyHDF5Loader):
                 self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
                 self.comp_map_start_index = cstart_w
                 return
-            elif self.has_comp_core:
+            elif self.has_comp_core():
                 self.comp_map_start_index = start_w
             if self.detector_map is not None:
                 self.detector_map = self.detector_map[start_w:, start_h:]
@@ -1036,7 +1050,7 @@ class VeraOutState(LazyHDF5Loader):
         The dataset is set as an attribute and tracked in diff_datasets.
         It is not categorized and not written to the file.
         """
-        setattr(self, dataset_name, dataset)
+        self.pin(dataset_name, dataset)
         self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
         ds_dtype = dataset.dataset_type
         if ds_dtype == VeraDtype.UNKNOWN:
@@ -1049,7 +1063,7 @@ class VeraOutState(LazyHDF5Loader):
         Like add_diff_dataset, but also categorizes the dataset by shape so it
         shows up in the grouped key listings. Not written to the file.
         """
-        setattr(self, dataset_name, dataset)
+        self.pin(dataset_name, dataset)
         self.derived_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
         ds_dtype = dataset.dataset_type
         if ds_dtype == VeraDtype.UNKNOWN:
@@ -1090,18 +1104,6 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
-    def active_state_full_core_keys(self) -> list:
-        """Flat list of dataset names available on the active state."""
-        pass
-
-    @property
-    @abstractmethod
-    def active_state_grouped_keys(self) -> list:
-        """Active-state dataset names grouped by category for UI display."""
-        pass
-
-    @property
-    @abstractmethod
     def active_state(self) -> VeraOutState:
         """The currently selected state."""
         pass
@@ -1118,31 +1120,68 @@ class VeraDataSource(ABC):
         """Set the active state, switching which state's data is exposed."""
         pass
 
-    def _get_dataset(self, ds_name: str) -> VeraDataset | None:
+    def _get_dataset(self, ds_name: str, state_idx: int | None = None) -> VeraDataset | None:
+        """Resolve a named array to its VeraDataset, without masking.
+
+        Resolution order:
+          - Names in `arrays_on_core` (e.g. pin_volumes) come from the core and
+            ignore `state_idx`, since core data is shared by every state.
+          - All other names come from `states[state_idx]`, or the active state
+            when `state_idx` is None.
+
+        args:
+            ds_name: dataset name as it appears in the state or core group
+            state_idx: state to read from; None uses the active state. Negative
+                indices are rejected rather than wrapping.
+
+        Returns the dataset, or None if the name is unknown to the source or
+        resolves to something that is not a VeraDataset. Raises IndexError if
+        `state_idx` is out of range, including for core arrays.
+
+        Note: reads are lazy. When the target state is uncached, this triggers a
+        full read of the dataset from the h5 file.
+        """
+        if state_idx is not None and not 0 <= state_idx < len(self.states):
+            raise IndexError(f"{state_idx} out of index range")
         arrays_on_core = [
             "pin_volumes",
         ]
-        if ds_name in arrays_on_core and isinstance(getattr(self.core, ds_name), VeraDataset):
-            # This one is on the core
-            return getattr(self.core, ds_name)
-        if self.active_state.has_dataset(ds_name) and isinstance(
-            getattr(self.active_state, ds_name), VeraDataset
-        ):
-            return getattr(self.active_state, ds_name)
+        if ds_name in arrays_on_core:
+            ds_src = self.core
+        elif state_idx is not None:
+            ds_src = self.states[state_idx]
         else:
+            ds_src = self.active_state
+
+        ds = ds_src.get(ds_name, None)
+        if not isinstance(ds, VeraDataset):
             return None
+        return ds
 
-    def array(self, array_name: str, mask_reflected: bool = True) -> VeraDataset:
-        """Return a named array from the core or the active state.
+    def get_dataset(
+        self,
+        array_name: str,
+        mask_reflected: bool = True,
+        state_idx: int | None = None,
+    ) -> VeraDataset:
+        """Return a named array from the core or a state, ready for use.
 
-        Core arrays (e.g. pin_volumes) come from the core.
-        Everything else comes from the active state, with reflected positions masked to NaN unless mask_reflected is False.
+        args:
+            array_name: dataset name
+            mask_reflected: set reflected positions to NaN on odd quarter cores
+            state_idx: state to read from; None uses the active state
+
+        Returns the dataset. Masking returns a copy, so the result may or may not
+        alias the cached array depending on `mask_reflected` and core symmetry;
+        treat it as read-only either way.
+
+        Raises RuntimeError if the name is not found, IndexError if `state_idx`
+        is out of range.
         """
-
-        # These are on the core
-        array = self._get_dataset(array_name)
-        if array is None:
-            RuntimeError(f"Could not find dataset/array named {array_name}.")
+        raw = self._get_dataset(array_name, state_idx)
+        if raw is None:
+            raise RuntimeError(f"Could not find dataset/array named {array_name}.")
+        array = raw.copy()
         cm = (
             self.core.reduced_core_map
             if not array.dataset_type.is_computational()
@@ -1153,25 +1192,31 @@ class VeraDataSource(ABC):
             array = nan_out_reflected(cm, self.core.core_sym, array)
         return array
 
-    def array_dtype(self, array_name: str) -> VeraDtype:
+    def get_dataset_dtype(self, array_name: str, state_idx: int | None = None) -> VeraDtype:
         """Return the VeraDtype of a named array, or UNKNOWN if not found.
-        Resolves against the core for core arrays and the active state otherwise.
+
+        Resolves against the core for core arrays and `state_idx` (or the active
+        state) otherwise. Raises IndexError if `state_idx` is out of range.
         """
-        ds = self._get_dataset(array_name)
+        ds = self._get_dataset(array_name, state_idx)
         return ds.dataset_type if ds is not None else VeraDtype.UNKNOWN
 
-    def array_units(self, array_name: str) -> str:
-        """Return the units of a named array, or "unitless" if not found.
-        Resolves against the core for core arrays and the active state otherwise.
+    def get_dataset_units(self, array_name: str, state_idx: int | None = None) -> str:
+        """Return the physical units of a named array, or "Unitless" if not found.
+
+        Resolves against the core for core arrays and `state_idx` (or the active
+        state) otherwise. Raises IndexError if `state_idx` is out of range.
         """
-        ds = self._get_dataset(array_name)
+        ds = self._get_dataset(array_name, state_idx)
         return ds.physical_units if ds is not None else "Unitless"
 
-    def array_shape(self, array_name: str) -> tuple:
+    def get_dataset_shape(self, array_name: str, state_idx: int | None = None) -> tuple:
         """Return the shape of a named array, or an empty tuple if not found.
-        Resolves against the core for core arrays and the active state otherwise.
+
+        Resolves against the core for core arrays and `state_idx` (or the active
+        state) otherwise. Raises IndexError if `state_idx` is out of range.
         """
-        ds = self._get_dataset(array_name)
+        ds = self._get_dataset(array_name, state_idx)
         return tuple(np.shape(ds)) if ds is not None else tuple()
 
     @abstractmethod

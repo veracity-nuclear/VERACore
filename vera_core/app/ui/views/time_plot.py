@@ -41,8 +41,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
-            array_shape = np.shape(src.array(array_name, mask_reflected=False))
-            array_dtype = src.array_dtype(array_name)
+            array_shape = np.shape(src.get_dataset(array_name, mask_reflected=False))
+            array_dtype = src.get_dataset_dtype(array_name)
             is_comp = array_dtype.is_computational()
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
@@ -50,7 +50,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             ny, nx, nax, nass, _, _ = indices
             assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
             axial_label = src.core.get_axial_mesh_means(dataset_type=array_dtype)[nax]
-            units = src.array_units(array_name)
+            units = src.get_dataset_units(array_name)
             units_label = f" ({units}) " if units != "unitless" else ""
             indices_list = []
             match array_dtype:
@@ -108,7 +108,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     continue
             for idx_n, indices in enumerate(indices_list):
                 group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
-                values = [getattr(x, array_name)[indices] for x in src.states]
+                values = [x.get(array_name)[indices] for x in src.states if array_name in x]
                 figure.add_trace(
                     go.Scatter(
                         x=time_axis,

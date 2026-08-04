@@ -94,7 +94,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         core = vera_source.core
         state[aspect_ratio_key] = core.aspect_ratio
 
-        array = vera_source.array(selected_array)
+        array = vera_source.get_dataset(selected_array)
         array_dtype = array.dataset_type
         if array_dtype.title not in option_for(0)["allowed_categories"]:
             return

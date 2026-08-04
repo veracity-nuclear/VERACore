@@ -55,7 +55,7 @@ def create_core_view(
 ):
     if z < 0:
         raise RuntimeError(f"z must be < 0, z = {z}")
-    dataset = vera_source.array(dataset_name)
+    dataset = vera_source.get_dataset(dataset_name)
     ds_dtype = dataset.dataset_type
     if ds_dtype not in ALLOWED_DTYPES:
         return tuple()

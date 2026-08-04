@@ -25,7 +25,7 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
                 "category": cat.replace("_", " ").title(),
                 "entries": [{"text": k.replace("_", " ").title(), "value": k} for k in names],
             }
-            for cat, names in registry.get(fid).active_state_grouped_keys
+            for cat, names in registry.get(fid).active_state.grouped_full_core_keys
         ]
         for fid in registry.src_ids()
     }

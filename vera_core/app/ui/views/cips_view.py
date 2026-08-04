@@ -76,7 +76,7 @@ def _ordered_pairs(tokens):
 
 def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresholds):
     """One metric as a core-shaped grid of floats/None, plus its value range."""
-    dataset = vera_source.array(array_name)
+    dataset = vera_source.get_dataset(array_name)
     ds_dtype = dataset.dataset_type
     match ds_dtype:
         case VeraDtype.RADIAL_ASSEMBLY:
@@ -108,7 +108,7 @@ def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_stat
     source = None
     for src_id, array_name in _ordered_pairs(tokens):
         vera_source = registry.get(src_id)
-        if vera_source is None or vera_source.array_dtype(array_name) not in ALLOWED_DTYPES:
+        if vera_source is None or vera_source.get_dataset_dtype(array_name) not in ALLOWED_DTYPES:
             continue
         thresholds = thresholds_state.get(format_label(src_id, array_name), [])
         values, value_range = _metric_values(vera_source, array_name, z, thresholds)
@@ -118,7 +118,7 @@ def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_stat
                 "label": _role_label(array_name),
                 "name": array_name,
                 "src_id": src_id,
-                "units": vera_source.array_units(array_name),
+                "units": vera_source.get_dataset_units(array_name),
                 "values": values,
             }
         )

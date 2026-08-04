@@ -96,7 +96,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # Extract data from H5 + add to cache
         if images_dataset is None:
-            array = vera_source.array(selected_array)
+            array = vera_source.get_dataset(selected_array)
             array_dtype: VeraDtype = array.dataset_type
             if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
                 return

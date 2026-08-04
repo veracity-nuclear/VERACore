@@ -46,13 +46,13 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return ""
-        return src.array_units(dataset_name)
+        return src.get_dataset_units(dataset_name)
 
     def _ds_info(src_id, dataset_name):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return None
-        return src.array_shape(dataset_name), src.array_dtype(dataset_name)
+        return src.get_dataset_shape(dataset_name), src.get_dataset_dtype(dataset_name)
 
     def _drop_axis(shape, axis):
         if axis is None:

@@ -204,7 +204,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
         core = vera_source.core
-        array = vera_source.array(selected_array)
+        array = vera_source.get_dataset(selected_array)
         array_dtype: VeraDtype = array.dataset_type
         if array_dtype == VeraDtype.PIN and core.non_fuel_locs is not None:
             array[core.non_fuel_locs] = np.nan

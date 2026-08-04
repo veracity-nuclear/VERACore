@@ -318,7 +318,7 @@ def _update_volume(server, registry: VeraDataRegistry, view_id):
     vera_out_file = registry.get(src_id)
     if vera_out_file is None or not array_name:
         return
-    array = vera_out_file.array(array_name)
+    array = vera_out_file.get_dataset(array_name)
     if array.dataset_type.title not in option_for(0)["allowed_categories"]:
         return
 

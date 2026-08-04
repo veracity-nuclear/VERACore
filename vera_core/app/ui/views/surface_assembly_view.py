@@ -72,7 +72,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             return
         _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
-        array = vera_source.array(selected_array)
+        array = vera_source.get_dataset(selected_array)
         array_dtype = array.dataset_type
         if array_dtype.title not in option_for(0)["allowed_categories"]:
             return

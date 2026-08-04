@@ -16,7 +16,9 @@ from .vera_tools.VERAout import VERAout
 
 
 class VeraOutFile(VeraDataSource):
-    def __init__(self, filename: str, core_overrides: CoreOverride | None = None):
+    def __init__(
+        self, filename: str, core_overrides: CoreOverride | None = None, state_caching: bool = True
+    ):
         """Open a VERA output file and build its core and state objects.
 
         Opens two handles on the file (a direct h5py.File and a VERAout
@@ -25,6 +27,7 @@ class VeraOutFile(VeraDataSource):
         """
         if core_overrides is None:
             core_overrides = {}
+        self._state_caching = state_caching
         self._file_path = filename
         self.f = h5py.File(filename, "r", locking=False)
         try:
@@ -47,9 +50,9 @@ class VeraOutFile(VeraDataSource):
         self._time_axes = {}
         for time_data_point in ("exposure", "core_exposure", "exposure_efpd"):
             time_axis = [
-                getattr(state, time_data_point).item()
+                state.get(time_data_point).item()
                 for state in self.states
-                if state.has_dataset(time_data_point)
+                if time_data_point in state
             ]
             if (
                 np.shape(time_axis) != np.shape(self.states)
@@ -105,14 +108,6 @@ class VeraOutFile(VeraDataSource):
         return self.states[self.active_state_index]
 
     @property
-    def active_state_full_core_keys(self):
-        return self.active_state.full_core_keys
-
-    @property
-    def active_state_grouped_keys(self):
-        return self.active_state.grouped_full_core_keys
-
-    @property
     def active_state_index(self):
         return self._active_state_index
 
@@ -127,12 +122,13 @@ class VeraOutFile(VeraDataSource):
         if hasattr(self, "_active_state_index"):
             if self._active_state_index == index:
                 return
-            else:
+            elif self._state_caching:
                 # Clear the cache from the active state
-                self.active_state._uncache_all()
+                self.active_state.uncache_all()
 
         self._active_state_index = index
-        self.active_state._cache_all()
+        if self._state_caching:
+            self.active_state.cache_all()
 
     def add_new_diff_dataset(
         self,
@@ -150,12 +146,10 @@ class VeraOutFile(VeraDataSource):
             if idx >= len(comp_src.states):
                 return
             comp_state = comp_src.states[idx]
-            if not state.has_dataset(ref_dataset_name) or not comp_state.has_dataset(
-                comp_dataset_name
-            ):
+            if ref_dataset_name not in state or comp_dataset_name not in comp_state:
                 continue
-            ref_data: VeraDataset = getattr(state, ref_dataset_name) * ref_scale
-            comp_data: VeraDataset = getattr(comp_state, comp_dataset_name) * comp_scale
+            ref_data: VeraDataset = state.get(ref_dataset_name) * ref_scale
+            comp_data: VeraDataset = comp_state.get(comp_dataset_name) * comp_scale
             ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
             comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
             if ref_data.dataset_type != comp_data.dataset_type:
@@ -198,7 +192,7 @@ class VeraOutFile(VeraDataSource):
             case VeraAxes.CORE:
                 der = VeraDataset(np.array([self.vera_calculator.Average(data)]), VeraDtype.SCALAR)
             case VeraAxes.NODE:
-                der = VeraDataset(self.vera_calculator.Node(data), VeraDtype.NODE)
+                der = VeraDataset(self.vera_calculator.Node(data), VeraDtype.NODAL)
             case VeraAxes.RADIAL:
                 der = VeraDataset(self.vera_calculator.Radial(data), VeraDtype.RADIAL)
             case VeraAxes.RADIAL_ASSEMBLY:
@@ -221,13 +215,13 @@ class VeraOutFile(VeraDataSource):
         if not self.vera_calculator:
             return
         for state in self._states:
-            if state.has_dataset(new_dataset_name):
+            if new_dataset_name in state:
                 raise ValueError(
                     f"A dataset named {new_dataset_name} already exists in this source, please pick a unique name."
                 )
-            if not state.has_dataset(source_array_name):
+            data = state.get(source_array_name, None)
+            if data is None:
                 continue
-            data = getattr(state, source_array_name)
             match der_method:
                 case DerivationMethod.AVERAGE:
                     der = self._run_avg_over_axes(data, axes)

@@ -199,7 +199,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         src = _src(src_id)
         # array_dtype returns None for a name that no longer exists, e.g. one
         # left behind by a removed source or recipe.
-        dtype = src.array_dtype(array_name) if src is not None and array_name else None
+        dtype = src.get_dataset_dtype(array_name) if src is not None and array_name else None
         if dtype is not None and (allowed is None or dtype.title in allowed):
             return (src_id, array_name)
         others = [s for s in registry.src_ids() if s and s != src_id]
@@ -254,7 +254,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         src = _src(src_id)
         if src is None or not array_name:
             return
-        for g, group_array in enumerate(_group_arrays(src.array(array_name))):
+        for g, group_array in enumerate(_group_arrays(src.get_dataset(array_name))):
             state[f"color_range_{view_id}_{g}"] = array_range(group_array)
 
     def _init_global_state():
@@ -325,7 +325,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             array_name = state[f"selected_array_{view_id}"]
             src = _src(src_id)
             if src is not None and array_name:
-                state[f"color_units_{view_id}"] = src.array_units(array_name)
+                state[f"color_units_{view_id}"] = src.get_dataset_units(array_name)
 
         @state.change(f"grid_view_{view_id}")
         @requires_src

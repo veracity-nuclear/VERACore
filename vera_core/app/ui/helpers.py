@@ -58,14 +58,12 @@ def set_info(view_id: int, state: State, registry: VeraDataRegistry):
         return
     j, i, layer, assy, src_id, ds_name = indices
     vera_source = registry.get(src_id)
-    dtype = vera_source.array_dtype(ds_name)
+    dtype = vera_source.get_dataset_dtype(ds_name)
     is_comp = dtype.is_computational()
     axial_mesh = vera_source.core.get_axial_mesh_means(dataset_type=dtype)
-    exposure = None
-    if vera_source.active_state.has_dataset("exposure"):
-        exposure = vera_source.active_state.exposure[0]
+    exposure = vera_source.active_state.get("exposure", None)
     state[f"label_info_{view_id}"] = {
-        "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
+        "Exposure": np.round(exposure[0], decimals=3) if exposure is not None else "not recorded",
         "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
         "Layer": _layer_elevation(axial_mesh, layer),
         "Pin_x": int(i),
@@ -95,7 +93,7 @@ def get_safe_idxs(
     if vera_source is None:
         return None
     core = vera_source.core
-    vdtype = vera_source.array_dtype(dataset_name)
+    vdtype = vera_source.get_dataset_dtype(dataset_name)
     if vdtype == VeraDtype.UNKNOWN:
         return None
     sel_assy = _get_assy_idx(vdtype, state, core)

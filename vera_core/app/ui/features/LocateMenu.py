@@ -63,9 +63,9 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
 
         if time_scope == "all":
             for state_idx, state in enumerate(src.states):
-                if not state.has_dataset(array_name) or getattr(state, array_name) is None:
+                vera_array = state.get(array_name, None)
+                if vera_array is None:
                     continue
-                vera_array = getattr(state, array_name)
                 vera_array = nan_out_reflected(reduced_core_map, core_sym, vera_array)
                 vera_array = _nan_control_rods_pos(controls_rod_pos, vera_array)
                 if np.all(np.isnan(vera_array)):
@@ -80,7 +80,7 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
                     indices_of_extremum = idx
                     winning_state_idx = state_idx
         elif time_scope == "current":
-            vera_array = src.array(array_name)
+            vera_array = src.get_dataset(array_name)
             if vera_array is None or np.all(np.isnan(vera_array)):
                 return None
             if assembly_search:
@@ -127,7 +127,7 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
             if mode not in ("max", "min"):
                 raise RuntimeError(f"Unknown mode: {mode}. Cannot find extremum for this mode.")
 
-            vera_array = src.array(array_name)
+            vera_array = src.get_dataset(array_name)
             vera_dtype = vera_array.dataset_type
 
             if vera_array is None:

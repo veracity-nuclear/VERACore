@@ -292,132 +292,99 @@ def build_core_dtypes(
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
 
 
-def _get_units(h5_ref: h5py.Dataset):
-    units = "Unitless"
-    if "physical_units" in h5_ref.attrs:
-        units = h5_ref.attrs["physical_units"]
-    elif "units" in h5_ref.attrs:
-        units = h5_ref.attrs["units"]
-    if isinstance(units, np.ndarray):
-        units = units.item() if units.size == 1 else units.tolist()[0]
-    if isinstance(units, bytes):
-        units = units.decode()
-    return str(units)
+class DatasetSource(ABC):
+    """Where one group's datasets come from. One subclass per backend."""
+
+    @property
+    @abstractmethod
+    def provenance(self) -> str:
+        """Where this dataset came from"""
+
+    @abstractmethod
+    def names(self) -> list[str]:
+        """Dataset names this source can supply. Drives the store's manifest."""
+
+    @abstractmethod
+    def shape(self, name: str) -> tuple[int, ...] | None:
+        """Shape without reading. None if absent."""
+
+    @abstractmethod
+    def load(self, name: str) -> VeraDataset | None:
+        """Read and wrap. None if absent."""
+
+    # non-abstract: subclasses inherit unless they can do better
+    def has(self, name: str) -> bool:
+        return self.shape(name) is not None
 
 
-class LazyHDF5Loader:
-    """Lazily exposes HDF5 datasets as attributes, reading on access.
+class DatasetStore:
+    """Lazily exposes a source's datasets, caching reads on request.
 
-    Datasets in _dataset_names are not held in memory by default. Accessing one
-    that isn't cached loads it in from the h5 file.
+    The manifest comes from the source once at construction; `names()` is
+    authoritative, so a listed name is one the source can actually supply.
     """
 
-    def __init__(
-        self,
-        f: "h5py.File",
-        path: str,
-        dataset_names: list[str],
-        dataset_dtypes: dict[tuple, "VeraDtype"] | None = None,
-    ):
-        """Store the file handle and dataset names, start lazy.
-
-        args:
-            f: an open h5py.File handle
-            path: the group path the datasets live under (e.g. "/CORE")
-            dataset_names: names of the datasets this loader manages, these are cache and uncached
-            dataset_dtypes: optional, shape -> VeraDtype map for typing datasets
-        """
-        self._f = f
-        self._path = path
-        self._dataset_names = dataset_names
-        self._dataset_dtypes = dataset_dtypes
+    def __init__(self, source: DatasetSource):
+        self._source = source
+        self._names = frozenset(source.names())
         self._cache: dict[str, VeraDataset] = {}
         self._pinned: dict[str, VeraDataset] = {}
-        self.uncache_all()  # start lazy
 
-    def __getitem__(self, key) -> VeraDataset:
-        if key in self._cache:
-            return self._cache[key]
-        elif key in self._pinned:
-            return self._pinned[key]
-        elif key in self._dataset_names:
-            ds = self._make_dataset(key)
-            if ds is None:
-                raise KeyError(f"{key} not found in HDF file")
-            return ds
-        else:
-            raise KeyError(f"{key} not found in HDF file")
+    def __contains__(self, key: str) -> bool:
+        return key in self._pinned or key in self._names or self._source.has(key)
 
-    def __contains__(self, key):
-        return (
-            key in self._pinned
-            or key in self._cache
-            or (key in self._dataset_names and self._in_h5(key))
-        )
-
-    def get(self, key: str, fallback: None | VeraDataset = None) -> VeraDataset | None:
-        if key in self._cache:
-            return self._cache[key]
-        elif key in self._pinned:
-            return self._pinned[key]
-        elif key in self._dataset_names:
-            ds = self._make_dataset(key)
-            return ds if ds is not None else fallback
-        else:
-            return fallback
-
-    def pin(self, key: str, dataset: VeraDataset):
-        self._pinned[key] = dataset
-
-    def _in_h5(self, name: str) -> bool:
-        return name in self._f[f"{self._path}"]
-
-    def _load_dataset(self, name: str) -> "h5py.Dataset":
-        """Return the raw h5py dataset handle for a name (no read)."""
-        return self._f[f"{self._path}/{name}"]
-
-    def _make_dataset(self, name: str) -> VeraDataset:
-        """Load a full dataset into memory and wrap it as a typed VeraDataset.
-
-        Scalars are stored as (1,) arrays for uniform access. The type is looked up from
-        dataset_shapes if available.
-        """
-        if not self._in_h5(name):
-            return None
-        h5_ref = self._load_dataset(name)
-        units = _get_units(h5_ref)
-        raw = h5_ref[()]
-        shape = np.shape(raw)
-        dtype = VeraDtype.UNKNOWN
-        if self._dataset_dtypes and self._dataset_dtypes.get(shape) is not None:
-            dtype = self._dataset_dtypes.get(shape)
-        arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
-        ds = VeraDataset(arr, dtype, units)
+    def __getitem__(self, key: str) -> VeraDataset:
+        ds = self.get(key)
+        if ds is None:
+            raise KeyError(f"{key} not found in source")
         return ds
 
-    def cache(self, name) -> None:
-        """Read a dataset and store it as an instance attribute."""
-        if self._f is None:
-            return
-        if name not in self._dataset_names:
-            raise AttributeError(name)
-        if not self._in_h5(name):
-            return
-        self._cache[name] = self._make_dataset(name)
+    @property
+    def provenance(self) -> str:
+        """Where this dataset came from"""
+        return self._source.provenance
 
-    def uncache(self, name) -> None:
-        """Drop a dataset's resident attribute so access reverts to lazy."""
+    def _make_dataset(self, name: str) -> VeraDataset | None:
+        return self._source.load(name)
+
+    def get(self, key: str, fallback: VeraDataset | None = None) -> VeraDataset | None:
+        if key in self._pinned:
+            return self._pinned[key]
+        if key in self._cache:
+            return self._cache[key]
+        if self._source.has(key):
+            ds = self._make_dataset(key)
+            return ds if ds is not None else fallback
+        return fallback
+
+    def shape(self, name: str) -> tuple[int, ...] | None:
+        """Shape without reading. None if absent."""
+        return self._source.shape(name)
+
+    def pin(self, key: str, dataset: VeraDataset) -> None:
+        """Attach an in-memory dataset that is never evicted."""
+        self._pinned[key] = dataset
+
+    def cache_dataset(self, name: str) -> None:
+        """Read a dataset and hold it resident."""
+        if name not in self._names:
+            raise KeyError(name)
+        ds = self._make_dataset(name)
+        if ds is not None:
+            self._cache[name] = ds
+
+    def uncache_dataset(self, name: str) -> None:
+        """Drop a resident dataset so access reverts to lazy."""
         self._cache.pop(name, None)
 
     def cache_all(self) -> None:
-        """Load every managed dataset in memory."""
-        for name in self._dataset_names:
-            self.cache(name)
+        """Load every managed dataset into memory."""
+        for name in self._names:
+            self.cache_dataset(name)
 
     def uncache_all(self) -> None:
-        """Drop every managed dataset back to the lazy."""
-        for name in self._dataset_names:
-            self.uncache(name)
+        """Drop every resident dataset back to lazy."""
+        self._cache.clear()
 
 
 def _make_ji_safe(j: int, i: int, array: np.ndarray):
@@ -457,24 +424,12 @@ class CorePropMissing(Exception):
         super().__init__(f"Core props missing: {', '.join(missing)}")
 
 
-class VeraOutCore(LazyHDF5Loader):
-    """Holds the core-level data for a VERA output file (the /CORE group).
-
-    The four annotated attributes below double as the manifest of datasets to
-    read from /CORE.
-    Core data is small and shared by every state, so it is cached eagerly rather
-    than lazily.
-    """
-
-    axial_mesh: H5_ARRAY_TYPE | None = None
-    core_map: H5_ARRAY_TYPE | None = None
-    core_sym: H5_ARRAY_TYPE | None = None
-    pin_volumes: H5_ARRAY_TYPE | None = None
+class VeraOutCore(DatasetStore):
+    """Holds the core-level data for a VERA output file (the /CORE group)."""
 
     def __init__(
         self,
-        f: "h5py.File",
-        aspect_ratio: float | None = None,
+        dataset_source: DatasetSource,
         overrides: CoreOverride | None = None,
     ):
         """Build the core from an open h5 file.
@@ -482,21 +437,17 @@ class VeraOutCore(LazyHDF5Loader):
         Pass f to read the /CORE datasets from the file
 
         args:
-            f: an open h5py.File handle (not a path)
             aspect_ratio: dx / dy of a pin cell
         """
         if overrides is None:
             overrides = {}
-        self.f = f
 
-        super().__init__(f, "/CORE", list(self.__annotations__))
-        self.aspect_ratio = (
-            f["/CORE/aspect_ratio"][()] if "aspect_ratio" in f["/CORE/"] else 1
-        )  # dx / dy
-        self.cache_all()
+        super().__init__(source=dataset_source)
+        aspect_ratio = self.get("aspect_ratio")
+        self.aspect_ratio = aspect_ratio if aspect_ratio is not None else 1
         self.axial_mesh = self.get("axial_mesh")
         self.core_map = self.get("core_map")
-        self.core_sym = self.get("core_sym")
+        self.core_sym = self.get("core_sym")[0]
         self.pin_volumes = self.get("pin_volumes")
         if self.core_map is None:
             raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
@@ -504,10 +455,9 @@ class VeraOutCore(LazyHDF5Loader):
         self._check_missing()
         if not self.has_axial_mesh():
             self.axial_mesh = FALLBACK_AXIAL_MESH
-        self.core_sym = self.core_sym[()]
         self._determine_computational_core_shape()
         self._determine_detectors()
-        self._shape_to_dtype = build_core_dtypes(
+        self.shape_to_dtype = build_core_dtypes(
             npiny=self.npy,
             npinx=self.npx,
             nax=self.nax,
@@ -533,30 +483,27 @@ class VeraOutCore(LazyHDF5Loader):
         self.npx = None
         self._npin_src = self._nax_src = "Could not find"
         self._pin_pitch = DEFAULT_PIN_PITCH
+        for pin_ds_name in ("npin", "num_pins"):
+            npins = self.get(pin_ds_name)
+            if npins is not None:
+                self.npy = self.npx = int(npins[0])
+                self._npin_src = f"/CORE/{pin_ds_name}"
+                break
 
-        core_group = self.f["CORE"]
-
-        if "npin" in core_group:
-            npin = int(core_group["npin"][()])
-            self.npy = self.npx = npin
-            self._npin_src = "/CORE/npin"
-        elif "num_pins" in core_group:
-            num_pins = int(core_group["num_pins"][()])
-            self.npy = self.npx = num_pins
-            self._npin_src = "/CORE/num_pins"
-        if "pin_factors" in core_group:
-            self.npy, self.npx, self.nax, self.nass = core_group["pin_factors"].shape
-            self._npin_src = self._nax_src = "/CORE/pin_factors"
-        elif "pin_heated_surface_area" in core_group:
-            self.npy, self.npx, self.nax, self.nass = core_group["pin_heated_surface_area"].shape
-            self._npin_src = self._nax_src = "/CORE/pin_heated_surface_area"
-        elif self.pin_volumes is not None:
-            self.npy, self.npx, self.nax, self.nass = np.shape(self.pin_volumes)
-            self._npin_src = self._nax_src = "/CORE/pin_volumes"
-        elif "STATE_0001/pin_powers" in self.f:
-            # if no pin_volumes see if state contains pin_powers as a source for core_shape
-            self.npy, self.npx, self.nax, self.nass = np.shape(self.f["STATE_0001/pin_powers"])
-            self._npin_src = self._nax_src = "/STATE_0001/pin_powers"
+        for geometry_ds_name in (
+            "pin_factors",
+            "pin_heated_surface_area",
+            "pin_volumes",
+            "STATE_0001/pin_powers",
+        ):
+            core_geometry = self.shape(geometry_ds_name)
+            if core_geometry and len(core_geometry) == 4:
+                self.npy, self.npx, self.nax, self.nass = core_geometry
+                is_state = geometry_ds_name.startswith("STATE_")
+                self._npin_src = self._nax_src = (
+                    f"/CORE/{geometry_ds_name}" if not is_state else geometry_ds_name
+                )
+                break
 
         if "npin" in overrides:
             self.npy = self.npx = overrides["npin"]
@@ -569,9 +516,10 @@ class VeraOutCore(LazyHDF5Loader):
         elif self.has_axial_mesh():
             self.nax = len(self.axial_mesh) - 1
             self._nax_src = "/CORE/axial_mesh"
-        if "apitch" in core_group and self.npx:
-            apitch = core_group["apitch"][()]
-            self._pin_pitch = float(apitch / self.npx)
+
+        apitch = self.get("apitch")
+        if apitch and self.npx:
+            self._pin_pitch = float(apitch[0] / self.npx)
             print("found pin pitch")
 
         if not self.has_axial_mesh() and self.nax:
@@ -594,25 +542,26 @@ class VeraOutCore(LazyHDF5Loader):
     def _determine_computational_core_shape(self):
         self.comp_nass = None
         self.comp_nax = None
-        if "computational_core_map" not in self.f["CORE"]:
+
+        if self.shape("computational_core_map") is None:
             print(
                 "Could not find computational_core_map, unable to determine computational core shape"
             )
             return
-        if "computational_axial_mesh" in self.f["CORE"]:
-            comp_axial_mesh = self.f["CORE/computational_axial_mesh"]
-        elif "STATE_0001/NODAL_XS/AXIALMESH" in self.f:  # fallback location
-            comp_axial_mesh = self.f["STATE_0001/NODAL_XS/AXIALMESH"]
+        if self.shape("computational_axial_mesh"):
+            comp_axial_mesh = self.get("computational_axial_mesh")
+        elif self.shape("STATE_0001/NODAL_XS/AXIALMESH"):  # fallback location
+            comp_axial_mesh = self.get("STATE_0001/NODAL_XS/AXIALMESH")
         else:
             print(
                 "Could not find computational axial_mesh, unable to determine computational core shape"
             )
             return
-        self.comp_core_map = self.f["CORE/computational_core_map"][()]
+        self.comp_core_map = self.get("computational_core_map")
         self.comp_nass = int(
             np.count_nonzero(np.unique(self.comp_core_map[~np.isnan(self.comp_core_map)]))
         )
-        self.comp_axial_mesh = comp_axial_mesh[()]
+        self.comp_axial_mesh = comp_axial_mesh
         self.comp_nax = len(self.comp_axial_mesh) - 1
         self.comp_core_map[np.isnan(self.comp_core_map)] = 0
         self._is_comp_rolled = np.count_nonzero(self.comp_core_map) == np.count_nonzero(
@@ -625,32 +574,23 @@ class VeraOutCore(LazyHDF5Loader):
         self.det_axial_mesh_means = None
         self.ndax = self.nax
         self.is_continous_detector = False
-        core_group: h5py.Group = self.f["CORE"]
-        if "detector_map" not in core_group:
+        self.detector_map = self.get("detector_map")
+        if self.detector_map is None:
             return
-        self.detector_map = core_group["detector_map"][()]
         self.ndet = int(
             np.count_nonzero(np.unique(self.detector_map[~np.isnan(self.detector_map)]))
         )
-        det_axial_mesh_name = next(
-            (ds for ds in core_group.keys() if ds.startswith("detector_axial_mesh")),
-            None,
-        )
-        if not det_axial_mesh_name:
+        if not self.shape("detector_axial_mesh"):
             return
-        self.det_axial_mesh_means = core_group[det_axial_mesh_name][()]
+        self.det_axial_mesh_means = self.get("detector_axial_mesh")
         self.ndax = len(self.det_axial_mesh_means)
         self.is_continous_detector = self.det_axial_mesh_means.ndim == 2
         if not self.is_continous_detector:
             return
-        # raw = self.det_axial_mesh_means
-        # if raw.shape[1] != 2:
-        #     raise RuntimeError("Expects start/stop for 2d detector axial mesh")
-        # self.det_axial_mesh_means = np.linspace(raw[:, 0], raw[:, 1], num=n_points, axis=-1)
 
     def _compute_reduced_core_maps(self) -> None:
         """Compute the reduced core map based upon the core_sym"""
-        sym = self.core_sym[()]
+        sym = self.core_sym
         has_comp_core = self.has_comp_core()
         if sym == 1:
             self.reduced_core_map = self.core_map[:].copy()
@@ -686,14 +626,14 @@ class VeraOutCore(LazyHDF5Loader):
         )
         alphabet = [*string.ascii_uppercase]
 
-        if "xlabel" in self.f["CORE"]:
-            xlabels = [char.decode() for char in self.f["CORE/xlabel"][()][start_index:]]
+        if (raw_xlabels := self.get("xlabel")) is not None:
+            xlabels = [char.decode() for char in raw_xlabels[start_index:]]
         else:
             xlabels = list(reversed(alphabet[:num_cols]))
         self.reduced_core_map_column_labels = xlabels
 
-        if "ylabel" in self.f["CORE"]:
-            ylabels = [char.decode() for char in self.f["CORE/ylabel"][()][start_index:]]
+        if (raw_ylabels := self.get("ylabel")) is not None:
+            ylabels = [char.decode() for char in raw_ylabels[start_index:]]
         else:
             ylabels = list(range(start_index + 1, start_index + num_rows + 1))
         self.reduced_core_map_row_labels = ylabels
@@ -796,7 +736,7 @@ class VeraOutCore(LazyHDF5Loader):
 
         Return VeraDtype.UNKNOWN if shape is not known.
         """
-        return self._shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
+        return self.shape_to_dtype.get(dataset_shape, VeraDtype.UNKNOWN)
 
     def get_core_shape(
         self, dataset: VeraDataset = None, dataset_type: VeraDtype = VeraDtype.UNKNOWN
@@ -953,41 +893,22 @@ class VeraOutCore(LazyHDF5Loader):
         return labels
 
 
-class VeraOutState(LazyHDF5Loader):
-    """Stores the datasets for a single VERA STATE_NNNN point.
-
-    Datasets are discovered and categorized by shape, then loaded lazily
-    through LazyHDF5Loader. Diff and derived datasets added after
-    construction live on the instance but are never written back to the file.
-    """
-
-    def __init__(self, f: "h5py.File", idx: int, core: VeraOutCore):
-        """Build a state either from an open h5 file or from raw Python data.
-
-        Pass either (f, idx) to read from a file, or
-        (data) to construct in memory.
-
-        args:
-            f: an open h5py.File handle (not a path), kept open by the owner
-            idx: the state number, formatted into the /STATE_{idx:04} group
-            core: reference to VeraOutCore object that contains core data for this state
-        """
-        # These are the attributes that will be read from the HDF5 file
+class VeraOutState(DatasetStore):
+    def __init__(self, source: DatasetSource, idx: int, core: VeraOutCore):
         self.categorized_ds_names = {dataset_type: set() for dataset_type in VeraDtype}
         self.dataset_dtypes = {}
         self._core = core
         self._index = idx
-
-        self.__annotations__ = dict()
-        state = f[f"/STATE_{idx:04}"]
-        self._search_for_datasets(state)
-        self.all_datasets = [
-            dataset for category in self.categorized_ds_names.values() for dataset in category
-        ]
-
-        super().__init__(
-            f, f"/STATE_{idx:04}", self.all_datasets, dataset_dtypes=self.dataset_dtypes
-        )
+        super().__init__(source)
+        source_names = frozenset(source.names())
+        for name in source_names:
+            ds_shape = self.shape(name)
+            if ds_shape is None:
+                continue
+            ds_dtype = core.core_dtypes(ds_shape)
+            if ds_dtype == VeraDtype.UNKNOWN:
+                continue
+            self.categorized_ds_names[ds_dtype].add(name)
         self.diff_datasets = dict()
         self.derived_datasets = dict()
 
@@ -1020,29 +941,6 @@ class VeraOutState(LazyHDF5Loader):
     def full_core_keys(self) -> list[str]:
         """Flat, category-ordered list of all dataset names."""
         return [name for _, names in self.grouped_full_core_keys for name in names]
-
-    def _search_for_datasets(self, data):
-        """Find all datasets with known shape and categorize them by VeraDdtype for one state."""
-        if "pin_powers" in data and np.shape(data["pin_powers"]) != self.core.core_shape:
-            raise RuntimeError(
-                f"Mismatch between the shape of STATE_{self._index:04}'s data and the core shape"
-            )
-
-        def _loop_through_datasets(h5_group, group_name=""):
-            for ds_name in h5_group.keys():
-                ds: h5py.Group | h5py.Dataset = h5_group[ds_name]
-                full_name = "/".join(part for part in (group_name, ds_name) if part)
-                if isinstance(ds, h5py.Group):  # recurse on group (subdir)
-                    _loop_through_datasets(ds, group_name=full_name)
-                    continue
-                ds_shape = np.shape(ds)
-                ds_dtype = self.core.core_dtypes(ds_shape)
-                if ds_dtype == VeraDtype.UNKNOWN:
-                    continue
-                self.categorized_ds_names[ds_dtype].add(full_name)
-                self.dataset_dtypes[ds_shape] = ds_dtype
-
-        _loop_through_datasets(data)
 
     def add_diff_dataset(self, dataset_name: str, dataset: VeraDataset) -> None:
         """Attach an in-memory diff dataset to this state.
@@ -1081,8 +979,8 @@ class VeraDataSource(ABC):
 
     @property
     @abstractmethod
-    def file_path(self) -> str:
-        """Raw path to file on disk"""
+    def provenance(self) -> str:
+        """Where the data came from"""
         pass
 
     @property

@@ -11,7 +11,7 @@ from trame_server.core import Server
 from vera_core.version import __version__
 
 from . import ui
-from .core import VeraDataRegistry, VeraOutFile
+from .core import VeraDataRegistry, make_VeraDataSource_from_file
 from .core.vera_data_stream import VeraDataStream
 
 # The user can set this via an environment variable
@@ -78,7 +78,7 @@ def main(server: Server | None | str = None, **kwargs):
         file_path = Path(data_file)
         if not file_path.is_file():
             raise FileNotFoundError(f"{data_file} must be an existing path to a file")
-        vera_out_file = VeraOutFile(data_file)
+        vera_out_file = make_VeraDataSource_from_file(data_file)
         registry.add_src(src=vera_out_file, src_id=file_path.stem)
 
     f = partial(_reload, registry=registry, state_queue=state_queue)

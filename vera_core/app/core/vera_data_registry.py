@@ -144,7 +144,7 @@ class VeraDataRegistry:
     def all_sources(self) -> dict[str, str]:
         src_paths = {}
         for src_id, src in self._srcs.items():
-            src_paths[src_id] = src.file_path
+            src_paths[src_id] = src.provenance
         return src_paths
 
     def clear(self):

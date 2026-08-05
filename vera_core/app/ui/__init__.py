@@ -12,8 +12,8 @@ from vera_core.app.core import (
     Session,
     VeraDataRegistry,
     VeraDtype,
-    VeraOutFile,
     ViewSession,
+    make_VeraDataSource_from_file,
     recipe_sources,
 )
 
@@ -523,7 +523,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         file_overrides = session.file_overrides
         for src_id, path in session.file_paths.items():
             registry.add_src(
-                VeraOutFile(path, core_overrides=file_overrides.get(path, {})),
+                make_VeraDataSource_from_file(path, core_overrides=file_overrides.get(path, {})),
                 src_id=src_id,
             )
         if session.default_src_id in registry:

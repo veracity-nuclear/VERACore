@@ -1,8 +1,8 @@
-import h5py
+from collections.abc import Callable
+
 import numpy as np
 from scipy.interpolate import make_interp_spline
 
-from .types import CoreOverride
 from .vera_data import (
     DerivationMethod,
     VeraAxes,
@@ -17,7 +17,13 @@ from .vera_tools.VERAout import VERAout
 
 class VeraOutFile(VeraDataSource):
     def __init__(
-        self, filename: str, core_overrides: CoreOverride | None = None, state_caching: bool = True
+        self,
+        core: VeraOutCore,
+        states: list[VeraOutState],
+        provenance: str,
+        filename: str | None = None,
+        close_callback: Callable[[], None] | None = None,
+        state_caching: bool = True,
     ):
         """Open a VERA output file and build its core and state objects.
 
@@ -25,26 +31,21 @@ class VeraOutFile(VeraDataSource):
         for averaging).
         It eagerly caches the core, and validates that the core shape agrees with pin_volumes and pin_powers.
         """
-        if core_overrides is None:
-            core_overrides = {}
         self._state_caching = state_caching
-        self._file_path = filename
-        self.f = h5py.File(filename, "r", locking=False)
-        try:
+        self.vera_calculator = None
+        if filename:
             try:
                 self.vera_calculator = VERAout(
                     filename=filename
                 )  # from pyvera, use this for calculating avgs
             except Exception:
                 self.vera_calculator = None
-            self._states = []
-            self._core = VeraOutCore(self.f, overrides=core_overrides)
-            self._create_states()
-            self.active_state_index = 0
-            self._determine_time_axes()
-        except Exception as e:
-            self.f.close()
-            raise e
+        self._core = core
+        self._states = states
+        self.active_state_index = 0
+        self._determine_time_axes()
+        self._provenance = provenance
+        self._close_callback = close_callback
 
     def _determine_time_axes(self):
         self._time_axes = {}
@@ -64,8 +65,8 @@ class VeraOutFile(VeraDataSource):
         self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
 
     @property
-    def file_path(self) -> str:
-        return self._file_path
+    def provenance(self) -> str:
+        return self._provenance
 
     @property
     def core(self) -> VeraOutCore:
@@ -73,15 +74,10 @@ class VeraOutFile(VeraDataSource):
         return self._core
 
     def close(self):
-        self.f.close()
+        if self._close_callback is not None:
+            self._close_callback()
         if self.vera_calculator is not None:
             self.vera_calculator.h5f.close()
-
-    def _create_states(self):
-        """Build a VeraOutState for every STATE_ group found in the file."""
-        state_keys = [key for key in self.f if key.startswith("STATE_")]
-        indices = [int(key.split("_")[1]) for key in state_keys]
-        self._states = [VeraOutState(self.f, idx, self.core) for idx in indices]
 
     def default_datasets(self) -> dict[str, str]:
         categorized_ds_names = self.active_state.categorized_ds_names

@@ -1,3 +1,4 @@
+from .readers.h5_reader import make_VeraDataSource_from_file
 from .session import (
     Session,
     ViewSession,
@@ -49,4 +50,5 @@ __all__ = [
     "VeraDataStream",
     "generate_stream_identifier",
     "VeraOutFile",
+    "make_VeraDataSource_from_file",
 ]

@@ -15,7 +15,9 @@
         :font-weight="i === activeI ? 700 : 400"
         text-anchor="middle"
         dominant-baseline="middle"
-      >{{ xLabels[i] }}</text>
+      >
+        {{ xLabels[i] }}
+      </text>
       <text
         v-for="(row, j) in cells"
         :key="'row-' + j"
@@ -25,7 +27,9 @@
         :font-weight="j === activeJ ? 700 : 400"
         text-anchor="middle"
         dominant-baseline="middle"
-      >{{ yLabels[j] }}</text>
+      >
+        {{ yLabels[j] }}
+      </text>
     </g>
     <template v-for="row in cells">
       <g
@@ -47,15 +51,20 @@
           <line
             v-for="(g, gi) in gridLines"
             :key="'g' + gi"
-            :x1="g.x1" :y1="g.y1" :x2="g.x2" :y2="g.y2"
+            :x1="g.x1"
+            :y1="g.y1"
+            :x2="g.x2"
+            :y2="g.y2"
             :stroke="theme.grid"
             stroke-width="1"
             vector-effect="non-scaling-stroke"
           />
           <line
             v-if="referenceLine"
-            :x1="referenceLine.x1" :y1="referenceLine.y1"
-            :x2="referenceLine.x2" :y2="referenceLine.y2"
+            :x1="referenceLine.x1"
+            :y1="referenceLine.y1"
+            :x2="referenceLine.x2"
+            :y2="referenceLine.y2"
             :stroke="theme.reference"
             stroke-width="1"
             stroke-dasharray="2 2"
@@ -89,7 +98,9 @@
             :font-size="labelFont * 0.8"
             :fill="theme.label"
             text-anchor="middle"
-          >{{ cell.label }}</text>
+          >
+            {{ cell.label }}
+          </text>
         </template>
         <rect
           :width="cellW"
@@ -101,8 +112,13 @@
         />
       </g>
     </template>
-    <g v-if="selectionPath" pointer-events="none" fill="none"
-       stroke-linecap="round" stroke-linejoin="round">
+    <g
+      v-if="selectionPath"
+      pointer-events="none"
+      fill="none"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path
         :d="selectionPath"
         :stroke="theme.halo"

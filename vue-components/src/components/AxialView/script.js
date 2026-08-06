@@ -259,12 +259,16 @@ export default {
         this.availWidth / this.unitWidth,
         this.availHeight / this.unitHeight,
         this.maxCellSize / (Math.max(...this.xSizes) * this.xScale),
-        this.maxCellSize / (Math.max(...this.ySizes) * this.yScale),
+        this.maxCellSize / (Math.max(...this.ySizes) * this.yScale)
       );
       return Number.isFinite(f) ? f : 0;
     },
-    xEdges() { return edgesFrom(this.xSizes, this.xScale * this.fit); },
-    yEdges() { return edgesFrom(this.ySizes, this.yScale * this.fit); },
+    xEdges() {
+      return edgesFrom(this.xSizes, this.xScale * this.fit);
+    },
+    yEdges() {
+      return edgesFrom(this.ySizes, this.yScale * this.fit);
+    },
     dataWidth() {
       return this.xEdges[this.xEdges.length - 1];
     },
@@ -295,7 +299,11 @@ export default {
       const ticks = [];
       const start = Math.ceil(lo / step) * step;
       for (let v = start; v <= hi + 1e-9; v += step) {
-        ticks.push({ value: v, text: formatTick(v, step), y: this.pixelForCm(v) });
+        ticks.push({
+          value: v,
+          text: formatTick(v, step),
+          y: this.pixelForCm(v),
+        });
       }
       return ticks;
     },
@@ -494,7 +502,12 @@ export default {
       const rect = event.currentTarget.getBoundingClientRect();
       const lx = event.clientX - rect.left;
       const ly = event.clientY - rect.top;
-      return { lx, ly, i: indexAt(this.xEdges, lx), j: indexAt(this.yEdges, ly) };
+      return {
+        lx,
+        ly,
+        i: indexAt(this.xEdges, lx),
+        j: indexAt(this.yEdges, ly),
+      };
     },
     onClick(event) {
       const { i, j } = this.locate(event);

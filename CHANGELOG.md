@@ -37,3 +37,9 @@ linked, interactive views arranged in a configurable grid.
 - In-application version notifications when a newer release is available.
 
 [2.0.0]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.0
+
+## [2.0.1] - 2026-08-06
+
+- This version adds functionality for viewing numeric values of nodal and assembly valued datasets on the core view, axial view, and surface core view.
+
+[2.0.1]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.0

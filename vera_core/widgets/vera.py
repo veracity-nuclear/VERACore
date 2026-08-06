@@ -49,6 +49,8 @@ class SurfaceView(HtmlElement):
             ("y_labels", "yLabels"),
             ("aspect_ratio", "aspectRatio"),
             ("cell_size", "cellSize"),
+            ("show_labels", "showLabels"),
+            "decimals",
             "dark",
             "busy",
         ]

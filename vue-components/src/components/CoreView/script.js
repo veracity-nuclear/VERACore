@@ -2,6 +2,15 @@ import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
 const CELL = 30;
+// Labels are laid out in their own coordinate system, LABEL_UNIT per node.
+// Font sizes near 1.0 give browsers wrong glyph metrics, so keep them large
+// and let the viewBox scale them down.
+const LABEL_UNIT = 100;
+const LABEL_MAX_SIZE = 26; // cap, so short labels do not fill the cell
+const LABEL_WIDTH = 86; // width a label may occupy, leaving a margin
+const CHAR_EM = 0.62; // approximate digit advance, in em
+// Beyond nodal (2x2) there are too many values in a cell to label.
+const MAX_LABEL_SIDE = 2;
 
 export default {
   name: 'VeraCore',
@@ -18,21 +27,15 @@ export default {
       type: Object,
       default: () => ({}),
     },
-    xLabels: {
-      type: Array,
-      default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'],
-    },
-    yLabels: {
-      type: Array,
-      default: () => ['8', '9', '10', '11', '12', '13', '14', '15'],
-    },
+    xLabels: { type: Array, default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] },
+    yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
     assemblySize: { type: Number, default: 0 },
     coreCols: { type: Number, default: 0 },
     scaling: { type: Number, default: 2 },
     busy: { type: Boolean, default: false },
-    labels: { type: Array, default: () => [] },
     aspectRatio: { type: Number, default: 1 },
     dark: { type: Boolean, default: false },
+    showLabels: { type: Boolean, default: false },
     decimals: { type: Number, default: 2 },
   },
   watch: {
@@ -72,6 +75,18 @@ export default {
     assemblyWidth() {
       return this.assemblySize;
     },
+    // Assembly-valued (1x1) and nodal (2x2) cells hold few enough values to
+    // label; pin and channel cells do not.
+    canLabel() {
+      return this.assemblySize > 0 && this.assemblySize <= MAX_LABEL_SIDE;
+    },
+    showValues() {
+      return this.showLabels && this.canLabel;
+    },
+    labelViewBox() {
+      const span = this.assemblySize * LABEL_UNIT;
+      return `0 0 ${span} ${span}`;
+    },
     colorMap() {
       return this.lookupTable.update(this.colorPreset, this.colorRange);
     },
@@ -95,6 +110,32 @@ export default {
         }
       }
       return images;
+    },
+    // labels[j][i] = one entry per node, positioned in node units. Node n
+    // sits where toImageURL draws it: row-major from the top-left.
+    labels() {
+      if (!this.showValues) {
+        return [];
+      }
+      const side = this.assemblySize;
+      return (this.value || []).map((line) =>
+        (line || []).map((cell) => {
+          if (!Array.isArray(cell) || !cell.length) {
+            return [];
+          }
+          return cell
+            .map((v, n) => {
+              const text = this.toLabel(v);
+              return {
+                text,
+                x: ((n % side) + 0.5) * LABEL_UNIT,
+                y: (Math.floor(n / side) + 0.5) * LABEL_UNIT,
+                size: Math.min(LABEL_MAX_SIZE, LABEL_WIDTH / (text.length * CHAR_EM)),
+              };
+            })
+            .filter((label) => label.text);
+        })
+      );
     },
   },
   created() {
@@ -150,8 +191,7 @@ export default {
     toUrl(i, j) {
       return this.images?.[j]?.[i];
     },
-    toLabel(i, j) {
-      const v = this.labels?.[j]?.[i];
+    toLabel(v) {
       if (v === undefined || v === null || Number.isNaN(v)) {
         return '';
       }

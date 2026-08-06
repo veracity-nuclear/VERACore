@@ -90,7 +90,6 @@ class CoreView(HtmlElement):
         )
         self._attr_names += [
             "value",
-            "labels",
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
             ("aspect_ratio", "aspectRatio"),
@@ -101,6 +100,7 @@ class CoreView(HtmlElement):
             ("y_labels", "yLabels"),
             ("assembly_size", "assemblySize"),
             ("core_cols", "coreCols"),
+            ("show_labels", "showLabels"),
             "decimals",
             "dark",
             "scaling",

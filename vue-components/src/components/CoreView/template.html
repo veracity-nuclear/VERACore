@@ -49,13 +49,29 @@
           >
             <div style="position: relative; width: 100%; height: 100%;">
               <img :src="toUrl(i, j)" style="width: 100%; height: 100%" />
-              <div
-                v-if="toLabel(i, j)"
-                class="assembly-label"
-                :class="{ 'assembly-label--sm': toLabel(i, j).length > 4 }"
+
+              <!-- Node values, one per image cell -->
+              <svg
+                v-if="showValues && isFilled(i, j)"
+                :viewBox="labelViewBox"
+                fill="black"
+                stroke="rgba(255,255,255,0.75)"
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                       font-family: Roboto, sans-serif; paint-order: stroke;"
               >
-                {{ toLabel(i, j) }}
-              </div>
+                <text
+                  v-for="(label, li) in labels[j][i]"
+                  :key="li"
+                  :x="label.x"
+                  :y="label.y"
+                  :font-size="label.size"
+                  :stroke-width="label.size * 0.18"
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                >
+                  {{ label.text }}
+                </text>
+              </svg>
             </div>
           </v-sheet>
         </v-row>

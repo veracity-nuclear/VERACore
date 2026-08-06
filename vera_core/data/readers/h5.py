@@ -92,34 +92,20 @@ class H5DatasetSource(DatasetSource):
         return ds
 
 
-class DictDatasetSource(DatasetSource):
-    """For mocks and streams: names -> arrays already in memory."""
-
-    def __init__(self, arrays):
-        self._a = arrays
-
-    def names(self):
-        return list(self._a)
-
-    def shape(self, name):
-        return None if name not in self._a else np.shape(self._a[name])
-
-    def load(self, name): ...
-
-
 def open_vera_file_data_source(
     file_path: str, core_overrides: dict | None = None
 ) -> VeraDataSource:
-    file = h5py.File(file_path, locking=False)
+    file = h5py.File(file_path, "r", locking=False)
 
     core_dataset_src = H5DatasetSource(file, "CORE")
     core = VeraOutCore(core_dataset_src, overrides=core_overrides)
 
     state_keys = [key for key in file if key.startswith("STATE_")]
     indices = [(key, int(key.split("_")[1])) for key in state_keys]
+    sorted_indices = sorted(indices, key=lambda i: i[1])
     states = [
         VeraOutState(H5DatasetSource(file, state_dir, core.shape_to_dtype), idx, core)
-        for state_dir, idx in indices
+        for state_dir, idx in sorted_indices
     ]
     close_callback = file.close
     return VeraDataSource(

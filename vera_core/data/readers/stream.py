@@ -5,7 +5,6 @@ import threading
 import msgpack
 import msgpack_numpy as m
 import zmq
-from trame.app.asynchronous import StateQueue
 
 from ..dtypes import DerivationMethod, VeraAxes
 from ..model import VeraDataSource, VeraOutCore, VeraOutState
@@ -18,7 +17,7 @@ def generate_stream_identifier(stream_id: str | int | float) -> str:
 
 
 class VeraDataStream(VeraDataSource):
-    def __init__(self, stream_name: str, port_to_listen_on, state_queue: StateQueue = None):
+    def __init__(self, stream_name: str, port_to_listen_on, state_queue):
         context = zmq.Context()
         self.subscriber = context.socket(zmq.SUB)
         self.subscriber.connect(f"tcp://127.0.0.1:{port_to_listen_on}")

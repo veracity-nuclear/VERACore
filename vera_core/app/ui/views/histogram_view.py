@@ -43,7 +43,6 @@ def option_for(view_id):
             VeraDtype.COMP_ASSY_ENERGY.title,
             VeraDtype.NODAL.title,
             VeraDtype.POINT_DETECTOR.title,
-            VeraDtype.CONTINOUS_DETECTOR.title,
         ],
     }
 

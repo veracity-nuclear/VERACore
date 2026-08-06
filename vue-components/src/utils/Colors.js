@@ -2,11 +2,7 @@ import vtkColorMaps from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction/C
 import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction';
 
 export class LookupTable {
-  constructor(
-    presetName = 'jet',
-    colorRange = [0, 1],
-    nanColor = [1, 1, 1, 1]
-  ) {
+  constructor(presetName = 'jet', colorRange = [0, 1], nanColor = [1, 1, 1, 1]) {
     this.lookupTable = vtkColorTransferFunction.newInstance();
     this.lookupTable.setNanColor(...nanColor);
     this.update(presetName, colorRange);

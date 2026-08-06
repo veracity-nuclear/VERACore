@@ -2,31 +2,12 @@
   class="d-flex flex-column align-center verticalColorMap"
   :class="{ busy, pointerCursor: !busy }"
 >
-  <v-text-field
-    v-model="maxValue"
-    @change="validateRange"
-    hide-details
-    dense
-    class="textField"
-  />
+  <v-text-field v-model="maxValue" @change="validateRange" hide-details dense class="textField" />
   <div class="colorBarContainer">
-    <img
-      :src="imgSrc"
-      class="colorBar"
-    />
+    <img :src="imgSrc" class="colorBar" />
   </div>
-  <v-text-field
-    v-model="minValue"
-    @change="validateRange"
-    hide-details
-    dense
-    class="textField"
-  />
-  <div
-    v-if="units"
-    class="text-caption text--secondary"
-    style="padding-top: 2px;"
-  >
-  {{ units }}
+  <v-text-field v-model="minValue" @change="validateRange" hide-details dense class="textField" />
+  <div v-if="units" class="text-caption text--secondary" style="padding-top: 2px;">
+    {{ units }}
   </div>
 </div>

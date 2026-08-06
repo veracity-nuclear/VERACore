@@ -6,7 +6,10 @@ function simplifyNumber(v, targetSize = 6) {
   if (v === 0) return 0;
   const abs = Math.abs(v);
   if (abs < 1e-3 || abs >= 1e5) {
-    return v.toExponential(2).replace(/\.?0+e/, 'e').replace('e+', 'e');
+    return v
+      .toExponential(2)
+      .replace(/\.?0+e/, 'e')
+      .replace('e+', 'e');
   }
   // Normal range: trim decimals to fit the field.
   let strValue = `${v}`;
@@ -29,9 +32,9 @@ export default {
       type: String,
       default: 'erdc_rainbow_bright',
     },
-    units: { 
-      type: String, 
-      default: '' ,
+    units: {
+      type: String,
+      default: '',
     },
   },
   data() {

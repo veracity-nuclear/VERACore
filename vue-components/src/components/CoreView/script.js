@@ -18,10 +18,16 @@ export default {
       type: Object,
       default: () => ({}),
     },
-    xLabels: { type: Array, default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] },
-    yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
+    xLabels: {
+      type: Array,
+      default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'],
+    },
+    yLabels: {
+      type: Array,
+      default: () => ['8', '9', '10', '11', '12', '13', '14', '15'],
+    },
     assemblySize: { type: Number, default: 0 },
-    coreCols: { type: Number, default: 0 }, 
+    coreCols: { type: Number, default: 0 },
     scaling: { type: Number, default: 2 },
     busy: { type: Boolean, default: false },
     labels: { type: Array, default: () => [] },
@@ -30,9 +36,15 @@ export default {
     decimals: { type: Number, default: 2 },
   },
   watch: {
-    selectedI(i) { this.activeI = i; },
-    selectedJ(j) { this.activeJ = j; },
-    aspectRatio() { this.resize(); },
+    selectedI(i) {
+      this.activeI = i;
+    },
+    selectedJ(j) {
+      this.activeJ = j;
+    },
+    aspectRatio() {
+      this.resize();
+    },
     dark() {
       this.updateNanColor();
       this.imagesReady++;
@@ -83,7 +95,7 @@ export default {
         }
       }
       return images;
-    }
+    },
   },
   created() {
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -149,7 +161,9 @@ export default {
       const d = this.decimals;
       const abs = Math.abs(v);
       if (abs < 1e-2 || abs >= 1e5) {
-        return Number(v).toExponential(d).replace(/\.?0+e/, 'e');
+        return Number(v)
+          .toExponential(d)
+          .replace(/\.?0+e/, 'e');
       }
       return Number(v).toFixed(d);
     },

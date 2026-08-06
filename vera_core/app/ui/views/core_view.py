@@ -33,6 +33,8 @@ ALLOWED_DTYPES: list[VeraDtype] = [
     VeraDtype.RADIAL_POINT_DETECTOR,
 ]
 
+MAX_LABEL_SIDE = 2
+
 
 def option_for(view_id):
     return {
@@ -83,22 +85,20 @@ def create_core_view(
             raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
     core = vera_source.core
     results = []
-    result_assembly_labels = []
     for layer in layer_list:
         if ds_dtype.has_fuel_pins():
             layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype == VeraDtype.RADIAL)
         if thresholds:
             layer = apply_thresholds(layer, thresholds)
-        formatted_result, assy_labels = format_for_vis(src=vera_source, dataset=layer)
+        # The label values are the cell values, so the second return is unused.
+        formatted_result, _ = format_for_vis(src=vera_source, dataset=layer)
         results.append(formatted_result)
-        result_assembly_labels.append(assy_labels)
 
     sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
     assembly_side_size = assembly_side(len(sample)) if sample else 0
     x_labels, y_labels, max_core_cols = core_labels(core, is_comp)
     return (
         results,
-        result_assembly_labels,
         assembly_side_size,
         x_labels,
         y_labels,
@@ -118,21 +118,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
     group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
-    label_keys = [f"core_labels_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
     x_label_key = f"core_view_x_labels_{view_id}"
     y_label_key = f"core_view_y_labels_{view_id}"
     core_cols_key = f"core_cols_{view_id}"
     assembly_size_key = f"assembly_size_{view_id}"
 
+    show_labels_key = f"assembly_show_labels_{view_id}"
+    state.setdefault(show_labels_key, False)
     decimals_key = f"assembly_decimals_{view_id}"
     state.setdefault(decimals_key, 2)
-    has_labels_key = f"has_assembly_labels_{view_id}"
-    state.setdefault(has_labels_key, False)
 
     for gk in group_keys:
         state.setdefault(gk, [])
-    for lk in label_keys:
-        state.setdefault(lk, [])
 
     aspect_ratio_key = f"aspect_ratio_{view_id}"
     lock_flag = f"locked_{view_id}"
@@ -173,23 +170,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
         if not vis_state:
             return
-        results, assy_labels, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
-        has_assembly_labels = (
-            assy_labels
-            and len(assy_labels) > 0
-            and any(cell is not None for row in assy_labels[0] for cell in row)
-        )
+        results, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
         num_groups = len(results)
         for idx in range(MAX_NUM_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx]
-            state[f"core_labels_{view_id}_{idx}"] = [] if idx >= num_groups else assy_labels[idx]
         state[n_groups_key] = num_groups
         state[assembly_size_key] = assembly_side_size
         state[x_label_key] = xlabels
         state[y_label_key] = ylabels
         state[core_cols_key] = max_core_cols
-        state[has_labels_key] = has_assembly_labels
         set_info(view_id, state, registry)
+
+    can_label = f"{assembly_size_key} > 0 && {assembly_size_key} <= {MAX_LABEL_SIDE}"
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -223,7 +215,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ):
                                 vera.CoreView(
                                     value=(group_keys[g], []),
-                                    labels=(label_keys[g], []),
                                     selected_i=("selected_assembly_ij.i",),
                                     selected_j=("selected_assembly_ij.j",),
                                     aspect_ratio=(aspect_ratio_key, 1),
@@ -236,6 +227,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
+                                    show_labels=(show_labels_key, False),
                                     decimals=(decimals_key, 2),
                                 )
                             with html.Div(
@@ -249,11 +241,11 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
-            # Footer: centered caption with the decimals selector pinned right.
+            # Footer: caption, values toggle and decimals selector on one line.
             with html.Div(
                 style=(
-                    "flex: 0 0 auto; position: relative;"
-                    "display: flex; align-items: center; justify-content: center;"
+                    "flex: 0 0 auto; display: flex; align-items: center;"
+                    "justify-content: center; gap: 16px;"
                     "min-height: 44px; padding: 6px 16px;"
                 )
             ):
@@ -261,17 +253,23 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     "Exposure {{ " + info + ".Exposure }}"
                     " · ({{ " + info + ".Assembly }})"
                     " · Axial - {{ " + info + ".Layer }}",
-                    classes="text-caption text-center",
+                    classes="text-caption",
                 )
-                with html.Div(
-                    v_if=(has_labels_key,),
-                    style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%);",
-                ):
-                    vuetify.VSelect(
-                        v_model=decimals_key,
-                        items=("[0,1,2,3,4]",),
-                        label="Decimals",
-                        dense=True,
-                        hide_details=True,
-                        style="max-width: 90px;",
-                    )
+                vuetify.VCheckbox(
+                    v_if=(can_label,),
+                    v_model=show_labels_key,
+                    label="Show values",
+                    dense=True,
+                    hide_details=True,
+                    classes="ma-0 pa-0 text-caption",
+                    style="flex: 0 0 auto;",
+                )
+                vuetify.VSelect(
+                    v_if=(f"{show_labels_key} && ({can_label})",),
+                    v_model=decimals_key,
+                    items=("[0,1,2,3,4]",),
+                    label="Decimals",
+                    dense=True,
+                    hide_details=True,
+                    style="flex: 0 0 auto; max-width: 90px;",
+                )

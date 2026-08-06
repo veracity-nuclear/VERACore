@@ -16,7 +16,7 @@ from .dtypes import (
     VeraDtype,
     build_core_dtypes,
 )
-from .vera_tools import VERAout
+from .vera_tools.VERAout import VERAout
 
 
 def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
@@ -746,7 +746,10 @@ class VeraDataSource:
                 self.vera_calculator = VERAout(
                     filename=filename
                 )  # from pyvera, use this for calculating avgs
-            except Exception:
+            except Exception as e:
+                print(
+                    "[Warning] could not load file for VERAout to read from for derivation:", str(e)
+                )
                 self.vera_calculator = None
         self._core = core
         self._states = states
@@ -924,7 +927,7 @@ class VeraDataSource:
     ):
         """Create a derived dataset from a source array using a reduction over axes."""
         if not self.vera_calculator:
-            return
+            raise RuntimeError("Could not find necessary factor datasets to perform derivation.")
         for state in self._states:
             if new_dataset_name in state:
                 raise ValueError(

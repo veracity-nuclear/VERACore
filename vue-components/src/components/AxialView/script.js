@@ -1,6 +1,15 @@
 import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
 
+// Fraction of a label slot the text may occupy, and the size below which
+// labels are dropped rather than rendered illegibly.
+const LABEL_WIDTH = 0.86;
+const MIN_LABEL_SIZE = 7;
+// Base size is set by this percentile of label widths, so a rare wide value
+// shrinks on its own instead of shrinking every label with it.
+const LABEL_PERCENTILE = 0.9;
+const LABEL_ROW_FILL = 1.05;
+
 function indexAt(edges, pos) {
   for (let k = edges.length - 2; k >= 0; k -= 1) {
     if (pos >= edges[k]) {
@@ -139,6 +148,18 @@ export default {
       type: Number,
       default: 64,
     },
+    labelCount: {
+      type: Number,
+      default: 0,
+    },
+    showLabels: {
+      type: Boolean,
+      default: false,
+    },
+    decimals: {
+      type: Number,
+      default: 2,
+    },
     busy: {
       type: Boolean,
       default: false,
@@ -174,8 +195,6 @@ export default {
     columnCount() {
       return this.xSizes.length;
     },
-    // NaN cells are drawn just off the panel background so an absent assembly
-    // reads as an empty cell rather than as a hole in the grid.
     nanColor() {
       const level = this.dark ? 45 / 255 : 0.93;
       return [level, level, level, 1];
@@ -203,6 +222,89 @@ export default {
         }
       }
       return rows;
+    },
+    showValues() {
+      return this.showLabels && this.labelCount > 0;
+    },
+    labelValues() {
+      if (!this.showValues) {
+        return [];
+      }
+      const out = [];
+      for (let j = 0; j < this.rowCount; j += 1) {
+        const line = this.value[j] || [];
+        for (let i = 0; i < this.columnCount; i += 1) {
+          const cell = line[i];
+          if (!Array.isArray(cell) || !cell.length) {
+            continue;
+          }
+          for (let k = 0; k < this.labelCount; k += 1) {
+            const text = this.toLabel(this.labelCount === 1 ? cell[0] : cell[k]);
+            if (text) {
+              out.push({ j, i, k, text, width: this.textWidth(text) });
+            }
+          }
+        }
+      }
+      return out;
+    },
+    labelSlot() {
+      if (!this.columnCount || !this.labelCount) {
+        return 0;
+      }
+      let narrowest = Infinity;
+      for (let i = 0; i < this.columnCount; i += 1) {
+        narrowest = Math.min(narrowest, this.xEdges[i + 1] - this.xEdges[i]);
+      }
+      return Number.isFinite(narrowest) ? (narrowest / this.labelCount) * LABEL_WIDTH : 0;
+    },
+    labelBaseSize() {
+      const slot = this.labelSlot;
+      if (!slot || !this.labelValues.length) {
+        return 0;
+      }
+      const widths = this.labelValues.map((label) => label.width).sort((a, b) => a - b);
+      const at = Math.min(widths.length - 1, Math.floor(widths.length * LABEL_PERCENTILE));
+      const width = widths[at];
+      return width ? Math.min(this.fontSize, (slot / width) * this.fontSize) : 0;
+    },
+    cellLabels() {
+      const base = this.labelBaseSize;
+      const slot = this.labelSlot;
+      if (!base) {
+        return [];
+      }
+      const out = [];
+      for (let n = 0; n < this.labelValues.length; n += 1) {
+        const { j, i, k, text, width } = this.labelValues[n];
+        const size = width ? Math.min(base, (slot / width) * this.fontSize) : base;
+        if (size < MIN_LABEL_SIZE) {
+          continue;
+        }
+        const top = this.yEdges[j];
+        const height = this.yEdges[j + 1] - top;
+        if (!(height >= size * LABEL_ROW_FILL)) {
+          continue;
+        }
+        const left = this.xEdges[i];
+        const cellWidth = (this.xEdges[i + 1] - left) / this.labelCount;
+        out.push({
+          key: `${j}-${i}-${k}`,
+          text,
+          style: {
+            position: 'absolute',
+            left: `${left + cellWidth * (k + 0.5)}px`,
+            top: `${top + height / 2}px`,
+            transform: 'translate(-50%, -50%)',
+            fontSize: `${size.toFixed(1)}px`,
+            lineHeight: 1,
+          },
+        });
+      }
+      return out;
+    },
+    labelsHidden() {
+      return this.showValues && this.cellLabels.length === 0;
     },
     lineHeight() {
       return Math.ceil(this.fontSize * 1.4);
@@ -434,6 +536,22 @@ export default {
       }
       context.font = `${this.fontSize}px ${this.fontFamily}`;
       return context.measureText(value).width;
+    },
+    toLabel(v) {
+      if (v === undefined || v === null || Number.isNaN(v)) {
+        return '';
+      }
+      if (v === 0) {
+        return '0';
+      }
+      const d = this.decimals;
+      const abs = Math.abs(v);
+      if (abs < 1e-2 || abs >= 1e5) {
+        return Number(v)
+          .toExponential(d)
+          .replace(/\.?0+e/, 'e');
+      }
+      return Number(v).toFixed(d);
     },
     pixelForCm(v) {
       const b = this.yBounds;

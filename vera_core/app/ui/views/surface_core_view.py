@@ -1,6 +1,6 @@
 import numpy as np
 from trame.ui.html import DivLayout
-from trame.widgets import html
+from trame.widgets import html, vuetify
 
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
@@ -40,6 +40,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     x_label_key = f"core_surface_x_labels_{view_id}"
     y_label_key = f"core_surface_y_labels_{view_id}"
     aspect_ratio_key = f"aspect_ratio_{view_id}"
+    show_labels_key = f"surface_show_labels_{view_id}"
+    decimals_key = f"surface_decimals_{view_id}"
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
 
@@ -49,6 +51,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(x_label_key, [])
     state.setdefault(y_label_key, [])
     state.setdefault(aspect_ratio_key, 1)
+    state.setdefault(show_labels_key, False)
+    state.setdefault(decimals_key, 2)
 
     def _build_cells(radial_adf, core_map, n_nodes):
         """Lay out ADF into value[j][i] = list-of-nodes, each node = [w,n,e,s]..
@@ -161,6 +165,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
+                                    show_labels=(show_labels_key, False),
+                                    decimals=(decimals_key, 2),
                                 )
                             with html.Div(
                                 style=(
@@ -173,9 +179,34 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
-            html.Div(
-                "Exposure {{ " + info + ".Exposure }}"
-                " · ({{ " + info + ".Assembly }})"
-                " · Axial - {{ " + info + ".Layer }}",
-                classes="text-caption text-center",
-            )
+            # Footer: caption, values toggle and decimals selector on one line.
+            with html.Div(
+                style=(
+                    "flex: 0 0 auto; display: flex; align-items: center;"
+                    "justify-content: center; gap: 16px;"
+                    "min-height: 44px; padding: 6px 16px;"
+                )
+            ):
+                html.Div(
+                    "Exposure {{ " + info + ".Exposure }}"
+                    " · ({{ " + info + ".Assembly }})"
+                    " · Axial - {{ " + info + ".Layer }}",
+                    classes="text-caption",
+                )
+                vuetify.VCheckbox(
+                    v_model=show_labels_key,
+                    label="Show values",
+                    dense=True,
+                    hide_details=True,
+                    classes="ma-0 pa-0 text-caption",
+                    style="flex: 0 0 auto;",
+                )
+                vuetify.VSelect(
+                    v_model=decimals_key,
+                    v_if=(show_labels_key,),
+                    items=("[0,1,2,3,4]",),
+                    label="Decimals",
+                    dense=True,
+                    hide_details=True,
+                    style="flex: 0 0 auto; max-width: 90px;",
+                )

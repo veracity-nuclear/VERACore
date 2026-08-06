@@ -2,7 +2,8 @@ import math
 
 import numpy as np
 
-from vera_core.app.core import VeraDataset, VeraDataSource, VeraOutCore
+from vera_core.data.dtypes import VeraDataset
+from vera_core.data.model import VeraDataSource, VeraOutCore
 
 
 def nan_out_non_fuel_locs(

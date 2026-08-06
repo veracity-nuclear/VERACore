@@ -1,4 +1,4 @@
-"""FIXME major design decisions around the stream are tbd"""
+"""FIXME major design decisions around the stream are tbd, this is stale."""
 
 import threading
 
@@ -7,13 +7,8 @@ import msgpack_numpy as m
 import zmq
 from trame.app.asynchronous import StateQueue
 
-from .vera_data import (
-    DerivationMethod,
-    VeraAxes,
-    VeraDataSource,
-    VeraOutCore,
-    VeraOutState,
-)
+from ..dtypes import DerivationMethod, VeraAxes
+from ..model import VeraDataSource, VeraOutCore, VeraOutState
 
 m.patch()
 

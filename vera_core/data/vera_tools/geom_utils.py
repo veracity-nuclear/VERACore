@@ -1,6 +1,8 @@
 from __future__ import annotations
-from typing import List, Tuple, Any, TypeAlias, Iterable
+
 from enum import Flag, auto
+from typing import Any, Iterable, List, Tuple, TypeAlias
+
 import numpy as np
 
 try:

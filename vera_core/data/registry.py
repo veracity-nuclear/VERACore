@@ -1,6 +1,7 @@
 import numpy as np
 
-from .vera_data import VeraAxes, VeraDataSource, VeraDtype
+from .dtypes import VeraAxes, VeraDtype
+from .model import VeraDataSource
 
 
 class VeraDataRegistry:

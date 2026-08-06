@@ -1,189 +1,22 @@
 import string
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from enum import Enum, StrEnum
+from collections.abc import Callable
 from typing import Union
 
 import h5py
 import numpy as np
+from scipy.interpolate import make_interp_spline
 
-from .types import CoreOverride
-
-NUM_ENERGY_GROUPS = 2
-MAX_NUM_GROUPS = 8
-NUM_DF = 6
-NUM_NODES = 4
-LATERAL_SURFACES = slice(0, 4)
-
-
-@dataclass(frozen=True)
-class _Info:
-    axial_idx: int | None = None  # None = no axial axis
-    fuel_pin: bool = False
-    computational: bool = False
-    nodal: bool = False
-    assembly: bool = False
-    surface: bool = False
-    channel: bool = False
-    detector: bool = False
-
-
-class VeraDtype(Enum):
-    """Dataset Identifiers"""
-
-    PIN = 1
-    ASSEMBLY = 2
-    AXIAL = 3
-    NODAL = 4
-    RADIAL = 5
-    SCALAR = 6
-    CORE = 6  # CORE is an alias for SCALAR
-    RADIAL_ASSEMBLY = 7
-    CHANNEL = 8
-    CHANNEL_RADIAL = 9
-    RADIAL_NODE = 10
-    UNKNOWN = 11
-    # COMP_ prefix means it uses computational core map for shape
-    COMP_NODAL = 12
-    COMP_NODAL_ENERGY = 13
-    COMP_NODAL_SURFACE = 14
-    COMP_ASSY = 15
-    COMP_ASSY_ENERGY = 16
-    COMP_ASSY_SURFACE = 17
-    POINT_DETECTOR = 18
-    RADIAL_POINT_DETECTOR = 19
-    CONTINOUS_DETECTOR = 20
-
-    def __str__(self):
-        return self.name
-
-    @property
-    def str(self):
-        return self.name
-
-    @property
-    def title(self):
-        return str(self).upper()
-
-    @property
-    def _info(self):
-        return _INFO[self]
-
-    @property
-    def axial_dim_idx(self):
-        idx = self._info.axial_idx
-        if idx is None:
-            raise ValueError(f"{self} has no axial dimension")
-        return idx
-
-    def has_axial_dim(self):
-        return self._info.axial_idx is not None
-
-    def is_computational(self):
-        return self._info.computational
-
-    def is_nodal(self):
-        return self._info.nodal
-
-    def is_assembly(self):
-        return self._info.assembly
-
-    def is_surface(self):
-        return self._info.surface
-
-    def is_channel(self):
-        return self._info.channel
-
-    def is_detector(self):
-        return self._info.detector
-
-    def has_fuel_pins(self):
-        return self._info.fuel_pin
-
-
-# the single place per-dtype facts are declared
-_INFO = {
-    VeraDtype.PIN: _Info(axial_idx=2, fuel_pin=True),
-    VeraDtype.ASSEMBLY: _Info(axial_idx=1, assembly=True),
-    VeraDtype.AXIAL: _Info(axial_idx=0),
-    VeraDtype.NODAL: _Info(axial_idx=1, nodal=True),
-    VeraDtype.RADIAL: _Info(fuel_pin=True),
-    VeraDtype.SCALAR: _Info(),  # == CORE
-    VeraDtype.RADIAL_ASSEMBLY: _Info(assembly=True),
-    VeraDtype.CHANNEL: _Info(axial_idx=2, channel=True),
-    VeraDtype.CHANNEL_RADIAL: _Info(channel=True),
-    VeraDtype.RADIAL_NODE: _Info(nodal=True),
-    VeraDtype.UNKNOWN: _Info(),
-    VeraDtype.COMP_NODAL: _Info(axial_idx=1, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_ENERGY: _Info(axial_idx=2, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_SURFACE: _Info(axial_idx=3, computational=True, nodal=True, surface=True),
-    VeraDtype.COMP_ASSY: _Info(axial_idx=1, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_ENERGY: _Info(axial_idx=2, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_SURFACE: _Info(
-        axial_idx=3, computational=True, assembly=True, surface=True
-    ),
-    VeraDtype.POINT_DETECTOR: _Info(axial_idx=0, assembly=True, detector=True),
-    VeraDtype.RADIAL_POINT_DETECTOR: _Info(assembly=True, detector=True),
-    VeraDtype.CONTINOUS_DETECTOR: _Info(axial_idx=0, assembly=True, detector=True),
-}
-
-
-class VeraAxes(Enum):
-    """Derivation Axes"""
-
-    ASSEMBLY = 1
-    AXIAL = 2
-    RADIAL = 3
-    CORE = 4
-    NODE = 5
-    RADIAL_ASSEMBLY = 6
-    RADIAL_NODE = 7
-
-
-class Surface(Enum):
-    WEST = 0
-    NORTH = 1
-    EAST = 2
-    SOUTH = 3
-    TOP = 4
-    BOTTOM = 5
-
-    @property
-    def str(self):
-        return self.name
-
-
-class DerivationMethod(StrEnum):
-    AVERAGE = "Average"
-    STDDEV = "Standard Deviation"
-    RMS = "Root Mean Square"
-
-
-class VeraDataset(np.ndarray):
-    """Numpy array tagged with a vera dtype"""
-
-    def __new__(
-        cls,
-        data,
-        dataset_type: VeraDtype = VeraDtype.UNKNOWN,
-        physical_units: str = "unitless",
-    ):
-        obj = np.asarray(data).view(cls)
-        obj.dataset_type = dataset_type
-        obj.physical_units = physical_units
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.dataset_type: VeraDtype = getattr(obj, "dataset_type", VeraDtype.UNKNOWN)
-        self.physical_units: str = getattr(obj, "physical_units", "unitless")
-
-    def is_computational(self) -> bool:
-        return self.dataset_type.is_computational()
-
-    def is_assembly(self) -> bool:
-        return self.dataset_type.is_assembly()
+from .dtypes import (
+    NUM_NODES,
+    CoreOverride,
+    DerivationMethod,
+    VeraAxes,
+    VeraDataset,
+    VeraDtype,
+    build_core_dtypes,
+)
+from .vera_tools import VERAout
 
 
 def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
@@ -214,79 +47,6 @@ def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
         array[:, :, 0, :, cm[:, 0] - 1] = np.nan
         array[:, :, 2, :, cm[:, 0] - 1] = np.nan
     return array
-
-
-def build_core_dtypes(
-    npiny: int | None = None,
-    npinx: int | None = None,
-    nax: int | None = None,
-    nass: int | None = None,
-    comp_nax: int | None = None,
-    comp_nass: int | None = None,
-    ndet: int | None = None,
-    ndax: int | None = None,
-    continous_det: int | None = None,
-) -> dict[tuple[int, ...], VeraDtype]:
-    """Creates and returns a dict mapping dataset shapes to dataset identifier (enums)"""
-    shape_to_dtype = {}
-    if nax and nass:
-        shape_to_dtype |= {
-            (1, nax, nass): VeraDtype.ASSEMBLY,
-            (nax,): VeraDtype.AXIAL,
-            (nass,): VeraDtype.RADIAL_ASSEMBLY,
-            (NUM_NODES, nax, nass): VeraDtype.NODAL,
-            (NUM_NODES, nass): VeraDtype.RADIAL_NODE,
-            (1,): VeraDtype.SCALAR,
-            (): VeraDtype.SCALAR,
-        }
-    if ndet and ndax and (ndet != nass or ndax != ndet):
-        shape_to_dtype |= {
-            (ndax, ndet): VeraDtype.CONTINOUS_DETECTOR
-            if continous_det
-            else VeraDtype.POINT_DETECTOR,
-        }
-    if ndet and ndet != nass:
-        shape_to_dtype |= {
-            (ndet,): VeraDtype.RADIAL_POINT_DETECTOR,
-        }
-    if npiny and npinx and nax and nass:
-        shape_to_dtype |= {
-            (npiny, npinx, nax, nass): VeraDtype.PIN,
-            (npiny + 1, npinx + 1, nax, nass): VeraDtype.CHANNEL,
-            (npiny, npinx, nass): VeraDtype.RADIAL,
-            (npiny + 1, npinx + 1, nass): VeraDtype.CHANNEL_RADIAL,
-        }
-    if comp_nax and comp_nass:
-        shape_to_dtype |= {
-            (NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL,
-            (
-                NUM_DF,
-                NUM_ENERGY_GROUPS,
-                NUM_NODES,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_NODAL_SURFACE,
-            (NUM_DF, 8, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_SURFACE,
-            (
-                NUM_ENERGY_GROUPS,
-                NUM_NODES,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_NODAL_ENERGY,
-            (8, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_ENERGY,
-            (1, comp_nax, comp_nass): VeraDtype.COMP_ASSY,
-            (
-                NUM_DF,
-                NUM_ENERGY_GROUPS,
-                1,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_ASSY_SURFACE,
-            (NUM_DF, 8, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_SURFACE,
-            (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_ENERGY,
-            (8, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_ENERGY,
-        }
-    return shape_to_dtype
 
 
 H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
@@ -969,54 +729,220 @@ class VeraOutState(DatasetStore):
         self.categorized_ds_names[ds_dtype].add(dataset_name)
 
 
-class VeraDataSource(ABC):
-    """Abstract class representing a valid data source for VeraCore to visualize datasets from
+class VeraDataSource:
+    def __init__(
+        self,
+        core: VeraOutCore,
+        states: list[VeraOutState],
+        provenance: str,
+        filename: str | None = None,
+        close_callback: Callable[[], None] | None = None,
+        state_caching: bool = True,
+    ):
+        self._state_caching = state_caching
+        self.vera_calculator = None
+        if filename:
+            try:
+                self.vera_calculator = VERAout(
+                    filename=filename
+                )  # from pyvera, use this for calculating avgs
+            except Exception:
+                self.vera_calculator = None
+        self._core = core
+        self._states = states
+        self.active_state_index = 0
+        self._determine_time_axes()
+        self._provenance = provenance
+        self._close_callback = close_callback
 
-    Concrete sources expose a single core, an ordered list of states with one
-    active at a time, and lookup of named arrays from either the active state
-    or the core.
-    """
+    def _determine_time_axes(self):
+        self._time_axes = {}
+        for time_data_point in ("exposure", "core_exposure", "exposure_efpd"):
+            time_axis = [
+                state.get(time_data_point).item()
+                for state in self.states
+                if time_data_point in state
+            ]
+            if (
+                np.shape(time_axis) != np.shape(self.states)
+                or not np.all(np.asarray(time_axis) >= 0)
+                or not np.all(np.diff(time_axis) >= 0)
+            ):
+                continue
+            self._time_axes[time_data_point] = time_axis
+        self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
 
     @property
-    @abstractmethod
     def provenance(self) -> str:
         """Where the data came from"""
-        pass
+        return self._provenance
 
     @property
-    @abstractmethod
     def core(self) -> VeraOutCore:
         """The core-level data shared across all states."""
-        pass
+        return self._core
 
-    @property
-    @abstractmethod
-    def states(self) -> list[VeraOutState]:
-        """All state points in the source, in order."""
-        pass
-
-    @abstractmethod
     def close(self):
         """Release any open handles/ports/etc held by the source."""
-        pass
+        if self._close_callback is not None:
+            self._close_callback()
+        if self.vera_calculator is not None:
+            self.vera_calculator.h5f.close()
+
+    def default_datasets(self) -> dict[str, str]:
+        categorized_ds_names = self.active_state.categorized_ds_names
+        default_names = {
+            category.title: sorted(names)[0]
+            for category, names in categorized_ds_names.items()
+            if category != VeraDtype.UNKNOWN and names
+        }
+        if not default_names:
+            return {}
+        if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, ()):
+            default_names[VeraDtype.PIN.title] = "pin_powers"
+        return default_names
+
+    def time_axes(self):
+        return self._time_axes
 
     @property
-    @abstractmethod
-    def active_state(self) -> VeraOutState:
+    def states(self):
+        """All state points in the source, in order."""
+        return self._states
+
+    @property
+    def active_state(self):
         """The currently selected state."""
-        pass
+        return self.states[self.active_state_index]
 
     @property
-    @abstractmethod
-    def active_state_index(self) -> int:
+    def active_state_index(self):
         """Index of the active state within states."""
-        pass
+        return self._active_state_index
 
     @active_state_index.setter
-    @abstractmethod
-    def active_state_index(self, index):
-        """Set the active state, switching which state's data is exposed."""
-        pass
+    def active_state_index(self, index: int):
+        """Set the active state, clamping to range and no-opping if unchanged.
+
+        Switching states uncaches the previous active state and caches the new
+        one
+        """
+        index = max(0, min(index, len(self._states) - 1))
+        if hasattr(self, "_active_state_index"):
+            if self._active_state_index == index:
+                return
+            elif self._state_caching:
+                # Clear the cache from the active state
+                self.active_state.uncache_all()
+
+        self._active_state_index = index
+        if self._state_caching:
+            self.active_state.cache_all()
+
+    def add_new_diff_dataset(
+        self,
+        ref_dataset_name: str,
+        comp_src: "VeraDataSource",
+        comp_dataset_name: str,
+        new_diff_name: str,
+        interpolation_order: int = 1,
+        ref_scale: float = 1.0,
+        comp_scale: float = 1.0,
+        units: str = "unitless",
+    ):
+        """Create a difference dataset (ref minus comp) on each state."""
+        produced = 0
+        for idx, state in enumerate(self._states):
+            if idx >= len(comp_src.states):
+                return
+            comp_state = comp_src.states[idx]
+            if ref_dataset_name not in state or comp_dataset_name not in comp_state:
+                continue
+            ref_data: VeraDataset = state.get(ref_dataset_name) * ref_scale
+            comp_data: VeraDataset = comp_state.get(comp_dataset_name) * comp_scale
+            ref_axial_mesh_means = self.core.get_axial_mesh_means(dataset=ref_data)
+            comp_axial_mesh_means = comp_src.core.get_axial_mesh_means(dataset=comp_data)
+            if ref_data.dataset_type != comp_data.dataset_type:
+                continue
+            if np.allclose(ref_axial_mesh_means, comp_axial_mesh_means):
+                diff = ref_data - comp_data
+            elif ref_data.dataset_type.has_axial_dim():
+                # all data dimensions that are not the axial dim must match between the two dataset
+                spl = make_interp_spline(
+                    comp_axial_mesh_means,
+                    comp_data,
+                    k=interpolation_order,
+                    axis=ref_data.dataset_type.axial_dim_idx,
+                )
+                comp_data_on_ref_mesh = spl(ref_axial_mesh_means, extrapolate=False)
+                diff: VeraDataset = ref_data - comp_data_on_ref_mesh
+            else:
+                continue
+            diff.physical_units = units
+            state.add_diff_dataset(new_diff_name, diff)
+            produced += 1
+        if produced == 0:
+            raise ValueError(f"No overlapping/compatible states to diff for '{new_diff_name}'")
+
+    def _run_avg_over_axes(self, data, axes: VeraAxes = VeraAxes.CORE):
+        """Reduce data over the given axes using the VERAout calculator.
+
+        Dispatches to the matching VERAout averaging routine and wraps the result
+        as a VeraDataset of the corresponding type; raises ValueError for an
+        unsupported axes value.
+        """
+        match axes:
+            case VeraAxes.ASSEMBLY:
+                der = VeraDataset(
+                    self.vera_calculator.Assembly(data)[np.newaxis, ...],
+                    VeraDtype.ASSEMBLY,
+                )
+            case VeraAxes.AXIAL:
+                der = VeraDataset(self.vera_calculator.Axial(data), VeraDtype.AXIAL)
+            case VeraAxes.CORE:
+                der = VeraDataset(np.array([self.vera_calculator.Average(data)]), VeraDtype.SCALAR)
+            case VeraAxes.NODE:
+                der = VeraDataset(self.vera_calculator.Node(data), VeraDtype.NODAL)
+            case VeraAxes.RADIAL:
+                der = VeraDataset(self.vera_calculator.Radial(data), VeraDtype.RADIAL)
+            case VeraAxes.RADIAL_ASSEMBLY:
+                der = VeraDataset(
+                    self.vera_calculator.Radial_Assembly(data),
+                    VeraDtype.RADIAL_ASSEMBLY,
+                )
+            case _:
+                raise ValueError(f"Derivation: {axes} not implemented")
+        return der
+
+    def add_new_derived_dataset(
+        self,
+        source_array_name: str,
+        new_dataset_name: str,
+        der_method: DerivationMethod,
+        axes: VeraAxes,
+        use_factors: bool = True,
+    ):
+        """Create a derived dataset from a source array using a reduction over axes."""
+        if not self.vera_calculator:
+            return
+        for state in self._states:
+            if new_dataset_name in state:
+                raise ValueError(
+                    f"A dataset named {new_dataset_name} already exists in this source, please pick a unique name."
+                )
+            data = state.get(source_array_name, None)
+            if data is None:
+                continue
+            match der_method:
+                case DerivationMethod.AVERAGE:
+                    der = self._run_avg_over_axes(data, axes)
+                case DerivationMethod.STDDEV:
+                    mean = self._run_avg_over_axes(data)
+                    var = self._run_avg_over_axes((data - mean) ** 2, axes)
+                    der = np.sqrt(var)
+                case DerivationMethod.RMS:
+                    der = np.sqrt(self._run_avg_over_axes(data**2, axes))
+            state.add_derived_dataset(new_dataset_name, der)
 
     def _get_dataset(self, ds_name: str, state_idx: int | None = None) -> VeraDataset | None:
         """Resolve a named array to its VeraDataset, without masking.
@@ -1116,33 +1042,3 @@ class VeraDataSource(ABC):
         """
         ds = self._get_dataset(array_name, state_idx)
         return tuple(np.shape(ds)) if ds is not None else tuple()
-
-    @abstractmethod
-    def default_datasets(self) -> dict[str, str]:
-        pass
-
-    @abstractmethod
-    def add_new_diff_dataset(
-        self,
-        ref_dataset_name: str,
-        comp_src: "VeraDataSource",
-        comp_dataset_name: str,
-        new_diff_name: str,
-        interpolation_order: int = 1,
-        ref_scale: float = 1.0,
-        comp_scale: float = 1.0,
-        units: str = "unitless",
-    ):
-        """Create a difference dataset (ref minus comp) on each state."""
-        pass
-
-    @abstractmethod
-    def add_new_derived_dataset(
-        self,
-        source_array_name: str,
-        new_dataset_name: str,
-        der_method: DerivationMethod,
-        axes: VeraAxes,
-    ):
-        """Create a derived dataset from a source array using a reduction over axes."""
-        pass

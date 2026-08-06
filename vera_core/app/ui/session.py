@@ -4,8 +4,8 @@ from pathlib import Path
 
 from trame_server.core import State
 
-from .types import FileOverrides
-from .vera_data_registry import VeraDataRegistry
+from vera_core.data.dtypes import FileOverrides
+from vera_core.data.registry import VeraDataRegistry
 
 SESSION_GLOBAL_KEYS = [
     "selected_assembly_ij",
@@ -52,46 +52,6 @@ class Session:
     globals: dict[str, object]
     views: list[ViewSession]
     recipes: list[dict] = field(default_factory=list)
-
-
-def derive_recipe(
-    src_id, source_array, name, method, axes, use_factors, exclude_non_fuel_rods
-) -> dict:
-    return {
-        "kind": "derive",
-        "src_id": src_id,
-        "source_array": source_array,
-        "name": name,
-        "method": method,
-        "axes": axes,
-        "use_factor": use_factors,
-        "exclude_fuel_rods": exclude_non_fuel_rods,
-    }
-
-
-def diff_recipe(
-    ref_src_id,
-    ref_array,
-    comp_src_id,
-    comp_array,
-    name,
-    interp_degree,
-    ref_scale,
-    comp_scale,
-    units,
-) -> dict:
-    return {
-        "kind": "diff",
-        "ref_src_id": ref_src_id,
-        "ref_array": ref_array,
-        "comp_src_id": comp_src_id,
-        "comp_array": comp_array,
-        "name": name,
-        "interp_degree": interp_degree,
-        "ref_scale": ref_scale,
-        "comp_scale": comp_scale,
-        "units": units,
-    }
 
 
 def recipe_sources(recipe) -> set:

@@ -2,13 +2,9 @@ import numpy as np
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import (
-    VeraDataRegistry,
-    VeraDataset,
-    VeraDataSource,
-    VeraDtype,
-    nan_out_reflected,
-)
+from vera_core.data.dtypes import VeraDataset, VeraDtype
+from vera_core.data.model import VeraDataSource, nan_out_reflected
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker

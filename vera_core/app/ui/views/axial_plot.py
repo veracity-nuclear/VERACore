@@ -3,11 +3,8 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core import (
-    Surface,
-    VeraDataRegistry,
-    VeraDtype,
-)
+from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 

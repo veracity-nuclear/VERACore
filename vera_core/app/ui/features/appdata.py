@@ -4,7 +4,7 @@ from typing import Any
 
 from platformdirs import user_data_dir
 
-from vera_core.app.core.types import CoreOverride, FileOverrides
+from vera_core.data.dtypes import CoreOverride, FileOverrides
 
 APP_NAME = "VERACore"
 APP_AUTHOR = "VeracityNuclear"

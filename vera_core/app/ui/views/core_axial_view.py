@@ -2,7 +2,8 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
-from vera_core.app.core import VeraDataRegistry, VeraDtype
+from vera_core.data.dtypes import VeraDtype
+from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import is_non_active_view

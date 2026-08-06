@@ -4,8 +4,10 @@ from pathlib import Path
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import CorePropMissing, VeraDataRegistry, make_VeraDataSource_from_file
-from vera_core.app.core.types import CoreOverride, FileOverrides
+from vera_core.data.dtypes import CoreOverride, FileOverrides
+from vera_core.data.model import CorePropMissing
+from vera_core.data.readers.h5 import open_vera_file_data_source
+from vera_core.data.registry import VeraDataRegistry
 
 from .appdata import load_prefs, save_prefs
 from .DatasetPicker import refresh_src_tree
@@ -80,7 +82,7 @@ def register_file_menu_state_ctrl(
             was_empty = registry.default_src_id is None
             file_overrides: FileOverrides = state.file_overrides
             try:
-                src = make_VeraDataSource_from_file(
+                src = open_vera_file_data_source(
                     raw_path, core_overrides=file_overrides.get(raw_path, {})
                 )
             except CorePropMissing as e:

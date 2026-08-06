@@ -1,8 +1,10 @@
-from typing import Any
-from enum import Enum
 import os
+from enum import Enum
+from typing import Any
+
 import h5py
 import numpy as np
+
 from . import VERAinput as verain
 
 

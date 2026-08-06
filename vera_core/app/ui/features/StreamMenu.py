@@ -1,13 +1,12 @@
 # StreamMenu.py
+"""FIXME major design decisions around the stream are tbd, this is stale."""
+
 from trame.app.asynchronous import StateQueue
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import (
-    VeraDataRegistry,
-    VeraDataStream,
-    generate_stream_identifier,
-)
+from vera_core.data.readers.stream import VeraDataStream, generate_stream_identifier
+from vera_core.data.registry import VeraDataRegistry
 
 from .DatasetPicker import refresh_src_tree
 

@@ -2,12 +2,9 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
-from vera_core.app.core import (
-    MAX_NUM_GROUPS,
-    VeraDataRegistry,
-    VeraDataSource,
-    VeraDtype,
-)
+from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.model import VeraDataSource
+from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import get_safe_idxs, is_non_active_view, set_info

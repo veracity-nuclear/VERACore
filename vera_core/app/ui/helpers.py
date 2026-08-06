@@ -3,12 +3,9 @@ import functools
 import numpy as np
 from trame_server.core import State
 
-from vera_core.app.core import (
-    NUM_NODES,
-    VeraDataRegistry,
-    VeraDtype,
-    VeraOutCore,
-)
+from vera_core.data.dtypes import NUM_NODES, VeraDtype
+from vera_core.data.model import VeraOutCore
+from vera_core.data.registry import VeraDataRegistry
 
 
 def format_label(file: str, key: str):

@@ -1,7 +1,8 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import DerivationMethod, VeraDataRegistry, derive_recipe
+from vera_core.data.dtypes import DerivationMethod, derive_recipe
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker, refresh_src_tree

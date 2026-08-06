@@ -1,8 +1,8 @@
 import h5py
 import numpy as np
 
-from ..vera_data import DatasetSource, VeraDataset, VeraDtype, VeraOutCore, VeraOutState
-from ..vera_out_file import VeraOutFile
+from ..dtypes import VeraDataset, VeraDtype
+from ..model import DatasetSource, VeraDataSource, VeraOutCore, VeraOutState
 
 
 def _get_units(h5_ref: h5py.Dataset):
@@ -107,9 +107,9 @@ class DictDatasetSource(DatasetSource):
     def load(self, name): ...
 
 
-def make_VeraDataSource_from_file(
+def open_vera_file_data_source(
     file_path: str, core_overrides: dict | None = None
-) -> VeraOutFile:
+) -> VeraDataSource:
     file = h5py.File(file_path, locking=False)
 
     core_dataset_src = H5DatasetSource(file, "CORE")
@@ -122,7 +122,7 @@ def make_VeraDataSource_from_file(
         for state_dir, idx in indices
     ]
     close_callback = file.close
-    return VeraOutFile(
+    return VeraDataSource(
         core=core,
         states=states,
         provenance=file_path,

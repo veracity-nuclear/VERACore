@@ -17,8 +17,9 @@ from vtkmodules.vtkRenderingCore import (
 )
 from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkSmartVolumeMapper
 
-from vera_core.app.core import VeraDataRegistry, VeraDtype
-from vera_core.app.core.thresholds import apply_thresholds
+from vera_core.data.dtypes import VeraDtype
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
 from ..helpers import format_label, is_view_locked

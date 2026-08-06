@@ -6,16 +6,9 @@ import numpy as np
 from trame.app.asynchronous import StateQueue
 from trame_server.core import Server
 
-from vera_core.app.core import (
-    LATERAL_SURFACES,
-    MAX_NUM_GROUPS,
-    Session,
-    VeraDataRegistry,
-    VeraDtype,
-    ViewSession,
-    make_VeraDataSource_from_file,
-    recipe_sources,
-)
+from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.readers.h5 import open_vera_file_data_source
+from vera_core.data.registry import VeraDataRegistry
 
 from .features import (
     DatasetPicker,
@@ -37,6 +30,7 @@ from .helpers import (
     is_view_locked,
 )
 from .layout import build_layout
+from .session import Session, ViewSession, recipe_sources
 from .views import (
     assembly_view,
     axial_plot,
@@ -523,7 +517,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         file_overrides = session.file_overrides
         for src_id, path in session.file_paths.items():
             registry.add_src(
-                make_VeraDataSource_from_file(path, core_overrides=file_overrides.get(path, {})),
+                open_vera_file_data_source(path, core_overrides=file_overrides.get(path, {})),
                 src_id=src_id,
             )
         if session.default_src_id in registry:

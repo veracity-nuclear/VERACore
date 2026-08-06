@@ -2,8 +2,10 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
-from vera_core.app.core import VeraDataRegistry, VeraDataSource, VeraDtype, VeraOutCore
-from vera_core.app.core.thresholds import apply_thresholds
+from vera_core.data.dtypes import VeraDtype
+from vera_core.data.model import VeraDataSource, VeraOutCore
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
 from ..helpers import (

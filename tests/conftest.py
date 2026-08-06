@@ -5,7 +5,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 from vera_core.app.core import VeraDataset, VeraDtype
 
 

@@ -2,7 +2,7 @@ from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import client, grid, html, vuetify
 from trame_server.core import Controller, Server, State
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.data.registry import VeraDataRegistry
 
 from . import assets
 from .features import (

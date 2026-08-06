@@ -1,5 +1,4 @@
 import numpy as np
-
 from vera_core.app.core import VeraDataset, VeraDtype
 from vera_core.app.core.thresholds import apply_thresholds
 

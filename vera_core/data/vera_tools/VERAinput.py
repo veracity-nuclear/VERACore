@@ -1,9 +1,11 @@
-import os
-from typing import Any, Optional, Dict
-import xml.etree.ElementTree as ET
 import json
-import numpy as np
+import os
+import xml.etree.ElementTree as ET
+from typing import Any, Dict, Optional
+
 import h5py
+import numpy as np
+
 from .geom_utils import num_units_from_hex_rings, reshape_hex_map
 
 # Guard import for verain package

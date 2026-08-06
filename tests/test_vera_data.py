@@ -1,7 +1,6 @@
 import h5py
 import numpy as np
 import pytest
-
 from vera_core.app.core.vera_data import (
     LazyHDF5Loader,
     VeraDataset,

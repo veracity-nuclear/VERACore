@@ -2,12 +2,9 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
-from vera_core.app.core import (
-    Surface,
-    VeraDataRegistry,
-    VeraDataSource,
-    VeraDtype,
-)
+from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.model import VeraDataSource
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 

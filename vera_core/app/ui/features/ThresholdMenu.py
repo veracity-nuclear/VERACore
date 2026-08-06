@@ -1,8 +1,8 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import VeraDataRegistry
-from vera_core.app.core.thresholds import ThresholdCondition
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import ThresholdCondition
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker

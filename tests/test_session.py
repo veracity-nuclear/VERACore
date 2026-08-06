@@ -1,7 +1,6 @@
 import json
 
 from conftest import FakeSource, FakeState
-
 from vera_core.app.core.session import (
     SESSION_VERSION,
     ViewSession,

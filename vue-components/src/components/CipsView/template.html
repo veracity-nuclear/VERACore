@@ -21,11 +21,7 @@
             </div>
           </v-sheet>
         </v-row>
-        <v-row
-          v-for="(line, j) in grid"
-          :key="j"
-          class="ma-0 pa-0 flex-nowrap"
-        >
+        <v-row v-for="(line, j) in grid" :key="j" class="ma-0 pa-0 flex-nowrap">
           <v-sheet
             :height="cell"
             :width="cell"
@@ -51,11 +47,7 @@
             @mouseleave="exit"
           >
             <div v-if="isFilled(i, j)" :style="cellStyle(i, j)" :title="tooltip(i, j)">
-              <div
-                v-for="(metric, k) in metrics"
-                :key="k"
-                :style="bandStyle(k, i, j)"
-              >
+              <div v-for="(metric, k) in metrics" :key="k" :style="bandStyle(k, i, j)">
                 {{ label(k, i, j) }}
               </div>
             </div>

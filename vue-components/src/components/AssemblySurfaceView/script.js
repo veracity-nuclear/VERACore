@@ -29,14 +29,33 @@ export default {
     cellSize: { type: Number, default: 60 },
   },
   watch: {
-    selectedI(i) { this.activeI = i + 1; },
-    selectedJ(j) { this.activeJ = j + 1; },
-    selectedSurface(s) { this.activeSurface = s; },
-    value() { this.updateColors(); },
-    colorPreset() { this.updateLookupTable(); this.updateColors(); },
-    colorRange() { this.updateLookupTable(); this.updateColors(); },
-    dark() { this.updateLookupTable(); this.updateColors(); },
-    sideCount() { this.resize(); },
+    selectedI(i) {
+      this.activeI = i + 1;
+    },
+    selectedJ(j) {
+      this.activeJ = j + 1;
+    },
+    selectedSurface(s) {
+      this.activeSurface = s;
+    },
+    value() {
+      this.updateColors();
+    },
+    colorPreset() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    colorRange() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    dark() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    sideCount() {
+      this.resize();
+    },
   },
   data() {
     return {
@@ -144,11 +163,7 @@ export default {
       };
     },
     isSelectedTriangle(i, j, surface) {
-      return (
-        i === this.activeI &&
-        j === this.activeJ &&
-        surface === this.activeSurface
-      );
+      return i === this.activeI && j === this.activeJ && surface === this.activeSurface;
     },
     triangleFill(i, j, surface) {
       const cellColors = this.colors[this.toIdx(i, j)];

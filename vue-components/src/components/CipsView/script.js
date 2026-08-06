@@ -44,11 +44,21 @@ export default {
     };
   },
   watch: {
-    selectedI(i) { this.activeI = i; },
-    selectedJ(j) { this.activeJ = j; },
-    aspectRatio() { this.resize(); },
-    metrics() { this.$nextTick(() => this.resize()); },
-    coreCols() { this.$nextTick(() => this.resize()); },
+    selectedI(i) {
+      this.activeI = i;
+    },
+    selectedJ(j) {
+      this.activeJ = j;
+    },
+    aspectRatio() {
+      this.resize();
+    },
+    metrics() {
+      this.$nextTick(() => this.resize());
+    },
+    coreCols() {
+      this.$nextTick(() => this.resize());
+    },
   },
   computed: {
     coreWidth() {
@@ -178,7 +188,9 @@ export default {
       const d = this.decimals;
       const abs = Math.abs(v);
       if (abs < 1e-2 || abs >= 1e5) {
-        return Number(v).toExponential(d).replace(/\.?0+e/, 'e');
+        return Number(v)
+          .toExponential(d)
+          .replace(/\.?0+e/, 'e');
       }
       return Number(v).toFixed(d);
     },

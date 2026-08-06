@@ -1,3 +1,13 @@
+exclude: |
+  (?x)^(
+      vue-components/node_modules/|
+      vue-components/dist/|
+      build/|
+      dist/|
+      venv/|
+      \.venv/
+  )
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -31,6 +41,20 @@ repos:
         pass_filenames: false
         always_run: true
         args: ["-q", "tests/"]
+
+      - id: eslint
+        name: ESLint
+        entry: npm --prefix vue-components run lint:fix
+        language: system
+        files: ^vue-components/.*\.(js|vue)$
+        pass_filenames: false
+
+      - id: prettier
+        name: Prettier
+        entry: npm --prefix vue-components run format
+        language: system
+        files: ^vue-components/src/.*\.(js|vue|html|css)$
+        pass_filenames: false
 
 
 default_install_hook_types: [pre-commit, pre-push]

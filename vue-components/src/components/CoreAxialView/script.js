@@ -48,8 +48,14 @@ export default {
     labels: { type: Array, default: () => [] },
     selectedI: { type: Number, default: -1 },
     selectedJ: { type: Number, default: -1 },
-    xLabels: { type: Array, default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] },
-    yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
+    xLabels: {
+      type: Array,
+      default: () => ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'],
+    },
+    yLabels: {
+      type: Array,
+      default: () => ['8', '9', '10', '11', '12', '13', '14', '15'],
+    },
     aspectRatio: { type: Number, default: 1 },
     busy: { type: Boolean, default: false },
     cellSize: { type: Number, default: 48 },
@@ -149,7 +155,12 @@ export default {
         return null;
       }
       const x = this.toX((lo + hi) / 2).toFixed(2);
-      return { x1: x, y1: this.plot.top, x2: x, y2: this.plot.top + this.plot.height };
+      return {
+        x1: x,
+        y1: this.plot.top,
+        x2: x,
+        y2: this.plot.top + this.plot.height,
+      };
     },
     cells() {
       const px = (v) => this.toX(v).toFixed(2);
@@ -158,23 +169,25 @@ export default {
       const y = (this.mesh && this.mesh.y) || [];
       const kind = (this.mesh && this.mesh.kind) || 'line';
 
-      return this.value.map((row, j) => row.map((cell, i) => {
-        const base = {
-          i,
-          j,
-          tx: GUTTER + i * this.cellW,
-          ty: GUTTER + j * this.cellH,
-          label: this.formatLabel(i, j),
-          border: this.theme.empty,
-          shape: null,
-        };
-        if (!cell || !cell.x || !cell.x.length || !y.length) {
+      return this.value.map((row, j) =>
+        row.map((cell, i) => {
+          const base = {
+            i,
+            j,
+            tx: GUTTER + i * this.cellW,
+            ty: GUTTER + j * this.cellH,
+            label: this.formatLabel(i, j),
+            border: this.theme.empty,
+            shape: null,
+          };
+          if (!cell || !cell.x || !cell.x.length || !y.length) {
+            return base;
+          }
+          base.shape = this.toShape(cell.x, y, kind, px, py);
+          base.border = this.colorFor(cell.mean);
           return base;
-        }
-        base.shape = this.toShape(cell.x, y, kind, px, py);
-        base.border = this.colorFor(cell.mean);
-        return base;
-      }));
+        })
+      );
     },
     selectionPath() {
       const cell = this.cellAt(this.selectedI, this.selectedJ);
@@ -229,7 +242,12 @@ export default {
       if (x.length !== y.length) {
         if (!this._zipWarned) {
           this._zipWarned = true;
-          console.warn('VeraCoreAxial: cell x length', x.length, 'does not match mesh y length', y.length);
+          console.warn(
+            'VeraCoreAxial: cell x length',
+            x.length,
+            'does not match mesh y length',
+            y.length
+          );
         }
         return null;
       }

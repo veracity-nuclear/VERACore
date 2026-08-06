@@ -40,9 +40,15 @@ export default {
     decimals: { type: Number, default: 2 },
   },
   watch: {
-    selectedI(i) { this.activeI = i; },
-    selectedJ(j) { this.activeJ = j; },
-    aspectRatio() { this.resize(); },
+    selectedI(i) {
+      this.activeI = i;
+    },
+    selectedJ(j) {
+      this.activeJ = j;
+    },
+    aspectRatio() {
+      this.resize();
+    },
     value() {
       this.$nextTick(() => this.resize());
     },
@@ -95,7 +101,8 @@ export default {
     triangleGrid() {
       const lut = this.colorMap;
       return this.value.map((line) =>
-        (Array.isArray(line) ? line : []).map((cell) => this.buildCell(lut, cell)));
+        (Array.isArray(line) ? line : []).map((cell) => this.buildCell(lut, cell))
+      );
     },
   },
   created() {
@@ -168,7 +175,9 @@ export default {
       const d = this.decimals;
       const abs = Math.abs(v);
       if (abs < 1e-2 || abs >= 1e5) {
-        return Number(v).toExponential(d).replace(/\.?0+e/, 'e');
+        return Number(v)
+          .toExponential(d)
+          .replace(/\.?0+e/, 'e');
       }
       return Number(v).toFixed(d);
     },

@@ -1,6 +1,6 @@
 import numpy as np
 from trame.ui.html import DivLayout
-from trame.widgets import html
+from trame.widgets import html, vuetify
 
 from vera_core.data.dtypes import VeraDtype
 from vera_core.data.model import VeraDataSource, VeraOutCore
@@ -70,6 +70,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     label_x_key = f"{prefix}_label_x_{view_id}"
     label_y_key = f"{prefix}_label_y_{view_id}"
     y_scale_key = f"{prefix}_y_scale_{view_id}"
+    label_count_key = f"{prefix}_label_count_{view_id}"
+    show_labels_key = f"{prefix}_show_labels_{view_id}"
+    decimals_key = f"{prefix}_decimals_{view_id}"
     selected_layer_key = f"selected_layer_{view_id}"
     n_groups_key = f"n_groups_{view_id}"
     info = f"label_info_{view_id}"
@@ -86,6 +89,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     state.setdefault(selected_layer_key, 0)
     state.setdefault(n_groups_key, 0)
     state.setdefault(y_scale_key, 3)
+    state.setdefault(label_count_key, 0)
+    state.setdefault(show_labels_key, False)
+    state.setdefault(decimals_key, 2)
 
     def axial_cell_selected(layer, clicked_idx):
         if is_x:
@@ -122,8 +128,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         selected_pin,
         assembly_indices,
     ):
-        """Return (grid, data_width, display_width, nb_cols) for one energy group's
-        array slice."""
+        """label_count is the number of distinct values a
+        cell holds, or 0 when a cell holds too many to label."""
         is_assembly = array_dtype.is_assembly()
         arr = array_2d_or_nodal
         assembly_data_indices = assembly_indices[assembly_indices > -1]
@@ -135,11 +141,13 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                 image_data = arr[:, selected_pin, :, assembly_data_indices]
             image_data = np.vstack(image_data).T
             data_width = display_width = cell_width
+            label_count = 0
 
         elif is_assembly:
             cell_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
             image_data = np.vstack(arr[:, assembly_data_indices])
             data_width = display_width = cell_width
+            label_count = 1
 
         elif array_dtype in (
             VeraDtype.COMP_NODAL,
@@ -151,6 +159,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             if n_nodes == 1:
                 data_width = display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
                 image_data = np.vstack(nodal[0])
+                label_count = 1
             else:
                 node_pair = _nodal_node_pair(selected_pin)
                 data_width = len(node_pair)
@@ -158,6 +167,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                 sel = nodal[list(node_pair)]
                 sel = np.transpose(sel, (1, 2, 0))
                 image_data = sel.reshape(sel.shape[0], -1)
+                label_count = data_width
         else:
             raise RuntimeError(f"Axial view cannot visualize datasets of type {str(array_dtype)}")
 
@@ -180,7 +190,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                     cell = image_data[j, col * data_width : (col + 1) * data_width]
                     line.append(np.ravel(cell).tolist())
                 col += 1
-        return grid, display_width, nb_cols
+        return grid, display_width, nb_cols, label_count
 
     @state.change(
         selected_array_key,
@@ -251,8 +261,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         state[y_scale_key] = float(X_SCALE * cm_per_pixel / core.pin_pitch)
 
         nb_cols = 0
+        label_count = 0
         for g in range(num_groups):
-            grid, display_width, nb_cols = _build_group_grid(
+            grid, display_width, nb_cols, label_count = _build_group_grid(
                 group_arrays[g],
                 array_dtype,
                 core,
@@ -265,6 +276,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         for g in range(num_groups, MAX_VIS_GROUPS):
             state[core_keys[g]] = []
             state[size_x_keys[g]] = []
+
+        state[label_count_key] = label_count
 
         if is_x:
             state[label_x_key] = (
@@ -325,6 +338,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                     ),
                                     x_scale=(str(X_SCALE),),
                                     y_scale=(y_scale_key,),
+                                    label_count=(label_count_key, 0),
+                                    show_labels=(show_labels_key, False),
+                                    decimals=(decimals_key, 2),
                                     busy=("trame__busy",),
                                     dark=("dark_mode",),
                                 )
@@ -340,7 +356,33 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
-            html.Div(
-                "Exposure {{ " + info + ".Exposure }} · ({{ " + info + ".Assembly }})",
-                classes="text-caption text-center",
-            )
+            # Footer: caption, values toggle and decimals selector on one line.
+            with html.Div(
+                style=(
+                    "flex: 0 0 auto; display: flex; align-items: center;"
+                    "justify-content: center; gap: 16px;"
+                    "min-height: 44px; padding: 6px 16px;"
+                )
+            ):
+                html.Div(
+                    "Exposure {{ " + info + ".Exposure }} · ({{ " + info + ".Assembly }})",
+                    classes="text-caption",
+                )
+                vuetify.VCheckbox(
+                    v_if=(f"{label_count_key} > 0",),
+                    v_model=show_labels_key,
+                    label="Show values",
+                    dense=True,
+                    hide_details=True,
+                    classes="ma-0 pa-0 text-caption",
+                    style="flex: 0 0 auto;",
+                )
+                vuetify.VSelect(
+                    v_if=(f"{show_labels_key} && {label_count_key} > 0",),
+                    v_model=decimals_key,
+                    items=("[0,1,2,3,4]",),
+                    label="Decimals",
+                    dense=True,
+                    hide_details=True,
+                    style="flex: 0 0 auto; max-width: 90px;",
+                )

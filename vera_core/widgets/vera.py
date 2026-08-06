@@ -158,6 +158,9 @@ class AxialView(HtmlElement):
             ("y_scale", "yScale"),
             ("x_sizes", "xSizes"),
             ("y_sizes", "ySizes"),
+            ("label_count", "labelCount"),
+            ("show_labels", "showLabels"),
+            "decimals",
             "dark",
             "busy",
         ]

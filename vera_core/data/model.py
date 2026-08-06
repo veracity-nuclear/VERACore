@@ -1,9 +1,7 @@
 import string
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Union
 
-import h5py
 import numpy as np
 from scipy.interpolate import make_interp_spline
 
@@ -49,9 +47,6 @@ def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
     return array
 
 
-H5_ARRAY_TYPE = Union[h5py.Dataset, np.ndarray]
-
-
 class DatasetSource(ABC):
     """Where one group's datasets come from. One subclass per backend."""
 
@@ -80,8 +75,11 @@ class DatasetSource(ABC):
 class DatasetStore:
     """Lazily exposes a source's datasets, caching reads on request.
 
-    The manifest comes from the source once at construction; `names()` is
-    authoritative, so a listed name is one the source can actually supply.
+    Reads go through the source on every `get` unless the name has been cached
+    via `cache_dataset`/`cache_all` or pinned. `names()` is snapshotted at
+    construction and drives caching; lookups also fall through to the source, so
+    a name outside the manifest (a cross-group path, say) still resolves.
+    Pinned datasets are in-memory only and never evicted.
     """
 
     def __init__(self, source: DatasetSource):
@@ -185,32 +183,42 @@ class CorePropMissing(Exception):
 
 
 class VeraOutCore(DatasetStore):
-    """Holds the core-level data for a VERA output file (the /CORE group)."""
+    """Core-level geometry shared by every state: maps, meshes, labels, shapes.
+
+    Reads from a DatasetSource, so the same class serves file, stream and
+    synthetic sources.
+    """
 
     def __init__(
         self,
         dataset_source: DatasetSource,
         overrides: CoreOverride | None = None,
     ):
-        """Build the core from an open h5 file.
-
-        Pass f to read the /CORE datasets from the file
+        """Build the core from a source covering the CORE group.
 
         args:
-            aspect_ratio: dx / dy of a pin cell
+            dataset_source: supplies core_map, core_sym, axial_mesh, etc.
+            overrides: user-supplied npin / nax, used when the source
+                underspecifies the lattice. Outranks anything discovered.
+
+        Raises CorePropMissing when the pin lattice or axial extent can't be
+        determined, and RuntimeError when core_map is absent.
         """
         if overrides is None:
             overrides = {}
 
         super().__init__(source=dataset_source)
-        aspect_ratio = self.get("aspect_ratio")
-        self.aspect_ratio = aspect_ratio if aspect_ratio is not None else 1
-        self.axial_mesh = self.get("axial_mesh")
         self.core_map = self.get("core_map")
-        self.core_sym = self.get("core_sym")[0]
-        self.pin_volumes = self.get("pin_volumes")
         if self.core_map is None:
-            raise RuntimeError("[ERROR] core_map not found in h5 file, unable to visualize data")
+            raise RuntimeError("[ERROR] core_map not found in source, unable to visualize data")
+        core_sym = self.get("core_sym")
+        self.core_sym = core_sym[0] if core_sym is not None else None
+        if self.core_sym is None:
+            print("[Warning] core_sym not found in source, will try to infer from core map")
+        self.pin_volumes = self.get("pin_volumes")
+        aspect_ratio = self.get("aspect_ratio")
+        self.aspect_ratio = aspect_ratio[0] if aspect_ratio is not None else 1
+        self.axial_mesh = self.get("axial_mesh")
         self._determine_core_shape(self.core_map, overrides)
         self._check_missing()
         if not self.has_axial_mesh():
@@ -238,6 +246,11 @@ class VeraOutCore(DatasetStore):
         if overrides is None:
             overrides = {}
         self.nass = int(np.count_nonzero(np.unique(cm[~np.isnan(cm)])))
+        if self.core_sym is None:
+            if int(np.count_nonzero(cm[~np.isnan(cm)])) == self.nass:
+                self.core_sym = 1
+            else:
+                self.core_sym = 4
         self.nax = None
         self.npy = None
         self.npx = None
@@ -278,9 +291,8 @@ class VeraOutCore(DatasetStore):
             self._nax_src = "/CORE/axial_mesh"
 
         apitch = self.get("apitch")
-        if apitch and self.npx:
+        if apitch is not None and self.npx:
             self._pin_pitch = float(apitch[0] / self.npx)
-            print("found pin pitch")
 
         if not self.has_axial_mesh() and self.nax:
             self.axial_mesh = np.linspace(0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
@@ -377,7 +389,10 @@ class VeraOutCore(DatasetStore):
             raise Exception(f"Unhandled symmetry: {sym}")
 
     def _determine_core_labels(self):
-        """Must be called AFTER `self.reduced_core_map` is set"""
+        """Assign row/column labels, falling back to letters and numbers.
+
+        Must be called AFTER `self.reduced_core_map` is set.
+        """
         num_rows, num_cols = self.reduced_core_map.shape
         start_index = (
             self.reduced_core_map_start_index
@@ -709,7 +724,7 @@ class VeraOutState(DatasetStore):
         It is not categorized and not written to the file.
         """
         self.pin(dataset_name, dataset)
-        self.diff_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+        self.diff_datasets.update({dataset_name: dataset.dataset_type})
         ds_dtype = dataset.dataset_type
         if ds_dtype == VeraDtype.UNKNOWN:
             return
@@ -722,7 +737,7 @@ class VeraOutState(DatasetStore):
         shows up in the grouped key listings. Not written to the file.
         """
         self.pin(dataset_name, dataset)
-        self.derived_datasets.update({dataset_name: "H5_ARRAY_TYPE = NONE"})
+        self.derived_datasets.update({dataset_name: dataset.dataset_type})
         ds_dtype = dataset.dataset_type
         if ds_dtype == VeraDtype.UNKNOWN:
             return
@@ -730,6 +745,13 @@ class VeraOutState(DatasetStore):
 
 
 class VeraDataSource:
+    """One loaded VERA calculation: a core, its states, and lookup across both.
+
+    Built by a reader rather than opened directly, so it is independent of where
+    the data came from. Derivation needs the pyvera calculator and is therefore
+    file-only; diffs work for any source.
+    """
+
     def __init__(
         self,
         core: VeraOutCore,
@@ -950,23 +972,12 @@ class VeraDataSource:
     def _get_dataset(self, ds_name: str, state_idx: int | None = None) -> VeraDataset | None:
         """Resolve a named array to its VeraDataset, without masking.
 
-        Resolution order:
-          - Names in `arrays_on_core` (e.g. pin_volumes) come from the core and
-            ignore `state_idx`, since core data is shared by every state.
-          - All other names come from `states[state_idx]`, or the active state
-            when `state_idx` is None.
+        Core arrays (pin_volumes) come from the core and ignore `state_idx`.
+        Everything else comes from `states[state_idx]`, or the active state when
+        None. Negative indices are rejected rather than wrapping.
 
-        args:
-            ds_name: dataset name as it appears in the state or core group
-            state_idx: state to read from; None uses the active state. Negative
-                indices are rejected rather than wrapping.
-
-        Returns the dataset, or None if the name is unknown to the source or
-        resolves to something that is not a VeraDataset. Raises IndexError if
-        `state_idx` is out of range, including for core arrays.
-
-        Note: reads are lazy. When the target state is uncached, this triggers a
-        full read of the dataset from the h5 file.
+        Returns None if the name is unknown. Raises IndexError if `state_idx` is
+        out of range. Reads are lazy: an uncached name is read on access.
         """
         if state_idx is not None and not 0 <= state_idx < len(self.states):
             raise IndexError(f"{state_idx} out of index range")
@@ -991,16 +1002,13 @@ class VeraDataSource:
         mask_reflected: bool = True,
         state_idx: int | None = None,
     ) -> VeraDataset:
-        """Return a named array from the core or a state, ready for use.
+        """Return a named array, masked and ready for use.
 
-        args:
-            array_name: dataset name
-            mask_reflected: set reflected positions to NaN on odd quarter cores
-            state_idx: state to read from; None uses the active state
+        On odd-sized quarter cores, reflected positions are set to NaN so
+        mirrored data isn't double-counted. Even cores and mask_reflected=False
+        skip this.
 
-        Returns the dataset. Masking returns a copy, so the result may or may not
-        alias the cached array depending on `mask_reflected` and core symmetry;
-        treat it as read-only either way.
+        Always returns a writable copy that the caller owns.
 
         Raises RuntimeError if the name is not found, IndexError if `state_idx`
         is out of range.

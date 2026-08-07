@@ -1,6 +1,6 @@
 import numpy as np
 from trame.ui.html import DivLayout
-from trame.widgets import html
+from trame.widgets import html, vuetify
 
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
@@ -37,10 +37,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     n_groups_key = f"n_groups_{view_id}"
     group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    decimals_key = f"assembly_decimals_{view_id}"
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
 
     state.setdefault(n_groups_key, 0)
+    state.setdefault(decimals_key, 2)
     for gk in group_keys:
         state.setdefault(gk, [])
 
@@ -139,6 +141,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     ),
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),
+                                    decimals=(decimals_key, 2),
                                 )
                             with html.Div(
                                 style=(
@@ -151,10 +154,26 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     color_preset="jet",
                                     units=(f"color_units_{view_id}",),
                                 )
-            html.Div(
-                "Exposure {{ " + info + ".Exposure }}"
-                " · ({{ " + info + ".Assembly }})"
-                " · Axial - {{ " + info + ".Layer }}"
-                " · Surface - {{ ['W','N','E','S'][selected_surface] || '-' }}",
-                classes="text-caption text-center",
-            )
+            # Footer: caption with the decimals selector alongside.
+            with html.Div(
+                style=(
+                    "flex: 0 0 auto; display: flex; align-items: center;"
+                    "justify-content: center; gap: 16px;"
+                    "min-height: 44px; padding: 6px 16px;"
+                )
+            ):
+                html.Div(
+                    "Exposure {{ " + info + ".Exposure }}"
+                    " · ({{ " + info + ".Assembly }})"
+                    " · Axial - {{ " + info + ".Layer }}"
+                    " · Surface - {{ ['W','N','E','S'][selected_surface] || '-' }}",
+                    classes="text-caption",
+                )
+                vuetify.VSelect(
+                    v_model=decimals_key,
+                    items=("[0,1,2,3,4]",),
+                    label="Decimals",
+                    dense=True,
+                    hide_details=True,
+                    style="flex: 0 0 auto; max-width: 90px;",
+                )

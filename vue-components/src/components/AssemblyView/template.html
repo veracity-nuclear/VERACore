@@ -48,8 +48,9 @@
             @mouseleave="exit"
           >
             <div
-              class="text-center text-caption"
+              class="text-center"
               style="color: black; text-shadow: 0 0 3px rgba(255,255,255,0.7);"
+              :style="valueStyle(i, j)"
             >
               {{ toValue(i, j) }}
             </div>

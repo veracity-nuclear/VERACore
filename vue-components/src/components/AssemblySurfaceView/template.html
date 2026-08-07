@@ -61,19 +61,19 @@
                   vector-effect="non-scaling-stroke"
                 />
 
-                <!-- Value text per triangle -->
                 <text
-                  v-for="surface in [0, 1, 2, 3]"
+                  v-for="(label, surface) in faceLabels[toIdx(i, j)]"
                   :key="'t' + surface"
                   :x="triangleCentroids[surface][0]"
                   :y="triangleCentroids[surface][1]"
                   text-anchor="middle"
                   dominant-baseline="central"
-                  :font-size="cellSize * 0.11"
+                  :font-size="label.size"
+                  :stroke-width="label.halo"
                   fill="black"
-                  style="paint-order: stroke; stroke: rgba(255,255,255,0.7); stroke-width: 2px;"
+                  style="paint-order: stroke; stroke: rgba(255,255,255,0.7);"
                 >
-                  {{ faceText(i, j, surface) }}
+                  {{ label.text }}
                 </text>
 
                 <!-- Selected-triangle highlight (drawn last, on top) -->

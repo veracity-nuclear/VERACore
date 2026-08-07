@@ -380,7 +380,6 @@ class VeraOutCore(DatasetStore):
                 cstart_h = ch // 2
                 self.comp_core_map = self.comp_core_map[cstart_w:, cstart_h:]
                 self.comp_map_start_index = cstart_w
-                return
             elif self.has_comp_core():
                 self.comp_map_start_index = start_w
             if self.detector_map is not None:

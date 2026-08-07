@@ -76,6 +76,7 @@ class AssemblySurfaceView(HtmlElement):
             ("cell_size", "cellSize"),
             "dark",
             "busy",
+            "decimals",
         ]
         self._event_names += [
             "click",

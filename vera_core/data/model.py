@@ -917,6 +917,7 @@ class VeraDataSource:
                     spl = make_interp_spline(comp_means, comp_data, k=interpolation_order, axis=ax)
                     diff = ref_data - spl(ref_means, extrapolate=False)
             diff.physical_units = units
+            diff.name = new_diff_name
             pending.append((state, diff))
         if not pending:
             raise ValueError(f"No overlapping/compatible states to diff for '{new_diff_name}'")
@@ -981,6 +982,7 @@ class VeraDataSource:
                     der = np.sqrt(var)
                 case DerivationMethod.RMS:
                     der = np.sqrt(self._run_avg_over_axes(data**2, axes))
+            der.name = new_dataset_name
             state.add_derived_dataset(new_dataset_name, der)
 
     def _get_dataset(self, ds_name: str, state_idx: int | None = None) -> VeraDataset | None:

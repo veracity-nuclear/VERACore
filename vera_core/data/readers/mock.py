@@ -1,10 +1,3 @@
-"""In-memory data sources for tests and synthetic cases.
-
-Builds the same objects the h5 reader does, from plain numpy arrays, so the
-whole data layer can be exercised without an HDF5 file. `build_source` is the
-main entry point; the `spec` helpers describe the cases worth covering.
-"""
-
 import numpy as np
 
 from ..dtypes import VeraDataset, VeraDtype
@@ -51,7 +44,7 @@ class DictDatasetSource(DatasetSource):
         raw = self._a[name]
         arr = raw if raw.ndim else np.array([raw])
         dtype = self._dataset_dtypes.get(tuple(np.shape(raw)), VeraDtype.UNKNOWN)
-        return VeraDataset(arr, dtype, self._units.get(name, "unitless"))
+        return VeraDataset(arr, dtype, name, self._units.get(name, "unitless"))
 
 
 def core_map(nass_side: int = 5, core_sym: int = 4) -> np.ndarray:

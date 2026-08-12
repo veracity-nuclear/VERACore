@@ -88,7 +88,7 @@ class H5DatasetSource(DatasetSource):
         if self._dataset_dtypes.get(shape) is not None:
             dtype = self._dataset_dtypes.get(shape)
         arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
-        ds = VeraDataset(arr, dtype, units)
+        ds = VeraDataset(arr, dtype, name, units)
         return ds
 
 

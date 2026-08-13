@@ -217,7 +217,7 @@ def finalize_layout(
 
 
 def request_title(request) -> str:
-    """A heading for one request, matching the trame header.
+    """A heading for one request.
 
     'PIN POWERS' for a single source, 'PIN POWERS | vera2' when the request
     names one.
@@ -229,8 +229,7 @@ def request_title(request) -> str:
 
 
 def panel_grid(n_groups: int) -> tuple[int, int]:
-    """(n_rows, n_cols) of panels: one row up to two groups, then 2 wide,
-    matching the wrap in the trame layout."""
+    """(n_rows, n_cols) of panels: one row up to two groups, then 2 wide"""
     n_cols = 1 if n_groups == 1 else 2
     return math.ceil(n_groups / n_cols), n_cols
 

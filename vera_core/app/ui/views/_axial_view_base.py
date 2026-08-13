@@ -5,6 +5,7 @@ from trame.widgets import html, vuetify
 from vera_core.data.dtypes import VeraDtype
 from vera_core.data.model import VeraDataSource, VeraOutCore
 from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.renders import AxialView, Selection
 from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
@@ -15,6 +16,7 @@ from ..helpers import (
     is_non_active_view,
     set_info,
 )
+from .save_image import notification, register_photo_state, take_photo
 
 MAX_VIS_GROUPS = 4
 FALLBACK_DISPLAY_SIZE = 17
@@ -77,6 +79,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     n_groups_key = f"n_groups_{view_id}"
     info = f"label_info_{view_id}"
 
+    msg_key, msg_show_key = register_photo_state(state, view_id, option["name"])
+
     pin_key = "selected_j" if is_x else "selected_i"
 
     for ck in core_keys:
@@ -92,6 +96,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     state.setdefault(label_count_key, 0)
     state.setdefault(show_labels_key, False)
     state.setdefault(decimals_key, 2)
+
+    saved_sel: Selection | None = None
 
     def axial_cell_selected(layer, clicked_idx):
         if is_x:
@@ -222,9 +228,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             array[core.non_fuel_locs] = np.nan
 
         thres_key = format_label(src_id, selected_array)
-        thres = state["thresholds"]
-        if thres.get(thres_key):
-            array = apply_thresholds(array, thres[thres_key])
+        thres = state["thresholds"].get(thres_key)
+        if thres:
+            array = apply_thresholds(array, thres)
 
         is_comp = array_dtype.is_computational()
         is_detector = array_dtype.is_detector()
@@ -259,6 +265,19 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         total_h = float(abs(axial_mesh[-1] - axial_mesh[0]))
         cm_per_pixel = total_h / mesh_pixels.sum()
         state[y_scale_key] = float(X_SCALE * cm_per_pixel / core.pin_pitch)
+
+        ax = AxialView(vera_source)
+        sel = ax.select(
+            selected_array,
+            state=vera_source.active_state_index,
+            axis="x" if is_x else "y",
+            assembly=selected_assembly,
+            pin=selected_pin,
+            thresholds=thres,
+        )
+        sel.title = format_label(src_id, selected_array)
+        nonlocal saved_sel
+        saved_sel = sel
 
         nb_cols = 0
         label_count = 0
@@ -386,3 +405,13 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
+                take_photo(
+                    state=state,
+                    saved_sel=lambda: saved_sel,
+                    show_labels_key=show_labels_key,
+                    decimals_key=decimals_key,
+                    msg_key=msg_key,
+                    msg_show_key=msg_show_key,
+                    n_groups_key=n_groups_key,
+                )
+            notification(msg_key, msg_show_key)

@@ -336,6 +336,7 @@ class Selection[RequestT]:
     def __init__(self, view: "View[RequestT]", request: RequestT):
         self.view = view
         self.request = request
+        self.title: str | bool = False
 
     def replace(self, **changes) -> "Selection[RequestT]":
         """A selection for the same view with some request fields changed.
@@ -353,28 +354,43 @@ class Selection[RequestT]:
     def figure(
         self,
         *,
+        title: str | bool = False,
         style: ViewStyle | None = None,
         color: ColorSource = None,
         color_scope: ColorScope | None = None,
         **kwargs,
     ) -> Figure:
         """The rendered figure. kwargs go to View.figure()."""
+        title = title if title else self.title
         return self.view.figure(
-            self.request, style=style, color=color, color_scope=color_scope, **kwargs
+            self.request,
+            title=self.title,
+            style=style,
+            color=color,
+            color_scope=color_scope,
+            **kwargs,
         )
 
     def savefig(
         self,
         path: str | Path,
         *,
+        title: str | bool = False,
         style: ViewStyle | None = None,
         color: ColorSource = None,
         color_scope: ColorScope | None = None,
         **kwargs,
     ) -> Path:
         """Render and write to path. Format follows the suffix."""
+        title = title if title else self.title
         return self.view.savefig(
-            self.request, path, style=style, color=color, color_scope=color_scope, **kwargs
+            self.request,
+            path,
+            title=title,
+            style=style,
+            color=color,
+            color_scope=color_scope,
+            **kwargs,
         )
 
     def __repr__(self) -> str:
@@ -460,6 +476,7 @@ class View[RequestT]:
         request: RequestT,
         path: str | Path,
         *,
+        title: str | bool = False,
         style: ViewStyle | None = None,
         color: ColorSource = None,
         color_scope: ColorScope | None = None,
@@ -471,7 +488,9 @@ class View[RequestT]:
         Format follows the suffix: .png, .pdf, .svg.
         """
         return write_figure(
-            self.figure(request, style=style, color=color, color_scope=color_scope, **kwargs),
+            self.figure(
+                request, title=title, style=style, color=color, color_scope=color_scope, **kwargs
+            ),
             path,
             dpi,
         )

@@ -6,6 +6,7 @@ import numpy as np
 from trame.app.asynchronous import StateQueue
 from trame_server.core import Server
 
+from vera_core.data.analysis.color import array_range
 from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.readers.h5 import open_vera_file_data_source
 from vera_core.data.registry import VeraDataRegistry
@@ -23,7 +24,6 @@ from .features import (
 )
 from .features.appdata import validate_file_overrides
 from .helpers import (
-    array_range,
     default_dataset_name,
     format_label,
     get_next_y_from_layout,

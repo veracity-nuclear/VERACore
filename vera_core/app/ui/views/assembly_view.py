@@ -5,10 +5,12 @@ from trame.widgets import html, vuetify
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.renders import AssemblyView, Selection
 from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
 from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
+from .save_image import notification, register_photo_state, take_photo
 
 
 def option_for(view_id):
@@ -48,6 +50,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     info = f"label_info_{view_id}"
     decimals_key = f"assembly_decimals_{view_id}"
     state.setdefault(decimals_key, 2)
+
+    msg_key, msg_show_key = register_photo_state(state, view_id, option["name"])
+
+    saved_sel: Selection | None = None
 
     @state.change(
         "assembly_view_size",
@@ -123,9 +129,20 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 rod_ij = (rows[in_image], cols[in_image])
                 for image in images_dataset:
                     image[rod_ij] = np.nan
-            if thres.get(thres_key):
+            thresholds_to_apply = thres.get(thres_key)
+            if thresholds_to_apply:
                 for idx, image in enumerate(images_dataset):
-                    images_dataset[idx] = apply_thresholds(image, thres[thres_key])
+                    images_dataset[idx] = apply_thresholds(image, thresholds_to_apply)
+            sel = AssemblyView(vera_source).select(
+                array,
+                state=vera_source.active_state_index,
+                assembly=selected_assembly,
+                z=selected_layer,
+                thresholds=thresholds_to_apply,
+            )
+            sel.title = format_label(selected_src_id, selected_array)
+            nonlocal saved_sel
+            saved_sel = sel
 
             # Only allow one image in the cache
             MAX_ITEMS_IN_CACHE = 1
@@ -218,3 +235,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         hide_details=True,
                         style="max-width: 72px;",
                     )
+                    take_photo(
+                        state=state,
+                        saved_sel=lambda: saved_sel,
+                        show_labels_key=True,
+                        decimals_key=decimals_key,
+                        msg_key=msg_key,
+                        msg_show_key=msg_show_key,
+                        n_groups_key=n_groups_key,
+                    )
+                notification(msg_key, msg_show_key)

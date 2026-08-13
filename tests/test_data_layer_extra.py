@@ -154,7 +154,7 @@ def test_metadata_survives_arithmetic():
 
 
 def test_metadata_survives_copy():
-    ds = VeraDataset(np.ones(3), VeraDtype.PIN, "W")
+    ds = VeraDataset(np.ones(3), VeraDtype.PIN, "test_name", "W")
     copied = ds.copy()
     assert copied.dataset_type is VeraDtype.PIN
     assert copied.physical_units == "W"

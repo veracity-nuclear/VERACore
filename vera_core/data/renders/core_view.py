@@ -53,18 +53,6 @@ __all__ = [
 ]
 
 
-def core_image(slice_: CoreSlice) -> np.ndarray:
-    """The slice as one 2-D pin-resolution array."""
-    data = slice_.data
-    if len(slice_.cell_shape) == 1:
-        side = assembly_side(slice_.cell_shape[0])
-        data = data.reshape(*slice_.grid_shape, side, side)
-    if data.ndim == 2:
-        return data
-    n_rows, n_cols, cell_h, cell_w = data.shape
-    return data.transpose(0, 2, 1, 3).reshape(n_rows * cell_h, n_cols * cell_w)
-
-
 def image_side(slice_: CoreSlice) -> int:
     """Pins across one assembly in the rendered image, 1 for cell-less data."""
     cell = slice_.cell_shape
@@ -107,7 +95,7 @@ def draw_core_slice(
     if style is None:
         style = ViewStyle()
     spec = resolve_color_specs([slice_], color)[0]
-    image = core_image(slice_)
+    image = slice_.as_image()
     side = image_side(slice_)
     height, width = image.shape
 

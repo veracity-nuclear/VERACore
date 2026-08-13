@@ -69,8 +69,16 @@ class CoreSlice:
 
     @property
     def assembly_side(self) -> int:
-        """Pins across one assembly, or 1 for assembly-level data."""
-        return self.cell_shape[0] if len(self.cell_shape) == 2 else 1
+        """Pins or nodes across one assembly, or 1 for assembly-level data.
+
+        A 1-D cell is a flat run of nodes, so its side is the square root, not
+        the length.
+        """
+        if len(self.cell_shape) == 2:
+            return self.cell_shape[0]
+        if len(self.cell_shape) == 1:
+            return assembly_side(self.cell_shape[0])
+        return 1
 
     @property
     def core_cols(self) -> int:
@@ -89,13 +97,28 @@ class CoreSlice:
     # -- views ------------------------------------------------------------
 
     def as_image(self) -> np.ndarray:
-        """Flatten per-assembly cells into one 2-D array for imshow"""
+        """Flatten per-assembly cells into one 2-D array for imshow."""
         if len(self.cell_shape) == 0:
             return self.data
-        if len(self.cell_shape) != 2:
-            raise ValueError(f"as_image() needs a 2-D cell, got cell_shape {self.cell_shape}")
-        nr, nc, ch, cw = self.data.shape
-        return self.data.transpose(0, 2, 1, 3).reshape(nr * ch, nc * cw)
+        data = self.data
+        if len(self.cell_shape) == 1:
+            side = assembly_side(self.cell_shape[0])
+            data = data.reshape(*self.grid_shape, side, side)
+        elif len(self.cell_shape) != 2:
+            raise ValueError(f"as_image() needs a cell of 1 or 2 dims, got {self.cell_shape}")
+        nr, nc, ch, cw = data.shape
+        return data.transpose(0, 2, 1, 3).reshape(nr * ch, nc * cw)
+
+    def serialize(self) -> list:
+        if len(self.cell_shape) > 2:
+            raise ValueError(f"serialize() needs a cell of 0, 1 or 2 dims, got {self.cell_shape}")
+        side = self.assembly_side
+        cells = self.data.reshape(*self.grid_shape, side * side)
+        empty = np.isnan(cells).all(axis=-1)
+        return [
+            [None if is_empty else cell for cell, is_empty in zip(row, empty_row, strict=False)]
+            for row, empty_row in zip(cells.tolist(), empty, strict=False)
+        ]
 
     def assembly(self, row: int, col: int) -> np.ndarray:
         """The cell at a grid position. All-NaN when the position is empty."""

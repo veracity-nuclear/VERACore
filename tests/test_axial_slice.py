@@ -1,200 +1,3 @@
-import numpy as np
-import pytest
-
-from vera_core.data.analysis.axial_slice import AxialSlice
-from vera_core.data.analysis.color import ColorSpec
-from vera_core.data.analysis.core_slice import CoreSlice
-from vera_core.data.analysis.surface_slice import SurfaceSlice
-from vera_core.data.dtypes import VeraDtype
-
-N_ASSEMBLIES = 12
-PIN_SIDE = 17
-N_LAYERS = 8
-PIN_PITCH = 1.26
-
-AXIAL_MESH = np.array([0.0, 12.0, 30.0, 55.0, 80.0, 110.0, 140.0, 175.0, 200.0])
-"""Deliberately non-uniform: uniform layers would hide edge-placement bugs."""
-
-COLUMN_LABELS = list("DCBA")
-ROW_LABELS = ["4", "5", "6", "7"]
-
-
-def core_map(n_rows=4, n_cols=4, n_entities=N_ASSEMBLIES):
-    """1-based entity ids with 0 for empty positions.
-
-    The last position is left empty on purpose, so every test exercises the
-    NaN path for a position the map does not fill.
-    """
-    ids = np.zeros((n_rows, n_cols), dtype=int)
-    ids.flat[:n_entities] = np.arange(1, n_entities + 1)
-    return ids
-
-
-class FakeCore:
-    """Minimal VeraOutCore."""
-
-    def __init__(self, non_fuel_locs=None, aspect_ratio=1.0):
-        self.aspect_ratio = aspect_ratio
-        self.non_fuel_locs = non_fuel_locs
-        self.pin_pitch = PIN_PITCH
-        self.core_shape = (PIN_SIDE, PIN_SIDE, N_LAYERS, N_ASSEMBLIES)
-        self.reduced_core_map = core_map()
-        self.comp_core_map = core_map()
-        self.reduced_core_map_column_labels = COLUMN_LABELS
-        self.reduced_core_map_row_labels = ROW_LABELS
-        self.comp_core_map_column_labels = COLUMN_LABELS
-        self.comp_core_map_row_labels = ROW_LABELS
-        self.reduced_core_map_start_index = 3
-        self.comp_map_start_index = 3
-
-    def get_map(self, dataset_type=None):
-        return self.comp_core_map if dataset_type.is_computational() else self.reduced_core_map
-
-    def has_comp_core(self):
-        return True
-
-    def get_axial_mesh(self, dataset_type=None):
-        return AXIAL_MESH
-
-    def get_axial_mesh_means(self, dataset_type=None):
-        return (AXIAL_MESH[:-1] + AXIAL_MESH[1:]) / 2
-
-    def row_assembly_indices(self, assembly, is_comp=False, is_detector=False):
-        """A cut across the map's second row, with one empty position."""
-        return np.array([-1, 0, 1, 2, 3, 4, 5])
-
-    col_assembly_indices = row_assembly_indices
-
-    def reduced_core_map_assembly(self, i, j, is_comp=False, is_detector=False):
-        return int(self.reduced_core_map[j, i]) - 1
-
-    def reduced_core_map_label(self, assembly, is_comp=False):
-        row, col = divmod(assembly, 4)
-        return f"{COLUMN_LABELS[col]}-{ROW_LABELS[row]}"
-
-
-class FakeSource:
-    """Minimal VeraDataSource over a dict of datasets.
-
-    Records how many times get_dataset() ran, so a test can prove the analysis
-    layer copies rather than writing into what it was handed.
-    """
-
-    def __init__(self, datasets, core=None):
-        self.datasets = datasets
-        self.core = core or FakeCore()
-        self.states = [{"exposure": np.array([0.0])}, {"exposure": np.array([52.413])}]
-        self.active_state = self.states[0]
-        self.reads = 0
-
-    def get_dataset_dtype(self, name, state=0):
-        return self.datasets[name][0]
-
-    def get_dataset(self, name, mask_reflected=True, state_idx=0):
-        self.reads += 1
-        return self.datasets[name][1]
-
-    def get_dataset_units(self, name, state=0):
-        return "unitless"
-
-
-# -- slice fixtures, for render tests that need no source -----------------
-
-
-def _empty_at(rows, cols):
-    """The grid position left empty, or None when the grid is too small to
-    spare one."""
-    return (rows - 1, cols - 1) if rows * cols > 1 else None
-
-
-def make_core_slice(cell=(2, 2), rows=4, cols=4, scale=1.0, **kwargs):
-    """A CoreSlice with one empty grid position and one NaN pin."""
-    rng = np.random.default_rng(0)
-    empty = _empty_at(rows, cols)
-    data = np.full((rows, cols, *cell), np.nan) if cell else np.full((rows, cols), np.nan)
-    for row in range(rows):
-        for col in range(cols):
-            if (row, col) == empty:
-                continue
-            data[row, col] = scale * rng.uniform(0.5, 1.5, cell or ())
-    if cell == (2, 2):
-        data[0, 0, 0, 0] = np.nan
-    finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
-    return CoreSlice(
-        data=data,
-        x_labels=COLUMN_LABELS,
-        y_labels=ROW_LABELS,
-        units="unitless",
-        **kwargs,
-    )
-
-
-def make_surface_slice(side=2, rows=4, cols=4, scale=1.0, **kwargs):
-    rng = np.random.default_rng(1)
-    empty = _empty_at(rows, cols)
-    data = np.full((rows, cols, side, side, 4), np.nan)
-    for row in range(rows):
-        for col in range(cols):
-            if (row, col) == empty:
-                continue
-            data[row, col] = scale * rng.uniform(0.85, 1.25, (side, side, 4))
-    finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
-    return SurfaceSlice(
-        data=data,
-        x_labels=COLUMN_LABELS,
-        y_labels=ROW_LABELS,
-        units="unitless",
-        **kwargs,
-    )
-
-
-def make_axial_slice(cell_width=2, n_cols=7, scale=1.0, **kwargs):
-    rng = np.random.default_rng(2)
-    data = scale * rng.uniform(0.4, 1.3, (N_LAYERS, n_cols, cell_width))
-    data[:, 0] = np.nan  # empty position along the cut
-    finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
-    return AxialSlice(
-        data=data,
-        x_edges=np.linspace(0, n_cols * PIN_SIDE * PIN_PITCH, n_cols * cell_width + 1),
-        y_edges=AXIAL_MESH,
-        x_labels=[f"C{i}" for i in range(n_cols)],
-        dtype=VeraDtype.NODAL,
-        units="unitless",
-        **kwargs,
-    )
-
-
-@pytest.fixture
-def core_slice():
-    return make_core_slice()
-
-
-@pytest.fixture
-def surface_slice():
-    return make_surface_slice()
-
-
-@pytest.fixture
-def axial_slice():
-    return make_axial_slice()
-
-
-@pytest.fixture
-def two_groups():
-    """Two core slices an order of magnitude apart, for color-range tests."""
-    return [
-        make_core_slice(scale=1.0, group=0, n_groups=2),
-        make_core_slice(scale=0.02, group=1, n_groups=2),
-    ]
-
-
-@pytest.fixture
-def spec():
-    return ColorSpec(0.0, 10.0)
-
 """Tests for the analysis layer.
 
 The slice builders are where geometry decisions live, so these focus on the
@@ -213,7 +16,6 @@ from conftest import (
     FakeSource,
     make_axial_slice,
     make_core_slice,
-    make_surface_slice,
 )
 
 from vera_core.data.analysis.axial_slice import (
@@ -229,6 +31,7 @@ from vera_core.data.analysis.surface_slice import (
     lateral_faces,
     surface_slices,
 )
+from vera_core.data.dtypes import VeraDtype
 
 RNG = np.random.default_rng(11)
 
@@ -352,6 +155,11 @@ def axial_source(dtype, shape):
     return FakeSource({"q": (dtype, RNG.uniform(0.5, 1.5, shape))})
 
 
+def _writable(source):
+    """FakeSource hands back the same array, so tests can mutate it."""
+    return source.datasets["q"][1]
+
+
 class TestAxialSlices:
     @pytest.mark.parametrize(
         "dtype, shape, cell_width",
@@ -451,3 +259,26 @@ class TestNodePair:
     def test_out_of_range_pin_clamps(self):
         assert node_pair(99, is_x=True) == (2, 3)
         assert node_pair(99, is_x=False) == (1, 3)
+
+
+class TestAxialEmptyCut:
+    """An empty cut used to render as a blank panel with a 0-to-1 colorbar,
+    which reads as a plot rather than a failure."""
+
+    def test_no_assemblies_on_the_cut_raises(self):
+        source = axial_source(VeraDtype.ASSEMBLY, (1, N_LAYERS, N_ASSEMBLIES))
+        source.core.row_assembly_indices = lambda *a, **k: np.full(9, -1)
+        with pytest.raises(ValueError, match="no assemblies"):
+            axial_slices(source, AxialRequest(array="q", state=0))
+
+    def test_all_nan_values_raise(self):
+        source = axial_source(VeraDtype.ASSEMBLY, (1, N_LAYERS, N_ASSEMBLIES))
+        source.datasets["q"][1][:] = np.nan
+        with pytest.raises(ValueError, match="no finite values"):
+            axial_slices(source, AxialRequest(array="q", state=0))
+
+    def test_the_message_reports_the_shapes(self):
+        source = axial_source(VeraDtype.ASSEMBLY, (1, N_LAYERS, N_ASSEMBLIES))
+        source.datasets["q"][1][:] = np.nan
+        with pytest.raises(ValueError, match=r"cut \(\d+, \d+, \d+\)"):
+            axial_slices(source, AxialRequest(array="q", state=0))

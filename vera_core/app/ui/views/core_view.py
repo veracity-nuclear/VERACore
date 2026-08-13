@@ -4,34 +4,17 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
+from vera_core.data.analysis.core_slice import ALLOWED_DTYPES, SliceRequest
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.renders import CoreView, Selection
 from vera_core.data.thresholds import ThresholdCondition, apply_thresholds
 from vera_core.widgets import vera
 
 from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
-from ._core_grid import (
-    assembly_side,
-    core_labels,
-    format_for_vis,
-    nan_out_non_fuel_locs,
-)
-
-ALLOWED_DTYPES: list[VeraDtype] = [
-    VeraDtype.PIN,
-    VeraDtype.CHANNEL,
-    VeraDtype.ASSEMBLY,
-    VeraDtype.RADIAL,
-    VeraDtype.RADIAL_ASSEMBLY,
-    VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY,
-    VeraDtype.COMP_ASSY,
-    VeraDtype.COMP_ASSY_ENERGY,
-    VeraDtype.NODAL,
-    VeraDtype.POINT_DETECTOR,
-    VeraDtype.RADIAL_POINT_DETECTOR,
-]
+from ._core_grid import assembly_side, core_labels, format_for_vis, nan_out_non_fuel_locs
+from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
 
@@ -128,6 +111,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     decimals_key = f"assembly_decimals_{view_id}"
     state.setdefault(decimals_key, 2)
 
+    msg_key, msg_show_key = register_photo_state(state, view_id, option["name"])
+
     for gk in group_keys:
         state.setdefault(gk, [])
 
@@ -140,6 +125,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(y_label_key, [])
     state.setdefault(core_cols_key, 1)
     state.setdefault(assembly_size_key, 1)
+
+    saved_sel: Selection[SliceRequest] | None = None
 
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
@@ -170,6 +157,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         )
         if not vis_state:
             return
+
+        cv = CoreView(source=vera_source)
+        sel = cv.select(
+            selected_array,
+            z=selected_layer,
+            state=vera_source.active_state_index,
+            thresholds=thresholds_to_apply,
+        )
+        sel.title = format_label(selected_src_id, selected_array)
+        nonlocal saved_sel
+        saved_sel = sel
+
         results, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
         num_groups = len(results)
         for idx in range(MAX_NUM_GROUPS):
@@ -273,3 +272,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
+                take_photo(
+                    state=state,
+                    saved_sel=lambda: saved_sel,
+                    show_labels_key=show_labels_key,
+                    decimals_key=decimals_key,
+                    msg_key=msg_key,
+                    msg_show_key=msg_show_key,
+                    n_groups_key=n_groups_key,
+                )
+            notification(msg_key, msg_show_key)

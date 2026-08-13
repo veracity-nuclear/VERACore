@@ -483,11 +483,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @state.change(f"selected_array_{view_id}", f"selected_src_id_{view_id}", "thresholds")
     def _on_selection_changed(**kwargs):
-        _update_volume(server, registry, view_id)
+        if _is_active(state, view_id):
+            _update_volume(server, registry, view_id)
 
     @state.change(f"color_range_{view_id}_0")
     def _on_color_changed(**kwargs):
-        _update_color(server, view_id)
+        if _is_active(state, view_id):
+            _update_color(server, view_id)
 
     @state.change(
         f"crop_enabled_{view_id}",
@@ -501,4 +503,5 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @ctrl.add("on_vera_out_active_state_index_changed")
     def _on_state_index_changed(**kwargs):
-        _update_volume(server, registry, view_id)
+        if _is_active(state, view_id):
+            _update_volume(server, registry, view_id)

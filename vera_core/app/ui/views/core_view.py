@@ -130,6 +130,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
+        if is_non_active_view(state, view_id, option):
+            return
         set_info(view_id, state, registry)
 
     @state.change(

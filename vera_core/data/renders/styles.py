@@ -52,12 +52,11 @@ class ViewStyle:
         'auto'   significant figures, switching the whole panel to
                  scientific notation if any one value needs it
         'sci'    always scientific
-        'fixed'  decimal places, matching the trame Decimals select, and
-                 printing 0.00 for anything below that precision
+        'fixed'  decimal places, and printing 0.00 for anything below that precision
     """
 
     endpoint_ticks_only: bool = True
-    """Colorbar shows only vmin and vmax, matching the trame editor. Set False
+    """Colorbar shows only vmin and vmax. Set False
     for intermediate ticks, which reads better in a report."""
 
     axis_label_size: float = 13.0

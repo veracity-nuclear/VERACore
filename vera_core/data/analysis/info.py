@@ -64,7 +64,7 @@ class GridPosition:
 
     @property
     def ij(self) -> dict[str, int]:
-        """The trame convention, for writing back to state."""
+        """i is column index, j is row index."""
         return {"i": self.col, "j": self.row}
 
 

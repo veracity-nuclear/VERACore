@@ -31,12 +31,11 @@ from vera_core.data.renders.core_surface_view import (
 from vera_core.data.renders.core_view import (
     MAX_LABEL_SIDE,
     core_columns,
-    core_image,
     core_view_figure,
     draw_core_slice,
     image_side,
 )
-from vera_core.data.renders.layout import DARK, LIGHT, ViewStyle
+from vera_core.data.renders.styles import DARK, LIGHT, ViewStyle
 
 VALUES = ViewStyle(show_values=True)
 
@@ -51,17 +50,17 @@ def fresh_axes() -> Axes:
 class TestCoreImage:
     def test_two_d_cell_flattens_to_pin_resolution(self):
         slice_ = make_core_slice(cell=(2, 2), rows=3, cols=4)
-        assert core_image(slice_).shape == (6, 8)
+        assert slice_.as_image().shape == (6, 8)
 
     def test_one_d_cell_is_reshaped_to_a_square(self):
         """NODAL and COMP_NODAL produce a 1-D cell, which as_image() rejects."""
         slice_ = make_core_slice(cell=(4,), rows=3, cols=4)
-        assert core_image(slice_).shape == (6, 8)
+        assert slice_.as_image().shape == (6, 8)
         assert image_side(slice_) == 2
 
     def test_cell_less_data_passes_through(self):
         slice_ = make_core_slice(cell=(), rows=3, cols=4)
-        assert core_image(slice_).shape == (3, 4)
+        assert slice_.as_image().shape == (3, 4)
         assert image_side(slice_) == 1
 
     def test_columns_counts_pins_not_assemblies(self):
@@ -74,7 +73,7 @@ class TestDrawCoreSlice:
         reaches that branch."""
         slice_ = make_core_slice()
         mappable = draw_core_slice(fresh_axes(), slice_)
-        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.value_range
+        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.slice_value_range
 
     def test_explicit_color_wins(self):
         spec = ColorSpec(0.0, 10.0)
@@ -161,7 +160,7 @@ class TestDrawSurfaceSlice:
     def test_draws_with_no_explicit_color(self):
         slice_ = make_surface_slice()
         mappable = draw_surface_slice(fresh_axes(), slice_)
-        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.value_range
+        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.slice_value_range
 
     def test_adds_a_polygon_collection(self):
         ax = fresh_axes()
@@ -202,7 +201,7 @@ class TestDrawAxialSlice:
     def test_draws_with_no_explicit_color(self):
         slice_ = make_axial_slice()
         mappable = draw_axial_slice(fresh_axes(), slice_)
-        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.value_range
+        assert (mappable.norm.vmin, mappable.norm.vmax) == slice_.slice_value_range
 
     def test_elevation_runs_upward(self):
         """Unlike a map, this axis is a physical height."""

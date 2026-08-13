@@ -39,6 +39,8 @@ def _layer_elevation(axial_mesh, layer):
 
 
 def set_info(view_id: int, state: State, registry: VeraDataRegistry):
+    if is_view_locked(state=state, view_id=view_id):
+        return
     indices = get_safe_idxs(view_id, state, registry)
     if not indices:
         return

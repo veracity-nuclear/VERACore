@@ -120,7 +120,7 @@ def make_core_slice(cell=(2, 2), rows=4, cols=4, scale=1.0, **kwargs):
     if cell == (2, 2):
         data[0, 0, 0, 0] = np.nan
     finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
+    kwargs.setdefault("slice_value_range", (float(finite.min()), float(finite.max())))
     return CoreSlice(
         data=data,
         x_labels=COLUMN_LABELS,
@@ -140,7 +140,7 @@ def make_surface_slice(side=2, rows=4, cols=4, scale=1.0, **kwargs):
                 continue
             data[row, col] = scale * rng.uniform(0.85, 1.25, (side, side, 4))
     finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
+    kwargs.setdefault("slice_value_range", (float(finite.min()), float(finite.max())))
     return SurfaceSlice(
         data=data,
         x_labels=COLUMN_LABELS,
@@ -155,7 +155,7 @@ def make_axial_slice(cell_width=2, n_cols=7, scale=1.0, **kwargs):
     data = scale * rng.uniform(0.4, 1.3, (N_LAYERS, n_cols, cell_width))
     data[:, 0] = np.nan  # empty position along the cut
     finite = data[~np.isnan(data)]
-    kwargs.setdefault("value_range", (float(finite.min()), float(finite.max())))
+    kwargs.setdefault("slice_value_range", (float(finite.min()), float(finite.max())))
     return AxialSlice(
         data=data,
         x_edges=np.linspace(0, n_cols * PIN_SIDE * PIN_PITCH, n_cols * cell_width + 1),

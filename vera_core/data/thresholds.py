@@ -3,7 +3,7 @@ from typing import Literal, Sequence, TypedDict
 
 import numpy as np
 
-from . import VeraDataset
+from .dtypes import VeraDataset, VeraDtype
 
 THRESHOLD_OPS = {
     ">": operator.gt,
@@ -22,9 +22,13 @@ class ThresholdCondition(TypedDict):
     value: float
 
 
-def apply_thresholds(array: VeraDataset, conditions: Sequence[ThresholdCondition]) -> VeraDataset:
+def apply_thresholds(
+    array: VeraDataset | np.ndarray, conditions: Sequence[ThresholdCondition]
+) -> VeraDataset:
     keep = np.ones(array.shape, dtype=bool)
-    dtype = array.dataset_type
+    dtype = VeraDtype.UNKNOWN
+    if isinstance(array, VeraDataset):
+        dtype = array.dataset_type
     for c in conditions:
         keep &= THRESHOLD_OPS[c["op"]](array, c["value"])
     return VeraDataset(np.where(keep, array, np.nan), dtype)

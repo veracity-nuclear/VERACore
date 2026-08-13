@@ -12,17 +12,6 @@ def format_label(file: str, key: str):
     return f"{key.replace('_', ' ').upper()} | {file}"
 
 
-def array_range(array):
-    lo = float(np.nanmin(array))
-    hi = float(np.nanmax(array))
-    if not np.isfinite(lo) or not np.isfinite(hi):
-        return (0.0, 1.0)
-    if lo == hi:
-        eps = max(abs(hi) * 1e-9, 1e-12)
-        return (lo, hi + eps)
-    return (lo, hi)
-
-
 def get_next_y_from_layout(layout):
     next_y = 0
     for item in layout:

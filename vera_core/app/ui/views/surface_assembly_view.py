@@ -5,9 +5,11 @@ from trame.widgets import html, vuetify
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.renders import AssemblySurfaceView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import get_safe_idxs, is_non_active_view, set_info
+from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
+from .save_image import notification, register_photo_state, take_photo
 
 # Lateral faces are the first four of [W, N, E, S, T, B]
 LATERAL_FACE_SLICE = slice(0, 4)
@@ -45,6 +47,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(decimals_key, 2)
     for gk in group_keys:
         state.setdefault(gk, [])
+
+    msg_key, msg_show_key = register_photo_state(state, view_id, name=option["name"])
+
+    saved_sel: Selection | None = None
 
     def _build_cells(radial_adf, n_nodes, side):
         """value[idx] = [w, n, e, s] per pin/node cell."""
@@ -90,6 +96,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         for g in range(n_energy, MAX_NUM_GROUPS):
             state[group_keys[g]] = []
 
+        sel = AssemblySurfaceView(vera_source).select(
+            array,
+            state=vera_source.active_state_index,
+            assembly=selected_assembly,
+            z=selected_layer,
+        )
+        sel.title = format_label(selected_src_id, selected_array)
+        nonlocal saved_sel
+        saved_sel = sel
         state[n_groups_key] = n_energy
         set_info(view_id, state, registry)
 
@@ -177,3 +192,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
+                take_photo(
+                    state=state,
+                    saved_sel=lambda: saved_sel,
+                    show_labels_key=True,
+                    decimals_key=decimals_key,
+                    msg_key=msg_key,
+                    msg_show_key=msg_show_key,
+                    n_groups_key=n_groups_key,
+                )
+            notification(msg_key, msg_show_key)

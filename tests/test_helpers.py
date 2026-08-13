@@ -3,12 +3,12 @@ import pytest
 
 from vera_core.app.ui.helpers import (
     _layer_elevation,
-    array_range,
     convert_ji_to_node,
     default_dataset_name,
     format_label,
     get_next_y_from_layout,
 )
+from vera_core.data.analysis.color import array_range
 
 
 def test_format_label():

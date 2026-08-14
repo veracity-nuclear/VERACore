@@ -12,6 +12,7 @@ dist_pylauncher
 vera_out_inspector.py
 temp.txt
 *.dmg
+*.app
 *.patch
 VeraCore.zip
 temp.py

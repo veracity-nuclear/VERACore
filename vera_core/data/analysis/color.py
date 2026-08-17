@@ -23,6 +23,15 @@ def array_range(array) -> tuple[float, float]:
     return (lo, hi)
 
 
+def union_range(ranges: Sequence[tuple[float, float]]) -> tuple[float, float]:
+    """The range covering all of them, or (0, 1) when there are none."""
+    if not ranges:
+        return (0.0, 1.0)
+    lo = min(float(low) for low, _ in ranges)
+    hi = max(float(high) for _, high in ranges)
+    return array_range(np.array([lo, hi]))
+
+
 @dataclass(frozen=True)
 class ColorSpec:
     """How values map to color. Backend-neutral.
@@ -70,137 +79,103 @@ class ColorSpec:
 
 
 def default_color_spec(value_range: tuple[float, float], cmap: str = DEFAULT_CMAP) -> ColorSpec:
-    """The starting spec for a slice. Pass CoreSlice.value_range.
+    """The starting spec for one range, e.g. CoreSlice.value_range().
 
     Takes the range rather than the slice so this module stays importable by
     core_slice.py without a cycle. A flat range is widened, so a hand-built
-    slice cannot produce a spec that its own validate() rejects.
+    spec cannot fail its own validate().
     """
     lo, hi = array_range(np.asarray(value_range, dtype=float))
     return ColorSpec(vmin=lo, vmax=hi, cmap=cmap)
 
 
 def shared_color_spec(
-    value_ranges: list[tuple[float, float]], cmap: str = DEFAULT_CMAP
+    value_ranges: Sequence[tuple[float, float]], cmap: str = DEFAULT_CMAP
 ) -> ColorSpec:
     """One spec spanning several ranges, for an explicit common scale.
 
-    No longer backs any fallback: ColorScope reads ranges the source computed,
-    which do not shift with whichever slices are on the page. Use this when
-    the union over exactly what is displayed is what you mean -- comparing two
-    states side by side, say -- and pass the result as color.
-
-    Returns the default spec when the list is empty.
+    Use it when the union over exactly what is displayed is what you mean --
+    two states side by side, say -- and pass the result as color. Within one
+    slice, ColorScope.SLICE already does this.
     """
-    if not value_ranges:
-        return ColorSpec(cmap=cmap)
-    lo = min(float(r[0]) for r in value_ranges)
-    hi = max(float(r[1]) for r in value_ranges)
-    return default_color_spec((lo, hi), cmap=cmap)
+    return default_color_spec(union_range(value_ranges), cmap=cmap)
 
 
 class ColorScope(StrEnum):
-    """How wide a span of data the colorbar covers.
+    """How wide a span of data one panel's colorbar covers.
 
-        SLICE     this panel only -- most contrast, but the scale moves as
-                  you page through levels or groups
-        GROUP     every level of this slice's group -- panels stay comparable
-                  across z, which is what makes an animation readable
-        DATASET   the whole dataset -- every panel of it is comparable, at the
-                  cost of contrast when groups differ by orders of magnitude
+        GROUP     this group, this slice -- most contrast, but the scale
+                  moves as you page through levels
+        SLICE     every group of this slice -- panels are comparable with
+                  each other, which is what makes a group comparison honest
+        DATASET   the whole dataset -- every panel of it is comparable across
+                  levels and states, at the cost of contrast
 
-    The ranges come from the source, so they do not depend on which slices
-    happen to be on the page. A union over only the displayed slices is a
-    different quantity, and a moving one: pass shared_color_spec() explicitly
-    if that is what you want.
+    DATASET needs a range the builder computed from the source; a slice that
+    does not carry one raises rather than quietly narrowing the scope.
     """
 
-    SLICE = "slice"
     GROUP = "group"
+    SLICE = "slice"
     DATASET = "dataset"
-
-    @property
-    def attribute(self) -> str:
-        """The slice attribute holding this scope's range."""
-        return f"{self.value}_value_range"
 
 
 @runtime_checkable
-class RangedSlice(Protocol):
+class GroupedSlice(Protocol):
     """What resolve_color_specs() needs from a slice. Structural, so this
-    module stays free of any dependency on a particular slice type."""
+    module depends on no particular slice type."""
 
-    group: int | None
-    value_range: tuple[float, float]
+    @property
+    def n_groups(self) -> int: ...
+
+    def value_range(self, group: int, scope: "ColorScope") -> tuple[float, float]: ...
 
 
 ColorSource = (
     ColorSpec
     | Mapping[int, ColorSpec]
     | Sequence[ColorSpec | None]
-    | Callable[[RangedSlice], ColorSpec | None]
+    | Callable[[int], ColorSpec | None]
     | None
 )
-"""Ways a caller can specify color for a set of slices.
+"""Ways a caller can specify color for a slice's groups.
 
-    None                    each slice keeps its own data range
-    ColorSpec               one spec for all of them
+    None                    each group keeps its own range at the given scope
+    ColorSpec               one spec for every group
     {0: spec, 2: spec}      by group index, others fall back
-    [spec, None, spec]      by position, None falls back
-    lambda s: ...           computed, None falls back
+    [spec, None, spec]      by group index, None falls back
+    lambda group: ...       computed, None falls back
 """
 
 
-def scope_range(slice_: RangedSlice, scope: ColorScope) -> tuple[float, float]:
-    """One slice's range at the requested scope.
-
-    Raises AttributeError naming the scope rather than the attribute, since a
-    slice type that predates the three-range contract fails here first.
-    """
-    try:
-        return getattr(slice_, scope.attribute)
-    except AttributeError:
-        raise AttributeError(
-            f"{type(slice_).__name__} has no {scope.attribute};"
-            f" it cannot be colored at {scope.value} scope"
-        ) from None
-
-
-def _fallback_specs(slices: Sequence[RangedSlice], scope: ColorScope, cmap: str) -> list[ColorSpec]:
-    """The spec each slice gets when the caller names nothing for it."""
-    return [default_color_spec(scope_range(slice_, scope), cmap=cmap) for slice_ in slices]
-
-
-def _override(color: ColorSource, slice_: RangedSlice, index: int) -> ColorSpec | None:
-    """The caller's spec for one slice, or None to fall back."""
+def _override(color: ColorSource, group: int) -> ColorSpec | None:
+    """The caller's spec for one group, or None to fall back."""
     if color is None:
         return None
     if isinstance(color, ColorSpec):
         return color
     if isinstance(color, Mapping):
-        return color.get(slice_.group if slice_.group is not None else index)
+        return color.get(group)
     if callable(color):
-        return color(slice_)
-    return color[index] if index < len(color) else None
+        return color(group)
+    return color[group] if group < len(color) else None
 
 
 def resolve_color_specs(
-    slices: Sequence[RangedSlice],
+    slice_: GroupedSlice,
     color: ColorSource = None,
     *,
-    scope: ColorScope = ColorScope.SLICE,
+    scope: ColorScope = ColorScope.GROUP,
     cmap: str = DEFAULT_CMAP,
 ) -> list[ColorSpec]:
-    """One ColorSpec per slice, from whatever shape the caller supplied."""
+    """One ColorSpec per group, from whatever shape the caller supplied."""
     scope = ColorScope(scope)
     specs = []
-    for index, (slice_, fallback) in enumerate(
-        zip(slices, _fallback_specs(slices, scope, cmap), strict=False)
-    ):
-        spec = _override(color, slice_, index) or fallback
+    for group in range(slice_.n_groups):
+        fallback = default_color_spec(slice_.value_range(group, scope), cmap=cmap)
+        spec = _override(color, group) or fallback
         problems = spec.validate()
         if problems:
-            label = index if slice_.group is None else f"group {slice_.group}"
-            raise ValueError(f"color for {label}: {'; '.join(problems)}")
+            raise ValueError(f"color for group {group}: {'; '.join(problems)}")
         specs.append(spec)
     return specs

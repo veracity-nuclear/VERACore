@@ -1,20 +1,16 @@
-from typing import Sequence
-
-import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
-from vera_core.data.analysis.core_slice import ALLOWED_DTYPES, SliceRequest
-from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.analysis.core_slice import CoreSlice
+from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
-from vera_core.data.renders import CoreView, Selection
-from vera_core.data.thresholds import ThresholdCondition, apply_thresholds
+
+# from vera_core.data.renders import CoreView, Selection
 from vera_core.widgets import vera
 
 from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
-from ._core_grid import assembly_side, core_labels, format_for_vis, nan_out_non_fuel_locs
-from .save_image import notification, register_photo_state, take_photo
+from .save_image import register_photo_state
 
 MAX_LABEL_SIDE = 2
 
@@ -25,68 +21,8 @@ def option_for(view_id):
         "label": "Core View",
         "multi_picker": False,
         "icon": "mdi-chart-pie",
-        "allowed_categories": [dtype.title for dtype in ALLOWED_DTYPES],
+        "allowed_categories": [dtype.title for dtype in CoreSlice.ALLOWED_DTYPES],
     }
-
-
-def create_core_view(
-    vera_source: VeraDataSource,
-    dataset_name: str,
-    z: int,
-    thresholds: Sequence[ThresholdCondition] = [],
-):
-    if z < 0:
-        raise RuntimeError(f"z must be < 0, z = {z}")
-    dataset = vera_source.get_dataset(dataset_name)
-    ds_dtype = dataset.dataset_type
-    if ds_dtype not in ALLOWED_DTYPES:
-        return tuple()
-    is_comp = ds_dtype.is_computational()
-    layer_list = []
-    match ds_dtype:
-        case VeraDtype.PIN | VeraDtype.CHANNEL:
-            layer_list.append(dataset[:, :, z].swapaxes(0, 2).swapaxes(1, 2))
-        case VeraDtype.POINT_DETECTOR:
-            layer_list.append(dataset[z, :])
-        case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
-            layer_list.append(dataset[0, z, :])
-        case VeraDtype.RADIAL:
-            layer_list.append(dataset.swapaxes(0, 2).swapaxes(1, 2))
-        case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
-            layer_list.append(dataset)
-        case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-            layer_list.append(dataset[:, z, :].swapaxes(0, 1))
-        case VeraDtype.COMP_ASSY_ENERGY:
-            num_energy_groups = np.shape(dataset)[0]
-            for energy_group in range(num_energy_groups):
-                layer_list.append(dataset[energy_group, 0, z, :])
-        case VeraDtype.COMP_NODAL_ENERGY:
-            num_energy_groups = np.shape(dataset)[0]
-            for energy_group in range(num_energy_groups):
-                layer_list.append(dataset[energy_group, :, z, :].swapaxes(0, 1))
-        case _:
-            raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
-    core = vera_source.core
-    results = []
-    for layer in layer_list:
-        if ds_dtype.has_fuel_pins():
-            layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype == VeraDtype.RADIAL)
-        if thresholds:
-            layer = apply_thresholds(layer, thresholds)
-        # The label values are the cell values, so the second return is unused.
-        formatted_result, _ = format_for_vis(src=vera_source, dataset=layer)
-        results.append(formatted_result)
-
-    sample = next((c for row in formatted_result for c in row if isinstance(c, list) and c), None)
-    assembly_side_size = assembly_side(len(sample)) if sample else 0
-    x_labels, y_labels, max_core_cols = core_labels(core, is_comp)
-    return (
-        results,
-        assembly_side_size,
-        x_labels,
-        y_labels,
-        max_core_cols,
-    )
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -126,7 +62,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(core_cols_key, 1)
     state.setdefault(assembly_size_key, 1)
 
-    saved_sel: Selection[SliceRequest] | None = None
+    # saved_sel: Selection[SliceRequest] | None = None
 
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
@@ -154,32 +90,36 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         thresholds_to_apply = state["thresholds"].get(thres_key, [])
         vera_source: VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
-        vis_state = create_core_view(
-            vera_source, selected_array, selected_layer, thresholds_to_apply
-        )
-        if not vis_state:
-            return
 
-        cv = CoreView(source=vera_source)
-        sel = cv.select(
+        core_slice = CoreSlice.create_core_slice(
+            vera_source,
             selected_array,
-            z=selected_layer,
-            state=vera_source.active_state_index,
+            selected_layer,
             thresholds=thresholds_to_apply,
         )
-        sel.title = format_label(selected_src_id, selected_array)
-        nonlocal saved_sel
-        saved_sel = sel
+        if not core_slice:
+            return
 
-        results, assembly_side_size, xlabels, ylabels, max_core_cols = vis_state
+        # cv = CoreView(source=vera_source)
+        # sel = cv.select(
+        #     selected_array,
+        #     z=selected_layer,
+        #     state=vera_source.active_state_index,
+        #     thresholds=thresholds_to_apply,
+        # )
+        # sel.title = format_label(selected_src_id, selected_array)
+        # nonlocal saved_sel
+        # saved_sel = sel
+
+        results = core_slice.serialize_data_groups()
         num_groups = len(results)
         for idx in range(MAX_NUM_GROUPS):
-            state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx]
+            state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx][0]
         state[n_groups_key] = num_groups
-        state[assembly_size_key] = assembly_side_size
-        state[x_label_key] = xlabels
-        state[y_label_key] = ylabels
-        state[core_cols_key] = max_core_cols
+        state[assembly_size_key] = core_slice.assembly_side
+        state[x_label_key] = core_slice.x_labels
+        state[y_label_key] = core_slice.y_labels
+        state[core_cols_key] = core_slice.max_columns
         set_info(view_id, state, registry)
 
     can_label = f"{assembly_size_key} > 0 && {assembly_size_key} <= {MAX_LABEL_SIDE}"
@@ -274,13 +214,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
-                take_photo(
-                    state=state,
-                    saved_sel=lambda: saved_sel,
-                    show_labels_key=show_labels_key,
-                    decimals_key=decimals_key,
-                    msg_key=msg_key,
-                    msg_show_key=msg_show_key,
-                    n_groups_key=n_groups_key,
-                )
-            notification(msg_key, msg_show_key)
+            #     take_photo(
+            #         state=state,
+            #         saved_sel=lambda: saved_sel,
+            #         show_labels_key=show_labels_key,
+            #         decimals_key=decimals_key,
+            #         msg_key=msg_key,
+            #         msg_show_key=msg_show_key,
+            #         n_groups_key=n_groups_key,
+            #     )
+            # notification(msg_key, msg_show_key)

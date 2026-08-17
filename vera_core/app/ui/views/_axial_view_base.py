@@ -1,22 +1,20 @@
-import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
+# from vera_core.data.renders import AxialView, Selection
+from vera_core.data.analysis.axial_slice import AxialSlice
 from vera_core.data.dtypes import VeraDtype
-from vera_core.data.model import VeraDataSource, VeraOutCore
+from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
-from vera_core.data.renders import AxialView, Selection
-from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
 from ..helpers import (
-    convert_ji_to_node,
     format_label,
     get_safe_idxs,
     is_non_active_view,
     set_info,
 )
-from .save_image import notification, register_photo_state, take_photo
+from .save_image import register_photo_state
 
 MAX_VIS_GROUPS = 4
 FALLBACK_DISPLAY_SIZE = 17
@@ -97,7 +95,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     state.setdefault(show_labels_key, False)
     state.setdefault(decimals_key, 2)
 
-    saved_sel: Selection | None = None
+    # saved_sel: Selection | None = None
 
     def axial_cell_selected(layer, clicked_idx):
         if is_x:
@@ -118,85 +116,6 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         state[selected_layer_key] = registry.global_axial_idx_to_src_idx(
             src_id, array_dtype, state.selected_layer
         )
-
-    def _nodal_node_pair(selected_pin):
-        """Pick the two nodes along the cut direction for this view's axis."""
-        if is_x:
-            node = int(convert_ji_to_node(selected_pin, 0))  # j picks the row
-            return (0, 1) if node in (0, 1) else (2, 3)
-        node = int(convert_ji_to_node(0, selected_pin))  # i picks the col
-        return (0, 2) if node in (0, 2) else (1, 3)
-
-    def _build_group_grid(
-        array_2d_or_nodal,
-        array_dtype: VeraDtype,
-        core: VeraOutCore,
-        selected_pin,
-        assembly_indices,
-    ):
-        """label_count is the number of distinct values a
-        cell holds, or 0 when a cell holds too many to label."""
-        is_assembly = array_dtype.is_assembly()
-        arr = array_2d_or_nodal
-        assembly_data_indices = assembly_indices[assembly_indices > -1]
-        if array_dtype in (VeraDtype.PIN, VeraDtype.CHANNEL):
-            cell_width = arr.shape[0]
-            if is_x:
-                image_data = arr[selected_pin, :, :, assembly_data_indices]
-            else:
-                image_data = arr[:, selected_pin, :, assembly_data_indices]
-            image_data = np.vstack(image_data).T
-            data_width = display_width = cell_width
-            label_count = 0
-
-        elif is_assembly:
-            cell_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-            image_data = np.vstack(arr[:, assembly_data_indices])
-            data_width = display_width = cell_width
-            label_count = 1
-
-        elif array_dtype in (
-            VeraDtype.COMP_NODAL,
-            VeraDtype.COMP_NODAL_ENERGY,
-            VeraDtype.NODAL,
-        ):
-            nodal = arr[:, :, assembly_data_indices]  # (nodes, nax, ncols)
-            n_nodes = nodal.shape[0]
-            if n_nodes == 1:
-                data_width = display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-                image_data = np.vstack(nodal[0])
-                label_count = 1
-            else:
-                node_pair = _nodal_node_pair(selected_pin)
-                data_width = len(node_pair)
-                display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-                sel = nodal[list(node_pair)]
-                sel = np.transpose(sel, (1, 2, 0))
-                image_data = sel.reshape(sel.shape[0], -1)
-                label_count = data_width
-        else:
-            raise RuntimeError(f"Axial view cannot visualize datasets of type {str(array_dtype)}")
-
-        image_data = image_data[::-1, :]  # axial level 0 at the bottom
-        nb_lines = image_data.shape[0]
-        nb_cols = image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
-        nb_cols = len(assembly_indices)
-        grid = []
-        for j in range(nb_lines):
-            line = []
-            grid.append(line)
-            col = 0
-            for i in assembly_indices:
-                if i < 0:
-                    line.append(np.full(data_width, np.nan).tolist())
-                    continue
-                if is_assembly:
-                    line.append(np.full(data_width, image_data[j, col]).tolist())
-                else:
-                    cell = image_data[j, col * data_width : (col + 1) * data_width]
-                    line.append(np.ravel(cell).tolist())
-                col += 1
-        return grid, display_width, nb_cols, label_count
 
     @state.change(
         selected_array_key,
@@ -221,94 +140,51 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             _, selected_pin, _, selected_assembly, src_id, selected_array = indices
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
-        core = vera_source.core
-        array = vera_source.get_dataset(selected_array)
-        array_dtype: VeraDtype = array.dataset_type
-        if array_dtype == VeraDtype.PIN and core.non_fuel_locs is not None:
-            array[core.non_fuel_locs] = np.nan
 
         thres_key = format_label(src_id, selected_array)
         thres = state["thresholds"].get(thres_key)
-        if thres:
-            array = apply_thresholds(array, thres)
 
-        is_comp = array_dtype.is_computational()
-        is_detector = array_dtype.is_detector()
-
-        if str(array_dtype).upper() not in option["allowed_categories"]:
-            return
-
-        if is_x:
-            assembly_indices = core.row_assembly_indices(selected_assembly, is_comp, is_detector)
-        else:
-            assembly_indices = core.col_assembly_indices(selected_assembly, is_comp, is_detector)
-
-        if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.COMP_ASSY_ENERGY):
-            num_groups = array.shape[0]
-            if array_dtype == VeraDtype.COMP_ASSY_ENERGY:
-                group_arrays = [array[g, 0] for g in range(num_groups)]
-            else:
-                group_arrays = [array[g] for g in range(num_groups)]
-        else:
-            num_groups = 1
-            if array_dtype.is_assembly():
-                group_arrays = [array[0]]
-            else:
-                group_arrays = [array]
-
-        mesh_pixels = core.get_axial_mesh_pixels(dataset_type=array_dtype)
-        mesh_means = core.get_axial_mesh_means(dataset_type=array_dtype)
-        state[size_y_key] = mesh_pixels[::-1].tolist()
-        state[label_y_key] = [np.round(m, 1) for m in mesh_means][::-1]
-
-        axial_mesh = core.get_axial_mesh(dataset_type=array_dtype)
-        total_h = float(abs(axial_mesh[-1] - axial_mesh[0]))
-        cm_per_pixel = total_h / mesh_pixels.sum()
-        state[y_scale_key] = float(X_SCALE * cm_per_pixel / core.pin_pitch)
-
-        ax = AxialView(vera_source)
-        sel = ax.select(
-            selected_array,
-            state=vera_source.active_state_index,
-            axis="x" if is_x else "y",
-            assembly=selected_assembly,
+        axial_slice = AxialSlice.create_axial_slice(
+            vera_source=vera_source,
+            selected_array=selected_array,
             pin=selected_pin,
-            thresholds=thres,
+            assembly_id=selected_assembly,
+            dim="x" if is_x else "y",
+            thresholds_to_apply=thres,
         )
-        sel.title = format_label(src_id, selected_array)
-        nonlocal saved_sel
-        saved_sel = sel
+        if not axial_slice:
+            return
+        # ax = AxialView(vera_source)
+        # sel = ax.select(
+        #     selected_array,
+        #     state=vera_source.active_state_index,
+        #     axis="x" if is_x else "y",
+        #     assembly=selected_assembly,
+        #     pin=selected_pin,
+        #     thresholds=thres,
+        # )
+        # sel.title = format_label(src_id, selected_array)
+        # nonlocal saved_sel
+        # saved_sel = sel
 
-        nb_cols = 0
-        label_count = 0
-        for g in range(num_groups):
-            grid, display_width, nb_cols, label_count = _build_group_grid(
-                group_arrays[g],
-                array_dtype,
-                core,
-                selected_pin,
-                assembly_indices,
-            )
-            state[core_keys[g]] = grid
-            state[size_x_keys[g]] = [display_width for _ in range(nb_cols)]
+        images = axial_slice.serialize_data_groups()
+        x_sizes = axial_slice.x_size.tolist()
+        for g, image in enumerate(images):
+            state[core_keys[g]] = image
+            state[size_x_keys[g]] = x_sizes
 
-        for g in range(num_groups, MAX_VIS_GROUPS):
+        for g in range(axial_slice.n_groups, MAX_VIS_GROUPS):
             state[core_keys[g]] = []
             state[size_x_keys[g]] = []
 
-        state[label_count_key] = label_count
+        state[label_count_key] = axial_slice.cell_width
+        state[size_y_key] = axial_slice.y_size.tolist()
+        state[label_y_key] = axial_slice.y_labels
+        state[y_scale_key] = axial_slice.y_scale
 
-        if is_x:
-            state[label_x_key] = (
-                core.comp_core_map_column_labels if is_comp else core.reduced_core_map_column_labels
-            )
-        else:
-            start_x = (
-                core.comp_map_start_index if is_comp else core.reduced_core_map_start_index
-            ) + 1
-            state[label_x_key] = list(range(start_x, nb_cols + start_x + 1))
+        state[label_x_key] = axial_slice.x_labels
 
-        state[n_groups_key] = num_groups
+        state[n_groups_key] = axial_slice.n_groups
         set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:
@@ -405,13 +281,13 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
-                take_photo(
-                    state=state,
-                    saved_sel=lambda: saved_sel,
-                    show_labels_key=show_labels_key,
-                    decimals_key=decimals_key,
-                    msg_key=msg_key,
-                    msg_show_key=msg_show_key,
-                    n_groups_key=n_groups_key,
-                )
-            notification(msg_key, msg_show_key)
+            #     take_photo(
+            #         state=state,
+            #         saved_sel=lambda: saved_sel,
+            #         show_labels_key=show_labels_key,
+            #         decimals_key=decimals_key,
+            #         msg_key=msg_key,
+            #         msg_show_key=msg_show_key,
+            #         n_groups_key=n_groups_key,
+            #     )
+            # notification(msg_key, msg_show_key)

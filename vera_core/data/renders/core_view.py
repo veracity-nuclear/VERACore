@@ -1,175 +1,107 @@
-from typing import Sequence
+"""The core map view: one axial layer on the assembly grid, a panel per group.
 
-import numpy as np
-from matplotlib.axes import Axes
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
+The matplotlib counterpart of the trame core view. Both read a CoreSlice, so
+what a report shows and what the web view shows cannot drift apart. This is
+the layer that knows both halves: it reads VERA data and calls the artists.
 
-from ..analysis.color import ColorSpec, resolve_color_specs
-from ..analysis.core_slice import (
-    CoreSlice,
-    SliceRequest,
-    assembly_side,
-    core_slices,
-)
-from ..analysis.info import create_info
-from ..dtypes import VeraDataset
+    draw.py       artists, one Axes at a time
+    canvas.py     the figure and its panels
+    view.py       the selection interface
+    core_view.py  one concrete view, wiring the three together  <- here
+"""
+
+from collections.abc import Sequence
+
+from ..analysis.color import resolve_color_specs
+from ..analysis.core_slice import CoreSlice
 from ..thresholds import ThresholdCondition
-from .layout import (
-    DEFAULT_DPI,
-    FALLBACK_VALUE_SIZE,
-    Selection,
-    View,
-    colormap,
-    contrast_color,
-    draw_axis_labels,
-    draw_grid,
-    frame_axes,
-    panel_figure,
-    value_formatter,
-    write_figure,
-)
-from .styles import (
-    DARK,
-    LIGHT,
-    ViewStyle,
-    ViewTheme,
-)
+from . import draw
+from .canvas import Canvas, map_aspect
+from .view import RenderOptions, Selection, View
 
-MAX_LABEL_SIDE = 2
-"""Widest assembly that can legibly carry per-pin value text."""
-
-# Kept for callers written against the pre-layout.py names. DARK and LIGHT
-# are re-exported from layout for the same reason.
-CoreTheme = ViewTheme
-__all__ = [
-    "DARK",
-    "LIGHT",
-    "CoreTheme",
-    "CoreView",
-    "core_view_figure",
-    "save_core_view",
-    "draw_core_slice",
-]
+MAX_VALUE_SIDE = 2
+"""Beyond nodal (2x2) there are too many values in an assembly to label."""
 
 
-def image_side(slice_: CoreSlice) -> int:
-    """Pins across one assembly in the rendered image, 1 for cell-less data."""
-    cell = slice_.cell_shape
-    if len(cell) == 0:
-        return 1
-    return assembly_side(cell[0]) if len(cell) == 1 else cell[0]
-
-
-def core_columns(slice_: CoreSlice) -> int:
-    """Pins across the whole map, which is one label column each."""
-    return slice_.grid_shape[1] * image_side(slice_)
-
-
-def _draw_values(ax: Axes, image: np.ndarray, mappable: ScalarMappable, style: ViewStyle):
-    """Numeric text per pin, colored for contrast against the cell."""
-    size = style.value_size or FALLBACK_VALUE_SIZE
-    finite = image[~np.isnan(image)]
-    write = value_formatter(finite, style)
-    for (y, x), value in np.ndenumerate(image):
-        if np.isnan(value):
-            continue
-        ax.text(
-            x + 0.5,
-            y + 0.5,
-            write(value),
-            ha="center",
-            va="center",
-            fontsize=size,
-            color=contrast_color(mappable.to_rgba(value), style.theme),
-        )
-
-
-def draw_core_slice(
-    ax: Axes,
-    slice_: CoreSlice,
-    color: ColorSpec | None = None,
-    style: ViewStyle | None = None,
-) -> ScalarMappable:
-    """Render one slice into ax and return its mappable for a colorbar."""
-    if style is None:
-        style = ViewStyle()
-    spec = resolve_color_specs([slice_], color)[0]
-    image = slice_.as_image()
-    side = image_side(slice_)
-    height, width = image.shape
-
-    mappable = ax.imshow(
-        image,
-        cmap=colormap(spec, style.theme),
-        norm=Normalize(vmin=spec.vmin, vmax=spec.vmax),
-        extent=(0, width, height, 0),
-        interpolation="nearest",
-    )
-    frame_axes(ax, (0, width), (height, 0), 1.0 / slice_.aspect_ratio, style)
-
-    if style.show_grid:
-        draw_grid(ax, *slice_.grid_shape, side, style)
-    if style.show_axis_labels:
-        draw_axis_labels(ax, slice_, side, style)
-    else:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    if style.show_values and side <= MAX_LABEL_SIDE:
-        _draw_values(ax, image, mappable, style)
-    return mappable
-
-
-def core_view_figure(slices: list[CoreSlice], **kwargs):
-    """Figure for one request's groups. kwargs go to panel_figure()."""
-    return panel_figure(slices, draw_core_slice, core_columns, **kwargs)
-
-
-def save_core_view(path, slices: list[CoreSlice], *, dpi: int = DEFAULT_DPI, **kwargs):
-    """Build and write in one call. Format follows the suffix."""
-    return write_figure(core_view_figure(slices, **kwargs), path, dpi)
-
-
-class CoreView(View[SliceRequest]):
-    """Core maps for one loaded source."""
-
-    request_type = SliceRequest
+class CoreView(View):
+    """Renders one axial layer of one dataset, a panel per energy group."""
 
     def select(
         self,
-        array: str | VeraDataset,
+        array: str,
         *,
-        state: int = 0,
         z: int = 0,
+        state: int | None = None,
+        group: int | None = None,
         src_id: str | None = None,
         thresholds: Sequence[ThresholdCondition] = (),
-        mask_reflected: bool = True,
-        group: int | None = None,
-    ) -> Selection[SliceRequest]:
-        """A core map at one dataset, state and axial level.
+        dataset_range: bool = False,
+    ) -> Selection:
+        """Bind one array, layer and state, ready to render.
 
-        array           dataset name, or the VeraDataset itself
-        state           state-point index
-        z               axial level index
-        src_id          source id, when the request outlives this view
-        thresholds      conditions that blank values before rendering
-        mask_reflected  drop reflected assemblies
-        group           one energy group, or None for every group
+        group picks one energy group, None renders all of them. src_id only
+        labels the heading. dataset_range reads the whole dataset's extent,
+        which ColorScope.DATASET needs and nothing else does.
         """
         return Selection(
             self,
-            SliceRequest(
-                array=array,
-                state=state,
-                z=z,
-                src_id=src_id,
-                thresholds=thresholds,
-                mask_reflected=mask_reflected,
-                group=group,
-            ),
+            array=array,
+            z=z,
+            state=state,
+            group=group,
+            src_id=src_id,
+            thresholds=tuple(thresholds),
+            dataset_range=dataset_range,
         )
 
-    build_slices = staticmethod(core_slices)
-    build_info = staticmethod(create_info)
-    draw = staticmethod(draw_core_slice)
-    columns = staticmethod(core_columns)
+    def build_slice(self, selection: Selection) -> CoreSlice:
+        slice_ = CoreSlice.create_core_slice(
+            self.source,
+            selection.array,
+            selection.z,
+            state_idx=selection.state,
+            thresholds=selection.thresholds,
+        )
+        if slice_ is None:
+            raise ValueError(f"{selection.label()} has no core view")
+        return slice_ if selection.group is None else slice_.group_slice(selection.group)
+
+    def default_title(self, selection: Selection) -> str:
+        """'PIN POWERS', or 'PIN POWERS | vera2' when a source is named."""
+        heading = selection.array.replace("_", " ").upper()
+        return heading if selection.src_id is None else f"{heading} | {selection.src_id}"
+
+    def caption(self, slice_: CoreSlice, selection: Selection) -> str:
+        """Override to name exposure or elevation from the source, as the
+        web view's footer does."""
+        return f"State {slice_.state} · Axial - {selection.z}"
+
+    def render(self, slice_: CoreSlice, selection: Selection, options: RenderOptions) -> Canvas:
+        style = options.style
+        n_rows, n_cols = slice_.grid_shape
+        side = slice_.assembly_side
+        canvas = Canvas(
+            slice_.n_groups,
+            panel_aspect=map_aspect(n_rows, n_cols, slice_.aspect_ratio),
+            style=style,
+            title=options.resolved_title(self, selection),
+            caption=self.caption(slice_, selection) if options.caption else None,
+            panel_width=options.panel_width,
+        )
+        specs = resolve_color_specs(slice_, options.color, scope=options.color_scope)
+
+        for group, (panel, spec) in enumerate(zip(canvas.panels, specs, strict=True)):
+            grid = slice_.to_grid(group)
+            mappable = draw.cells(panel.ax, grid, spec, style, aspect_ratio=slice_.aspect_ratio)
+            if style.show_grid:
+                draw.block_grid(panel.ax, n_rows, n_cols, side, style)
+            if style.show_axis_labels:
+                draw.axis_labels(panel.ax, slice_.x_labels, slice_.y_labels, side, style)
+            if style.show_values and side <= MAX_VALUE_SIDE:
+                write = draw.value_formatter(slice_.finite(group), style)
+                draw.cell_values(panel.ax, grid, spec, style, write)
+                panel.fit_values(n_cols * side)
+            if slice_.n_groups > 1:
+                panel.title(f"Group {group + 1}")
+            panel.colorbar(mappable, units=slice_.units)
+        return canvas

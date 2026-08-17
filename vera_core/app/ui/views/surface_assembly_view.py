@@ -1,15 +1,16 @@
-import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
+from vera_core.data.analysis.assembly_surface_slice import AssemblySurfaceSlice
 from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
-from vera_core.data.renders import AssemblySurfaceView, Selection
+
+# from vera_core.data.renders import AssemblySurfaceView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
-from .save_image import notification, register_photo_state, take_photo
+from ..helpers import get_safe_idxs, is_non_active_view, set_info
+from .save_image import register_photo_state
 
 # Lateral faces are the first four of [W, N, E, S, T, B]
 LATERAL_FACE_SLICE = slice(0, 4)
@@ -50,15 +51,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     msg_key, msg_show_key = register_photo_state(state, view_id, name=option["name"])
 
-    saved_sel: Selection | None = None
-
-    def _build_cells(radial_adf, n_nodes, side):
-        """value[idx] = [w, n, e, s] per pin/node cell."""
-        cells = []
-        for node in range(n_nodes):
-            faces = radial_adf[:, node]
-            cells.append([float(v) for v in faces])
-        return cells
+    # saved_sel: Selection | None = None
 
     @state.change(
         selected_array_key,
@@ -77,35 +70,34 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             return
         _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
-        array = vera_source.get_dataset(selected_array)
-        array_dtype = array.dataset_type
-        if array_dtype.title not in option_for(0)["allowed_categories"]:
-            return
 
-        # ADF shape: (6_faces, n_energy, n_nodes, nax, nass)
-        n_energy = array.shape[1]
-        n_nodes = array.shape[2]
-        side = int(round(np.sqrt(n_nodes)))  # 1 assembly, 2 nodal
-
-        for g in range(n_energy):
-            # (4_faces, n_nodes) for this assembly, group, layer
-            radial = np.asarray(array[LATERAL_FACE_SLICE, g, :, selected_layer, selected_assembly])
-            cells = _build_cells(radial, n_nodes, side)
-            state[group_keys[g]] = cells
-
-        for g in range(n_energy, MAX_NUM_GROUPS):
-            state[group_keys[g]] = []
-
-        sel = AssemblySurfaceView(vera_source).select(
-            array,
-            state=vera_source.active_state_index,
-            assembly=selected_assembly,
+        assembly_surface_slice = AssemblySurfaceSlice.create_assemlby_surface_slice(
+            vera_source=vera_source,
+            selected_array=selected_array,
+            assembly_id=selected_assembly,
             z=selected_layer,
         )
-        sel.title = format_label(selected_src_id, selected_array)
-        nonlocal saved_sel
-        saved_sel = sel
-        state[n_groups_key] = n_energy
+        if not assembly_surface_slice:
+            return
+
+        serialized_data = assembly_surface_slice.serialize_data_groups()
+        for g, image in enumerate(serialized_data):
+            # (4_faces, n_nodes) for this assembly, group, layer
+            state[group_keys[g]] = image
+
+        for g in range(len(serialized_data), MAX_NUM_GROUPS):
+            state[group_keys[g]] = []
+
+        # sel = AssemblySurfaceView(vera_source).select(
+        #     array,
+        #     state=vera_source.active_state_index,
+        #     assembly=selected_assembly,
+        #     z=selected_layer,
+        # )
+        # sel.title = format_label(selected_src_id, selected_array)
+        # nonlocal saved_sel
+        # saved_sel = sel
+        state[n_groups_key] = len(serialized_data)
         set_info(view_id, state, registry)
 
     def on_surface_click(i, j, surface):
@@ -192,13 +184,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
-                take_photo(
-                    state=state,
-                    saved_sel=lambda: saved_sel,
-                    show_labels_key=True,
-                    decimals_key=decimals_key,
-                    msg_key=msg_key,
-                    msg_show_key=msg_show_key,
-                    n_groups_key=n_groups_key,
-                )
-            notification(msg_key, msg_show_key)
+            #     take_photo(
+            #         state=state,
+            #         saved_sel=lambda: saved_sel,
+            #         show_labels_key=True,
+            #         decimals_key=decimals_key,
+            #         msg_key=msg_key,
+            #         msg_show_key=msg_show_key,
+            #         n_groups_key=n_groups_key,
+            #     )
+            # notification(msg_key, msg_show_key)

@@ -256,6 +256,7 @@ class VeraOutCore(DatasetStore):
         self.npx = None
         self._npin_src = self._nax_src = "Could not find"
         self._pin_pitch = DEFAULT_PIN_PITCH
+        self.apitch = DEFAULT_PIN_PITCH * 17
         for pin_ds_name in ("npin", "num_pins"):
             npins = self.get(pin_ds_name)
             if npins is not None:
@@ -292,6 +293,7 @@ class VeraOutCore(DatasetStore):
 
         apitch = self.get("apitch")
         if apitch is not None and self.npx:
+            self.apitch = apitch[0]
             self._pin_pitch = float(apitch[0] / self.npx)
 
         if not self.has_axial_mesh() and self.nax:
@@ -416,7 +418,9 @@ class VeraOutCore(DatasetStore):
             return
         comp_num_rows, comp_num_cols = self.comp_core_map.shape
         self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
-        self.comp_core_map_row_labels = list(range(start_index, start_index + comp_num_rows + 1))
+        self.comp_core_map_row_labels = list(
+            range(start_index + 1, start_index + comp_num_rows + 1)
+        )
 
     def _compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in

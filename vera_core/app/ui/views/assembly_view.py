@@ -1,16 +1,16 @@
-import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
-from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.analysis.assembly_slice import AssemblySlice
+from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
-from vera_core.data.renders import AssemblyView, Selection
-from vera_core.data.thresholds import apply_thresholds
+
+# from vera_core.data.renders import AssemblyView, Selection
 from vera_core.widgets import vera
 
 from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
-from .save_image import notification, register_photo_state, take_photo
+from .save_image import register_photo_state
 
 
 def option_for(view_id):
@@ -19,13 +19,7 @@ def option_for(view_id):
         "label": "Assembly View",
         "multi_picker": False,
         "icon": "mdi-dots-grid",
-        "allowed_categories": [
-            VeraDtype.PIN.title,
-            VeraDtype.CHANNEL.title,
-            VeraDtype.RADIAL.title,
-            VeraDtype.COMP_NODAL.title,
-            VeraDtype.COMP_NODAL_ENERGY.title,
-        ],
+        "allowed_categories": [dtype.title for dtype in AssemblySlice.ALLOWED_DTYPES],
     }
 
 
@@ -53,7 +47,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     msg_key, msg_show_key = register_photo_state(state, view_id, option["name"])
 
-    saved_sel: Selection | None = None
+    # saved_sel: Selection | None = None
 
     @state.change(
         "assembly_view_size",
@@ -81,6 +75,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if thres.get(thres_key):
             for condition in thres[thres_key]:
                 thres_hash += hash(condition["op"]) + hash(condition["value"])
+
         images_dataset = None
 
         # Extract from cache if possible
@@ -99,65 +94,44 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # Extract data from H5 + add to cache
         if images_dataset is None:
-            array = vera_source.get_dataset(selected_array)
-            array_dtype: VeraDtype = array.dataset_type
-            if str(array_dtype).upper() not in option_for(0)["allowed_categories"]:
-                return
-            match array_dtype:
-                case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    images_dataset = [array[:, :, selected_layer, selected_assembly].copy()]
-                case VeraDtype.RADIAL:
-                    images_dataset = [array[:, :, selected_assembly].copy()]
-                case VeraDtype.COMP_NODAL:
-                    images_dataset = [array[:, selected_layer, selected_assembly]]
-                case VeraDtype.COMP_NODAL_ENERGY:
-                    num_energy_groups = np.shape(array)[0]
-                    images_dataset = [
-                        array[energy_group, :, selected_layer, selected_assembly]
-                        for energy_group in range(num_energy_groups)
-                    ]
-                case _:
-                    raise RuntimeError(
-                        f"Assembly View cannot visualize datasets of type {str(array_dtype)}"
-                    )
-            if (
-                array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL)
-                and vera_source.core.non_fuel_locs is not None
-            ):
-                rows, cols, layers, assys = vera_source.core.non_fuel_locs
-                in_image = (assys == selected_assembly) & (layers == selected_layer)
-                rod_ij = (rows[in_image], cols[in_image])
-                for image in images_dataset:
-                    image[rod_ij] = np.nan
-            thresholds_to_apply = thres.get(thres_key)
-            if thresholds_to_apply:
-                for idx, image in enumerate(images_dataset):
-                    images_dataset[idx] = apply_thresholds(image, thresholds_to_apply)
-            sel = AssemblyView(vera_source).select(
-                array,
-                state=vera_source.active_state_index,
-                assembly=selected_assembly,
+            thres_key = format_label(selected_src_id, selected_array)
+            thresholds_to_apply = state["thresholds"].get(thres_key, [])
+            assembly_slice = AssemblySlice.create_assembly_slice(
+                vera_source=vera_source,
+                selected_array=selected_array,
                 z=selected_layer,
-                thresholds=thresholds_to_apply,
+                assembly_id=selected_assembly,
+                state=vera_source.active_state_index,
+                thresholds_to_apply=thresholds_to_apply,
             )
-            sel.title = format_label(selected_src_id, selected_array)
-            nonlocal saved_sel
-            saved_sel = sel
+            if not assembly_slice:
+                return
+            # sel = AssemblyView(vera_source).select(
+            #     array,
+            #     state=vera_source.active_state_index,
+            #     assembly=selected_assembly,
+            #     z=selected_layer,
+            #     thresholds=thresholds_to_apply,
+            # )
+            # sel.title = format_label(selected_src_id, selected_array)
+            # nonlocal saved_sel
+            # saved_sel = sel
 
             # Only allow one image in the cache
             MAX_ITEMS_IN_CACHE = 1
             while len(cached_assembly_images) >= MAX_ITEMS_IN_CACHE:
                 cached_assembly_images.pop(next(iter(cached_assembly_images)))
+            images_dataset = assembly_slice.serialize_data_groups()
             cached_assembly_images[cache_key] = images_dataset
-            set_info(view_id, state, registry)
 
         # Update the client
         for idx, image in enumerate(images_dataset):
-            state[f"assembly_array_{view_id}_{idx}"] = np.ravel(image).tolist()
+            state[f"assembly_array_{view_id}_{idx}"] = image
         num_groups = len(images_dataset)
         for idx in range(num_groups, MAX_NUM_GROUPS):
             state[f"assembly_array_{view_id}_{idx}"] = []
         state[n_groups_key] = num_groups
+        set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
@@ -235,13 +209,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         hide_details=True,
                         style="max-width: 72px;",
                     )
-                    take_photo(
-                        state=state,
-                        saved_sel=lambda: saved_sel,
-                        show_labels_key=True,
-                        decimals_key=decimals_key,
-                        msg_key=msg_key,
-                        msg_show_key=msg_show_key,
-                        n_groups_key=n_groups_key,
-                    )
-                notification(msg_key, msg_show_key)
+                #     take_photo(
+                #         state=state,
+                #         saved_sel=lambda: saved_sel,
+                #         show_labels_key=True,
+                #         decimals_key=decimals_key,
+                #         msg_key=msg_key,
+                #         msg_show_key=msg_show_key,
+                #         n_groups_key=n_groups_key,
+                #     )
+                # notification(msg_key, msg_show_key)

@@ -5,10 +5,12 @@ from trame.widgets import vuetify
 from trame_server.core import State
 
 from vera_core.data.analysis.color import ColorScope
-from vera_core.data.renders.layout import Selection
 from vera_core.data.renders.styles import DARK, LIGHT, ViewStyle
 
 from ..features.file_picker_entry import launch_picker
+
+# from vera_core.data.renders.layout import Selection
+type Selection[T] = int
 
 
 def register_photo_state(state: State, view_id: int, name: str):

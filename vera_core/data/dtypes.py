@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import TypedDict
 
@@ -21,8 +21,12 @@ LATERAL_SURFACES = slice(0, 4)
 
 @dataclass(frozen=True)
 class _Info:
+    assembly_id_idx: int | None = None  # None = no assembly axis
     axial_idx: int | None = None  # None = no axial axis
-    group_idx: int | None = None  # None = no groups
+    group_idx: int | None = None  # None = no energy groups
+    pin_idxs: tuple[int, int] | None = None  # None = no pin dim
+    node_dim_idx: int | None = None  # None = no nodal dim
+    surface_idx: int | None = None  # None = no surface dim
     fuel_pin: bool = False
     computational: bool = False
     nodal: bool = False
@@ -30,6 +34,61 @@ class _Info:
     surface: bool = False
     channel: bool = False
     detector: bool = False
+
+    ndim: int = field(init=False)
+
+    def __post_init__(self):
+        # Collect all dimension indices.
+        indices = {
+            "assembly_id_idx": self.assembly_id_idx,
+            "axial_idx": self.axial_idx,
+            "group_idx": self.group_idx,
+            "node_dim_idx": self.node_dim_idx,
+            "surface_idx": self.surface_idx,
+        }
+
+        if self.pin_idxs is not None:
+            if len(self.pin_idxs) != 2:
+                raise ValueError(f"pin_idxs must contain exactly 2 indices, got {self.pin_idxs!r}")
+
+            indices["pin_idxs[0]"] = self.pin_idxs[0]
+            indices["pin_idxs[1]"] = self.pin_idxs[1]
+
+        # Remove dimensions that don't exist.
+        indices = {name: idx for name, idx in indices.items() if idx is not None}
+
+        # Validate index types and values.
+        for name, idx in indices.items():
+            if not isinstance(idx, int) or isinstance(idx, bool):
+                raise TypeError(f"{name} must be an int or None, got {type(idx).__name__}")
+
+            if idx < 0:
+                raise ValueError(f"{name} must be non-negative, got {idx}")
+
+        ndim = len(indices)
+
+        # Every axis must have a unique index.
+        if len(set(indices.values())) != ndim:
+            duplicates = {
+                idx: [name for name, value in indices.items() if value == idx]
+                for idx in set(indices.values())
+                if list(indices.values()).count(idx) > 1
+            }
+
+            raise ValueError(f"Dimension indices must be unique; duplicates: {duplicates}")
+
+        # Indices should describe exactly ndim axes:
+        # e.g. ndim=3 -> {0, 1, 2}
+        expected = set(range(ndim))
+        actual = set(indices.values())
+
+        if actual != expected:
+            raise ValueError(
+                f"Dimension indices must be contiguous from 0 to {ndim - 1}; "
+                f"expected {sorted(expected)}, got {sorted(actual)}"
+            )
+
+        object.__setattr__(self, "ndim", ndim)
 
 
 class VeraDtype(Enum):
@@ -74,24 +133,71 @@ class VeraDtype(Enum):
         return _INFO[self]
 
     @property
-    def axial_dim_idx(self):
+    def axial_dim_idx(self) -> int:
         idx = self._info.axial_idx
         if idx is None:
             raise ValueError(f"{self} has no axial dimension")
         return idx
 
     @property
-    def energy_group_dim_idx(self):
+    def energy_group_dim_idx(self) -> int:
         idx = self._info.group_idx
         if idx is None:
             raise ValueError(f"{self} has no energy group dimension")
         return idx
+
+    @property
+    def pin_dim_idxs(self) -> tuple[int, int]:
+        idxs = self._info.pin_idxs
+        if idxs is None:
+            raise ValueError(f"{self} has no pin dimensions")
+        return idxs
+
+    @property
+    def node_dim_idx(self) -> int:
+        idx = self._info.node_dim_idx
+        if idx is None:
+            raise ValueError(f"{self} has no dim dimensions")
+        return idx
+
+    @property
+    def assembly_id_dim_idx(self) -> int:
+        idx = self._info.assembly_id_idx
+        if idx is None:
+            raise ValueError(f"{self} has no assembly id dimensions")
+        return idx
+
+    @property
+    def surface_dim_idx(self) -> int:
+        idx = self._info.surface_idx
+        if idx is None:
+            raise ValueError(f"{self} has no surface dimensions")
+        return idx
+
+    @property
+    def ndim(self) -> int:
+        return self._info.ndim
 
     def has_axial_dim(self):
         return self._info.axial_idx is not None
 
     def has_energy_group_dim(self):
         return self._info.group_idx is not None
+
+    def has_node_dim(self):
+        return self._info.node_dim_idx is not None
+
+    def has_pin_level_dim(self):
+        return self._info.pin_idxs is not None
+
+    def has_surface_dim(self):
+        return self._info.surface_idx is not None
+
+    def has_assembly_id_dim(self):
+        return self._info.assembly_id_idx is not None
+
+    def has_fuel_pins(self):
+        return self._info.fuel_pin
 
     def is_computational(self):
         return self._info.computational
@@ -102,46 +208,120 @@ class VeraDtype(Enum):
     def is_assembly(self):
         return self._info.assembly
 
-    def is_surface(self):
-        return self._info.surface
-
     def is_channel(self):
         return self._info.channel
 
     def is_detector(self):
         return self._info.detector
 
-    def has_fuel_pins(self):
-        return self._info.fuel_pin
+    def make_slice(
+        self,
+        *,
+        surface_idx: int | None = None,
+        group_idx: int | None = None,
+        node_idx: int | None = None,
+        pin_idxs: tuple[int, int] | None = None,
+        axial_idx: int | None = None,
+        assembly_id: int | None = None,
+    ) -> tuple[int | slice, ...]:
+        return make_slice(
+            self,
+            surface_idx=surface_idx,
+            group_idx=group_idx,
+            node_idx=node_idx,
+            pin_idxs=pin_idxs,
+            axial_idx=axial_idx,
+            assembly_id=assembly_id,
+        )
 
 
 # the single place per-dtype facts are declared
 _INFO = {
-    VeraDtype.PIN: _Info(axial_idx=2, fuel_pin=True),
-    VeraDtype.ASSEMBLY: _Info(axial_idx=1, assembly=True),
+    VeraDtype.PIN: _Info(pin_idxs=(0, 1), axial_idx=2, assembly_id_idx=3, fuel_pin=True),
+    VeraDtype.ASSEMBLY: _Info(node_dim_idx=0, axial_idx=1, assembly_id_idx=2, assembly=True),
     VeraDtype.AXIAL: _Info(axial_idx=0),
-    VeraDtype.NODAL: _Info(axial_idx=1, nodal=True),
-    VeraDtype.RADIAL: _Info(fuel_pin=True),
+    VeraDtype.NODAL: _Info(node_dim_idx=0, axial_idx=1, assembly_id_idx=2, nodal=True),
+    VeraDtype.RADIAL: _Info(pin_idxs=(0, 1), assembly_id_idx=2, fuel_pin=True),
     VeraDtype.SCALAR: _Info(),  # == CORE
-    VeraDtype.RADIAL_ASSEMBLY: _Info(assembly=True),
-    VeraDtype.CHANNEL: _Info(axial_idx=2, channel=True),
-    VeraDtype.CHANNEL_RADIAL: _Info(channel=True),
-    VeraDtype.RADIAL_NODE: _Info(nodal=True),
+    VeraDtype.RADIAL_ASSEMBLY: _Info(assembly_id_idx=0, assembly=True),
+    VeraDtype.CHANNEL: _Info(pin_idxs=(0, 1), axial_idx=2, assembly_id_idx=3, channel=True),
+    VeraDtype.CHANNEL_RADIAL: _Info(pin_idxs=(0, 1), assembly_id_idx=2, channel=True),
+    VeraDtype.RADIAL_NODE: _Info(node_dim_idx=0, assembly_id_idx=1, nodal=True),
     VeraDtype.UNKNOWN: _Info(),
-    VeraDtype.COMP_NODAL: _Info(axial_idx=1, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_ENERGY: _Info(group_idx=0, axial_idx=2, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL: _Info(
+        node_dim_idx=0, axial_idx=1, assembly_id_idx=2, computational=True, nodal=True
+    ),
+    VeraDtype.COMP_NODAL_ENERGY: _Info(
+        group_idx=0, node_dim_idx=1, axial_idx=2, assembly_id_idx=3, computational=True, nodal=True
+    ),
     VeraDtype.COMP_NODAL_SURFACE: _Info(
-        group_idx=1, axial_idx=3, computational=True, nodal=True, surface=True
+        surface_idx=0,
+        group_idx=1,
+        node_dim_idx=2,
+        axial_idx=3,
+        assembly_id_idx=4,
+        computational=True,
+        nodal=True,
+        surface=True,
     ),
-    VeraDtype.COMP_ASSY: _Info(axial_idx=1, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_ENERGY: _Info(axial_idx=2, group_idx=0, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY: _Info(
+        node_dim_idx=0, axial_idx=1, assembly_id_idx=2, computational=True, assembly=True
+    ),
+    VeraDtype.COMP_ASSY_ENERGY: _Info(
+        group_idx=0,
+        node_dim_idx=1,
+        axial_idx=2,
+        assembly_id_idx=3,
+        computational=True,
+        assembly=True,
+    ),
     VeraDtype.COMP_ASSY_SURFACE: _Info(
-        axial_idx=3, group_idx=1, computational=True, assembly=True, surface=True
+        surface_idx=0,
+        group_idx=1,
+        node_dim_idx=2,
+        axial_idx=3,
+        assembly_id_idx=4,
+        computational=True,
+        assembly=True,
+        surface=True,
     ),
-    VeraDtype.POINT_DETECTOR: _Info(axial_idx=0, assembly=True, detector=True),
-    VeraDtype.RADIAL_POINT_DETECTOR: _Info(assembly=True, detector=True),
-    VeraDtype.CONTINOUS_DETECTOR: _Info(axial_idx=0, assembly=True, detector=True),
+    VeraDtype.POINT_DETECTOR: _Info(axial_idx=0, assembly_id_idx=1, assembly=True, detector=True),
+    VeraDtype.RADIAL_POINT_DETECTOR: _Info(assembly_id_idx=0, assembly=True, detector=True),
+    VeraDtype.CONTINOUS_DETECTOR: _Info(
+        axial_idx=0, assembly_id_idx=1, assembly=True, detector=True
+    ),
 }
+
+
+def make_slice(
+    vdtype: "VeraDtype",
+    *,
+    surface_idx: int | None = None,
+    group_idx: int | None = None,
+    node_idx: int | None = None,
+    pin_idxs: tuple[int, int] | None = None,
+    axial_idx: int | None = None,
+    assembly_id: int | None = None,
+) -> tuple[int | slice, ...]:
+    result = [slice(None)] * vdtype.ndim
+
+    dims = [
+        (vdtype._info.surface_idx, surface_idx),
+        (vdtype._info.group_idx, group_idx),
+        (vdtype._info.node_dim_idx, node_idx),
+        (vdtype._info.axial_idx, axial_idx),
+        (vdtype._info.assembly_id_idx, assembly_id),
+    ]
+
+    for dim, value in dims:
+        if dim is not None and value is not None:
+            result[dim] = value
+
+    if vdtype._info.pin_idxs is not None and pin_idxs is not None:
+        for dim, value in zip(vdtype._info.pin_idxs, pin_idxs, strict=True):
+            result[dim] = value
+
+    return tuple(result)
 
 
 class VeraAxes(Enum):

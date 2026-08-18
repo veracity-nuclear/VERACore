@@ -5,12 +5,11 @@ from vera_core.data.analysis.core_slice import CoreSlice
 from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
-
-# from vera_core.data.renders import CoreView, Selection
+from vera_core.data.renders import CoreView, Selection
 from vera_core.widgets import vera
 
 from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
-from .save_image import register_photo_state
+from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
 
@@ -62,7 +61,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state.setdefault(core_cols_key, 1)
     state.setdefault(assembly_size_key, 1)
 
-    # saved_sel: Selection[SliceRequest] | None = None
+    saved_sel: Selection | None = None
 
     @state.change("selected_assembly_ij")
     def update_info(**kwargs):
@@ -100,16 +99,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if not core_slice:
             return
 
-        # cv = CoreView(source=vera_source)
-        # sel = cv.select(
-        #     selected_array,
-        #     z=selected_layer,
-        #     state=vera_source.active_state_index,
-        #     thresholds=thresholds_to_apply,
-        # )
-        # sel.title = format_label(selected_src_id, selected_array)
-        # nonlocal saved_sel
-        # saved_sel = sel
+        cv = CoreView(source=vera_source)
+        sel = cv.select(
+            selected_array,
+            z=selected_layer,
+            state=vera_source.active_state_index,
+            thresholds=thresholds_to_apply,
+        )
+        sel.title = format_label(selected_src_id, selected_array)
+        nonlocal saved_sel
+        saved_sel = sel
 
         results = core_slice.serialize_data_groups()
         num_groups = len(results)
@@ -214,13 +213,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     hide_details=True,
                     style="flex: 0 0 auto; max-width: 90px;",
                 )
-            #     take_photo(
-            #         state=state,
-            #         saved_sel=lambda: saved_sel,
-            #         show_labels_key=show_labels_key,
-            #         decimals_key=decimals_key,
-            #         msg_key=msg_key,
-            #         msg_show_key=msg_show_key,
-            #         n_groups_key=n_groups_key,
-            #     )
-            # notification(msg_key, msg_show_key)
+                take_photo(
+                    state=state,
+                    saved_sel=lambda: saved_sel,
+                    show_labels_key=show_labels_key,
+                    decimals_key=decimals_key,
+                    msg_key=msg_key,
+                    msg_show_key=msg_show_key,
+                    n_groups_key=n_groups_key,
+                )
+            notification(msg_key, msg_show_key)

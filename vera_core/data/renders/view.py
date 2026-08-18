@@ -14,12 +14,20 @@ signature is the one place a view's inputs are declared.
     *_view.py     one concrete view, wiring the three together
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from matplotlib.figure import Figure
 
-from ..analysis.color import ColorScope, ColorSource
+from ..analysis.color import (
+    DEFAULT_CMAP,
+    ColorScope,
+    ColorSource,
+    ColorSpec,
+    shared_group_specs,
+)
+from .animation import DEFAULT_FPS, write_animation
 from .canvas import DEFAULT_DPI, PANEL_WIDTH_IN, Canvas, write_figure
 from .styles import ViewStyle
 
@@ -36,7 +44,7 @@ class RenderOptions:
 
     style: ViewStyle = ViewStyle()
     color: ColorSource = None
-    color_scope: ColorScope = ColorScope.GROUP
+    color_scope: ColorScope = ColorScope.SLICE_ALL
     title: str | bool = False
     """A heading, True for one the view derives, False for none."""
     caption: bool = True
@@ -148,11 +156,168 @@ class Selection:
             )
         ).figure()
 
-    def canvas(self, options: RenderOptions | None = None) -> Canvas:
+    def savecollage(
+        self,
+        path: str | Path,
+        *,
+        over: str = "state",
+        values: Sequence | None = None,
+        columns: int = None,
+        style: ViewStyle | None = None,
+        color: ColorSource = None,
+        color_scope: ColorScope | None = None,
+        title: str | bool | None = None,
+        caption: bool | None = None,
+        panel_width: float | None = None,
+        dpi: int = DEFAULT_DPI,
+    ) -> Path:
+        """Every frame of a sweep in one figure, written to path.
+
+        A collage holds one choice up against itself: the same array at every
+        state, on one scale, so a change between frames is a change in the
+        data and not in the colorbar. Multi-group data keeps a scale and a
+        bar per group, since a fast group would otherwise flatten a thermal
+        one into a single color.
+
+            over      which choice varies, "state" by default
+            values    the values it takes, or None for every one the view
+                      knows about
+            columns   frames per row before a group's block wraps
+            color     overrides the shared scale, one spec per group
+
+        The rest are savefig's, and mean the same thing.
+        """
+        return write_figure(
+            self.collage(
+                over=over,
+                values=values,
+                columns=columns,
+                style=style,
+                color=color,
+                title=title,
+                caption=caption,
+                panel_width=panel_width,
+                color_scope=color_scope,
+            ),
+            path,
+            dpi,
+        )
+
+    def collage(
+        self,
+        *,
+        over: str = "state",
+        values: Sequence | None = None,
+        columns: int = None,
+        style: ViewStyle | None = None,
+        color: ColorSource = None,
+        color_scope: ColorScope | None = None,
+        title: str | bool | None = None,
+        caption: bool | None = None,
+        panel_width: float | None = None,
+    ) -> Figure:
+        """The finished collage figure. Options are savecollage's."""
+        if over not in self.params:
+            raise TypeError(f"{type(self.view).__name__} does not select on {over!r}")
+        if values is None:
+            values = self.view.sweep_values(over)
+        frames = [self.replace(**{over: value}) for value in values]
+        if not frames:
+            raise ValueError(f"no {over} values to draw")
+        slices = [frame.slice() for frame in frames]
+        options = self.options(
+            style=style,
+            color=color if color is not None else self._shared_color(slices, color_scope),
+            title=title,
+            caption=caption,
+            panel_width=panel_width,
+            color_scope=color_scope,
+        )
+        return self.view.render_collage(
+            slices, frames, options, over=over, columns=columns
+        ).figure()
+
+    def _shared_color(self, slices, scope: ColorSpec | None = None) -> list[ColorSpec]:
+        """One scale per group, spanning every frame."""
+        cmap = self.view.options.color
+        cmap = cmap.cmap if isinstance(cmap, ColorSpec) else DEFAULT_CMAP
+        return shared_group_specs(slices, cmap=cmap, scope=scope)
+
+    def canvas(self, options: RenderOptions | None = None, slice_=None) -> Canvas:
         """The drawn canvas, before it is finished, for callers that want to
         reach the panels and annotate one. Takes whole options rather than
-        fields of them; build a set with self.options() or replace()."""
-        return self.view.render(self.view.build_slice(self), self, options or self.options())
+        fields of them; build a set with self.options() or replace().
+
+        Pass slice_ to draw data already in hand, which is how a movie avoids
+        reading every state twice.
+        """
+        if slice_ is None:
+            slice_ = self.view.build_slice(self)
+        return self.view.render(slice_, self, options or self.options())
+
+    def savemovie(
+        self,
+        path: str | Path,
+        *,
+        over: str = "state",
+        values: Sequence | None = None,
+        fps: float = DEFAULT_FPS,
+        loop: int = 0,
+        style: ViewStyle | None = None,
+        color: ColorSource = None,
+        color_scope: ColorScope | None = None,
+        title: str | bool | None = None,
+        caption: bool | None = None,
+        panel_width: float | None = None,
+        dpi: int = DEFAULT_DPI,
+    ) -> Path:
+        """One still per frame of a sweep, combined into an animation.
+
+        The same frames a collage lays out side by side, played in sequence
+        instead. They share one scale per group for the same reason: a
+        colorbar that moved between frames would show change that is not in
+        the data.
+
+            path      .gif, or .mp4 .avi .mov .webm .mkv with imageio and
+                      ffmpeg installed, or no suffix for a directory of
+                      numbered PNGs
+            over      which choice varies, "state" by default
+            values    the values it takes, or None for every one the view
+                      knows about
+            fps       frames per second
+            loop      gif only: 0 forever, 1 once
+
+        The rest are savefig's, and mean the same thing.
+        """
+        frames, slices, options = self._sweep(
+            over, values, color, color_scope, style, title, caption, panel_width
+        )
+        figures = (
+            frame.canvas(options, slice_).figure()
+            for frame, slice_ in zip(frames, slices, strict=True)
+        )
+        return write_animation(figures, path, fps=fps, dpi=dpi, loop=loop)
+
+    def _sweep(self, over, values, color, color_scope, style, title, caption, panel_width):
+        """The frames of a sweep, their slices, and the options that hold
+        every frame to one scale per group. Shared by collage and movie."""
+        if over not in self.params:
+            raise TypeError(f"{type(self.view).__name__} does not select on {over!r}")
+        if values is None:
+            values = self.view.sweep_values(over)
+        frames = [self.replace(**{over: value}) for value in values]
+        if not frames:
+            raise ValueError(f"no {over} values to draw")
+        slices = [frame.slice() for frame in frames]
+        options = self.options(
+            style=style,
+            color=color if color is not None else self._shared_color(slices, color_scope),
+            title=title,
+            caption=caption,
+            panel_width=panel_width,
+            color_scope=color_scope,
+        )
+        return frames, slices, options
 
     def options(self, **named) -> RenderOptions:
         """The view's options, overridden by this selection's title, then by
@@ -181,7 +346,7 @@ class View:
     a template.
     """
 
-    def __init__(self, source, options: RenderOptions | None = None):
+    def __init__(self, source, options: RenderOptions | None = None):  # noqa: D107
         self.source = source
         self.options = options or RenderOptions()
 
@@ -193,6 +358,37 @@ class View:
 
     def render(self, slice_, selection: Selection, options: RenderOptions) -> Canvas:
         raise NotImplementedError
+
+    def render_collage(
+        self,
+        slices,
+        selections: "list[Selection]",
+        options: RenderOptions,
+        *,
+        over: str,
+        columns: int = None,
+    ) -> Canvas:
+        """Every frame in one canvas. Views that cannot do this say so."""
+        raise NotImplementedError(f"{type(self).__name__} has no collage")
+
+    def sweep_values(self, over: str) -> Sequence:
+        """Everything `over` can be, when a collage is not given values.
+
+        Only states are known here; a view that can enumerate its own
+        choices, e.g. axial levels, extends this.
+        """
+        if over == "state":
+            return range(len(self.source.states))
+        raise ValueError(f"{type(self).__name__} cannot enumerate {over!r}; pass values")
+
+    def frame_title(self, selection: Selection, over: str) -> str:
+        """The heading over one frame of a collage."""
+        return f"{over.replace('_', ' ').capitalize()} {getattr(selection, over)}"
+
+    def collage_caption(self, slices, selections: "list[Selection]", over: str) -> str:
+        """The line under a collage. Says what is held fixed, not what varies:
+        the frames are labelled with that."""
+        return f"{len(selections)} frames over {over}"
 
     def default_title(self, selection: Selection) -> str:
         return selection.label()

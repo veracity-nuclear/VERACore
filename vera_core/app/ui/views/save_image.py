@@ -5,12 +5,10 @@ from trame.widgets import vuetify
 from trame_server.core import State
 
 from vera_core.data.analysis.color import ColorScope
+from vera_core.data.renders import Selection
 from vera_core.data.renders.styles import DARK, LIGHT, ViewStyle
 
 from ..features.file_picker_entry import launch_picker
-
-# from vera_core.data.renders.layout import Selection
-type Selection[T] = int
 
 
 def register_photo_state(state: State, view_id: int, name: str):
@@ -25,7 +23,7 @@ def register_photo_state(state: State, view_id: int, name: str):
 def take_photo[Request](
     *,
     state: State,
-    saved_sel: Callable[[], Selection[Request]],
+    saved_sel: Callable[[], Selection],
     show_labels_key,
     decimals_key,
     msg_key,
@@ -44,9 +42,26 @@ def take_photo[Request](
             decimals_key=decimals_key,
             msg_key=msg_key,
             msg_show_key=msg_show_key,
+            collage=False,
         ),
     ):
         vuetify.VIcon("mdi-image")
+    with vuetify.VBtn(
+        icon=True,
+        small=True,
+        disabled=(f"{n_groups_key} < 1",),
+        click=partial(
+            save_image,
+            state=state,
+            saved_sel=saved_sel,
+            show_labels_key=show_labels_key,
+            decimals_key=decimals_key,
+            msg_key=msg_key,
+            msg_show_key=msg_show_key,
+            collage=True,
+        ),
+    ):
+        vuetify.VIcon("mdi-image-multiple")
 
 
 def notification(msg_key, msg_show_key):
@@ -61,11 +76,12 @@ def notification(msg_key, msg_show_key):
 async def save_image[Request](
     *,
     state: State,
-    saved_sel: Callable[[], Selection[Request]],
+    saved_sel: Callable[[], Selection],
     show_labels_key: str | bool,
     decimals_key,
     msg_key,
     msg_show_key,
+    collage: bool = False,
 ):
     def notify(text: str):
         state[msg_key] = text
@@ -87,7 +103,7 @@ async def save_image[Request](
             "--prompt",
             "Save Image",
             "--name",
-            "core_photo.png",
+            "core_photo.png" if not collage else "core_collage",
         )
     except Exception as e:
         notify(f"Could not open save dialog: {e}")
@@ -104,7 +120,10 @@ async def save_image[Request](
             else state[show_labels_key],
             decimals=state[decimals_key],
         )
-        saved_sel.savefig(path=path, color_scope=ColorScope.GROUP, style=vs)
+        if collage:
+            saved_sel.savecollage(path=path, color_scope=ColorScope.DATASET_GROUP, style=vs)
+        else:
+            saved_sel.savefig(path=path, color_scope=ColorScope.DATASET_GROUP, style=vs)
         notify(f"Saved to {path}")
     except Exception as e:
         print(str(e))

@@ -5,8 +5,7 @@ import numpy as np
 
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource
-from .color import array_range
-from .vera_slices import GroupedSlice, assembly_side, axis_labels
+from .vera_slices import GroupedSlice, assembly_side, axis_labels, build_dataset_ranges
 
 FACES: tuple[str, ...] = ("W", "N", "E", "S")
 """Order the reader delivers lateral faces in, and the order stored in the
@@ -191,7 +190,7 @@ class SurfaceSlice(GroupedSlice):
             units=array.physical_units,
             dtype=array_dtype,
             core_map=core.get_map(array),
-            dataset_range=array_range(array),
+            dataset_ranges=build_dataset_ranges(array),
             x_labels=x_labels,
             y_labels=y_labels,
         )

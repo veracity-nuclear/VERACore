@@ -22,6 +22,7 @@ LATERAL_SURFACES = slice(0, 4)
 @dataclass(frozen=True)
 class _Info:
     axial_idx: int | None = None  # None = no axial axis
+    group_idx: int | None = None  # None = no groups
     fuel_pin: bool = False
     computational: bool = False
     nodal: bool = False
@@ -79,8 +80,18 @@ class VeraDtype(Enum):
             raise ValueError(f"{self} has no axial dimension")
         return idx
 
+    @property
+    def energy_group_dim_idx(self):
+        idx = self._info.group_idx
+        if idx is None:
+            raise ValueError(f"{self} has no energy group dimension")
+        return idx
+
     def has_axial_dim(self):
         return self._info.axial_idx is not None
+
+    def has_energy_group_dim(self):
+        return self._info.group_idx is not None
 
     def is_computational(self):
         return self._info.computational
@@ -118,12 +129,14 @@ _INFO = {
     VeraDtype.RADIAL_NODE: _Info(nodal=True),
     VeraDtype.UNKNOWN: _Info(),
     VeraDtype.COMP_NODAL: _Info(axial_idx=1, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_ENERGY: _Info(axial_idx=2, computational=True, nodal=True),
-    VeraDtype.COMP_NODAL_SURFACE: _Info(axial_idx=3, computational=True, nodal=True, surface=True),
+    VeraDtype.COMP_NODAL_ENERGY: _Info(group_idx=0, axial_idx=2, computational=True, nodal=True),
+    VeraDtype.COMP_NODAL_SURFACE: _Info(
+        group_idx=1, axial_idx=3, computational=True, nodal=True, surface=True
+    ),
     VeraDtype.COMP_ASSY: _Info(axial_idx=1, computational=True, assembly=True),
-    VeraDtype.COMP_ASSY_ENERGY: _Info(axial_idx=2, computational=True, assembly=True),
+    VeraDtype.COMP_ASSY_ENERGY: _Info(axial_idx=2, group_idx=0, computational=True, assembly=True),
     VeraDtype.COMP_ASSY_SURFACE: _Info(
-        axial_idx=3, computational=True, assembly=True, surface=True
+        axial_idx=3, group_idx=1, computational=True, assembly=True, surface=True
     ),
     VeraDtype.POINT_DETECTOR: _Info(axial_idx=0, assembly=True, detector=True),
     VeraDtype.RADIAL_POINT_DETECTOR: _Info(assembly=True, detector=True),

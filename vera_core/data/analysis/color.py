@@ -96,7 +96,7 @@ def shared_color_spec(
 
     Use it when the union over exactly what is displayed is what you mean --
     two states side by side, say -- and pass the result as color. Within one
-    slice, ColorScope.SLICE already does this.
+    slice, ColorScope.SLICE_ALL already does this.
     """
     return default_color_spec(union_range(value_ranges), cmap=cmap)
 
@@ -104,20 +104,22 @@ def shared_color_spec(
 class ColorScope(StrEnum):
     """How wide a span of data one panel's colorbar covers.
 
-        GROUP     this group, this slice -- most contrast, but the scale
-                  moves as you page through levels
-        SLICE     every group of this slice -- panels are comparable with
-                  each other, which is what makes a group comparison honest
-        DATASET   the whole dataset -- every panel of it is comparable across
-                  levels and states, at the cost of contrast
+    Two independent questions: how much of the dataset, and whether the
+    groups share a scale. The name gives the answer to both, in that order.
 
-    DATASET needs a range the builder computed from the source; a slice that
-    does not carry one raises rather than quietly narrowing the scope.
+        SLICE_GROUP     this layer, this group -- most contrast, but the
+                        scale moves as you page through layers
+        SLICE_ALL       this layer, every group on one scale
+        DATASET_GROUP   every layer and state, this group -- a group stays
+                        comparable across a sweep without a fast group
+                        flattening a thermal one
+        DATASET_ALL     everything on one scale
     """
 
-    GROUP = "group"
-    SLICE = "slice"
-    DATASET = "dataset"
+    SLICE_GROUP = "slice_group"
+    SLICE_ALL = "slice_all"
+    DATASET_GROUP = "dataset_group"
+    DATASET_ALL = "dataset_all"
 
 
 @runtime_checkable
@@ -129,6 +131,35 @@ class GroupedSlice(Protocol):
     def n_groups(self) -> int: ...
 
     def value_range(self, group: int, scope: "ColorScope") -> tuple[float, float]: ...
+
+
+def shared_group_specs(
+    slices: Sequence["GroupedSlice"],
+    *,
+    scope: "ColorScope | None" = None,
+    cmap: str = DEFAULT_CMAP,
+) -> list[ColorSpec]:
+    """One spec per group, each spanning every slice given.
+
+    For a set of slices meant to be read against each other -- the frames of
+    a collage, two states side by side -- where a group must keep its own
+    scale. Group 0's range is the union of group 0 across the slices, so a
+    fast group cannot flatten a thermal one.
+
+    The slices must agree on how many groups they have.
+    """
+    if not slices:
+        return []
+    scope = ColorScope.SLICE_ALL if scope is None else ColorScope(scope)
+    counts = {slice_.n_groups for slice_ in slices}
+    if len(counts) != 1:
+        raise ValueError(f"slices disagree on group count: {sorted(counts)}")
+    return [
+        default_color_spec(
+            union_range([slice_.value_range(group, scope) for slice_ in slices]), cmap=cmap
+        )
+        for group in range(counts.pop())
+    ]
 
 
 ColorSource = (
@@ -165,7 +196,7 @@ def resolve_color_specs(
     slice_: GroupedSlice,
     color: ColorSource = None,
     *,
-    scope: ColorScope = ColorScope.GROUP,
+    scope: ColorScope = ColorScope.SLICE_ALL,
     cmap: str = DEFAULT_CMAP,
 ) -> list[ColorSpec]:
     """One ColorSpec per group, from whatever shape the caller supplied."""

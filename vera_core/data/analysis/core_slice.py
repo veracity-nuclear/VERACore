@@ -6,8 +6,7 @@ import numpy as np
 from ..dtypes import VeraDataset, VeraDtype
 from ..model import VeraDataSource
 from ..thresholds import ThresholdCondition, apply_thresholds
-from .color import array_range
-from .vera_slices import GroupedSlice, assembly_side, core_labels
+from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core_labels
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
@@ -165,7 +164,7 @@ class CoreSlice(GroupedSlice):
             dtype=ds_dtype,
             units=dataset.physical_units,
             core_map=vera_source.core.get_map(dataset),
-            dataset_range=array_range(np.asarray(dataset)),
+            dataset_ranges=build_dataset_ranges(dataset),
         )
 
     def serialize_data_groups(self) -> list[tuple[list, list]]:

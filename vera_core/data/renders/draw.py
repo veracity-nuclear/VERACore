@@ -32,6 +32,7 @@ LABEL_POINTS_PER_PANEL = 130.0
 
 COLORBAR_FRACTION = 0.06
 COLORBAR_PAD = 0.03
+BAR_TITLE_SIZE = 11.0
 
 
 # -- text ------------------------------------------------------------------
@@ -194,14 +195,16 @@ def cell_values(
 def colorbar(
     figure: Figure,
     mappable: ScalarMappable,
-    ax: Axes,
+    ax: Axes | Sequence[Axes],
     units: str = "",
     style: ViewStyle | None = None,
+    title: str = "",
 ) -> Colorbar:
     """Vertical colorbar beside ax, endpoints only by default.
 
-    Panels normally reach this through Panel.colorbar(), which also has the
-    bar snapped to the drawn map.
+    Several axes may be given, for one bar reading a shared scale. Views
+    normally reach this through Canvas.colorbar(), which also snaps the bar
+    to the drawn maps.
     """
     if style is None:
         style = ViewStyle()
@@ -215,4 +218,7 @@ def colorbar(
         # Anchored left, not centered: a units string is wider than the bar,
         # and centering spills it over whatever sits to the left.
         bar.ax.set_xlabel(units, color=style.theme.foreground, labelpad=8, loc="left")
+    if title:
+        # Names what this bar reads, for a figure holding more than one.
+        bar.ax.set_title(title, color=style.theme.foreground, fontsize=BAR_TITLE_SIZE)
     return bar

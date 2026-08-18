@@ -4,7 +4,7 @@ from typing import Self
 
 import numpy as np
 
-from ..dtypes import NUM_NODES, VeraDtype
+from ..dtypes import NUM_NODES, VeraDataset, VeraDtype
 from ..model import VeraOutCore
 from .color import ColorScope, array_range, union_range
 
@@ -20,9 +20,9 @@ class GroupedSlice:
     aspect_ratio: float = 1.0
     """dx / dy of a pin cell, from the core."""
 
-    dataset_range: tuple[float, float] | None = None
+    dataset_ranges: list[tuple[float, float]] | None = None
     """Finite (lo, hi) over the whole dataset, when the builder computed one.
-    Only ColorScope.DATASET needs it."""
+    Only ColorScope.DATASET_ needs it."""
 
     @property
     def n_groups(self) -> int:
@@ -30,7 +30,13 @@ class GroupedSlice:
 
     def group_slice(self, group: int) -> Self:
         """This slice narrowed to one group, keeping geometry and labels."""
-        return replace(self, data_groups=[self.data_groups[group]])
+        ranges = None if self.dataset_ranges is None else [self.dataset_ranges[group]]
+
+        return replace(
+            self,
+            data_groups=[self.data_groups[group]],
+            dataset_ranges=ranges,
+        )
 
     def finite(self, group: int = 0) -> np.ndarray:
         """One group's finite values, flat. Empty when the group is all NaN."""
@@ -38,20 +44,22 @@ class GroupedSlice:
         return values[np.isfinite(values)]
 
     def value_range(
-        self, group: int = 0, scope: ColorScope = ColorScope.GROUP
+        self, group: int = 0, scope: ColorScope = ColorScope.SLICE_ALL
     ) -> tuple[float, float]:
         """The (lo, hi) a colorbar should span for one group, at one scope."""
         scope = ColorScope(scope)
-        if scope is ColorScope.GROUP:
+        if scope is ColorScope.SLICE_GROUP:
             return array_range(self.data_groups[group])
-        if scope is ColorScope.SLICE:
+        if scope is ColorScope.SLICE_ALL:
             return union_range([array_range(values) for values in self.data_groups])
-        if self.dataset_range is None:
+        if self.dataset_ranges is None:
             raise ValueError(
-                "this slice carries no dataset_range;"
-                " build it with dataset_range=True to color at dataset scope"
+                "this slice carries no dataset_ranges; "
+                "build it with dataset_ranges to color at dataset scope"
             )
-        return self.dataset_range
+        if scope is ColorScope.DATASET_GROUP:
+            return self.dataset_ranges[group]
+        return union_range(self.dataset_ranges)
 
     def validate(self) -> list[str]:
         """Return contract violations common to all grouped slices."""
@@ -90,18 +98,41 @@ class GroupedSlice:
         elif not np.isfinite(self.aspect_ratio) or self.aspect_ratio <= 0:
             problems.append(f"aspect_ratio must be finite and > 0, got {self.aspect_ratio}")
 
-        if self.dataset_range is not None:
-            if not isinstance(self.dataset_range, tuple) or len(self.dataset_range) != 2:
-                problems.append("dataset_range must be tuple[float, float] or None")
+        if self.dataset_ranges is not None:
+            if not isinstance(self.dataset_ranges, list):
+                problems.append("dataset_ranges must be list[tuple[float, float]] or None")
             else:
-                lo, hi = self.dataset_range
+                if len(self.dataset_ranges) != self.n_groups:
+                    problems.append(
+                        f"dataset_ranges has {len(self.dataset_ranges)} ranges, "
+                        f"expected {self.n_groups} "
+                        f"for {self.n_groups} data groups"
+                    )
 
-                if not all(isinstance(value, (int, float, np.number)) for value in (lo, hi)):
-                    problems.append("dataset_range values must be numeric")
-                elif not all(np.isfinite(value) for value in (lo, hi)):
-                    problems.append(f"dataset_range must be finite, got {self.dataset_range}")
-                elif lo > hi:
-                    problems.append(f"dataset_range lower bound {lo} exceeds upper bound {hi}")
+                for group_index, value_range in enumerate(self.dataset_ranges):
+                    if not isinstance(value_range, tuple) or len(value_range) != 2:
+                        problems.append(
+                            f"dataset_ranges[{group_index}] must be tuple[float, float]"
+                        )
+                        continue
+
+                    lo, hi = value_range
+
+                    if not all(isinstance(value, (int, float, np.number)) for value in (lo, hi)):
+                        problems.append(f"dataset_ranges[{group_index}] values must be numeric")
+                        continue
+
+                    if not all(np.isfinite(value) for value in (lo, hi)):
+                        problems.append(
+                            f"dataset_ranges[{group_index}] must be finite, got {value_range}"
+                        )
+                        continue
+
+                    if lo > hi:
+                        problems.append(
+                            f"dataset_ranges[{group_index}] "
+                            f"lower bound {lo} exceeds upper bound {hi}"
+                        )
 
         return problems
 
@@ -133,3 +164,15 @@ def core_labels(core: VeraOutCore, is_comp: bool):
 
 def convert_ji_to_node(selected_j, selected_i):
     return np.clip((selected_i + selected_j * int(NUM_NODES / 2)), 0, NUM_NODES - 1)
+
+
+def build_dataset_ranges(dataset: VeraDataset) -> list[tuple[float, float]]:
+    ds_dtype = dataset.dataset_type
+    if ds_dtype.has_energy_group_dim():
+        e_group_dim = ds_dtype.energy_group_dim_idx
+        dataset_ranges = [
+            array_range(np.take(dataset, e_group, e_group_dim))
+            for e_group in range(dataset.shape[e_group_dim])
+        ]
+        return dataset_ranges
+    return [array_range(dataset)]

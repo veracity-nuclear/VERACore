@@ -52,6 +52,36 @@ def panel_grid(n_panels: int) -> tuple[int, int]:
     return math.ceil(n_panels / n_cols), n_cols
 
 
+def square_columns(n_frames: int) -> int:
+    """Columns that keep a block as square as it can be: ceil(sqrt(n)).
+
+    8 frames go 3 wide, 11 or 12 go 4 wide, 17 through 19 go 5. Integer
+    arithmetic, so no float rounding decides a boundary case.
+    """
+    return math.isqrt(max(n_frames, 1) - 1) + 1
+
+
+def block_layout(n_blocks: int, n_frames: int, columns: int | None = None):
+    """Grid and cell placement for n_blocks blocks of n_frames panels each.
+
+    A collage draws one block per group: every frame of a group sits together,
+    wrapping at `columns`, and the next group starts on a fresh row so a
+    block is never split across another group's. columns defaults to a
+    square block.
+
+    Returns ((n_rows, n_cols), cells), cells being (row, col) per panel in
+    block-major order.
+    """
+    columns = max(1, min(columns or square_columns(n_frames), n_frames))
+    block_rows = math.ceil(n_frames / columns)
+    cells = [
+        (block * block_rows + frame // columns, frame % columns)
+        for block in range(n_blocks)
+        for frame in range(n_frames)
+    ]
+    return (n_blocks * block_rows, columns), cells
+
+
 class Panel:
     """One subplot of a Canvas.
 
@@ -59,21 +89,20 @@ class Panel:
     here for the parts the canvas has to settle by measurement.
     """
 
-    def __init__(self, figure: Figure, ax: Axes, style: ViewStyle):
-        self.figure = figure
+    def __init__(self, canvas: "Canvas", ax: Axes, style: ViewStyle):
+        self.canvas = canvas
+        self.figure = canvas._figure
         self.ax = ax
         self.style = style
-        self.colorbar_ax: Axes | None = None
         self.value_columns: int | None = None
 
     def title(self, text: str) -> None:
         self.ax.set_title(text, color=self.style.theme.foreground, pad=PANEL_TITLE_PAD)
 
     def colorbar(self, mappable: ScalarMappable, units: str = "") -> Colorbar:
-        """A colorbar for this panel, snapped to the drawn map on finish."""
-        bar = draw.colorbar(self.figure, mappable, self.ax, units, self.style)
-        self.colorbar_ax = bar.ax
-        return bar
+        """A colorbar for this panel alone. Canvas.colorbar() gives one bar
+        to several panels, which is what a shared scale needs."""
+        return self.canvas.colorbar(mappable, [self], units)
 
     def fit_values(self, n_columns: int) -> None:
         """Resize this panel's text on finish so n_columns labels fit across
@@ -81,17 +110,12 @@ class Panel:
         if self.style.value_size is None:
             self.value_columns = n_columns
 
-    def _settle(self, ax_box, width_pt: float) -> None:
-        """Correct what the measured layout revealed.
+    def _settle_values(self, width_pt: float) -> None:
+        """Resize value text against the width the panel actually got.
 
-        A map has a locked aspect, so it shrinks inside its cell while the
-        colorbar fills that cell; the bar is snapped back to the map's box.
-        Value text sized against the nominal panel width overflows, because
-        the row labels and the colorbar take part of that width.
+        Text sized against the nominal panel width overflows, because the row
+        labels and the colorbar take part of that width.
         """
-        if self.colorbar_ax is not None:
-            box = self.colorbar_ax.get_position()
-            self.colorbar_ax.set_position([box.x0, ax_box.y0, box.width, ax_box.height])
         if not self.value_columns or not self.ax.texts:
             return
         chars = max(len(text.get_text()) for text in self.ax.texts)
@@ -103,10 +127,13 @@ class Panel:
 class Canvas:
     """One output image: equally sized panels, a heading and a caption.
 
-    canvas = Canvas(slice_.n_groups, panel_aspect=..., style=style)
-    for group, panel in enumerate(canvas.panels):
-        ...                     # draw into panel.ax
-    canvas.save("out.png")
+        canvas = Canvas(slice_.n_groups, panel_aspect=..., style=style)
+        for group, panel in enumerate(canvas.panels):
+            ...                     # draw into panel.ax
+        canvas.save("out.png")
+
+    Panels fill a two-wide grid by default. Pass grid and cells to place them
+    yourself, as a collage does to keep each group's frames together.
     """
 
     def __init__(
@@ -118,12 +145,19 @@ class Canvas:
         title: str | None = None,
         caption: str | None = None,
         panel_width: float = PANEL_WIDTH_IN,
+        grid: tuple[int, int] | None = None,
+        cells: list[tuple[int, int]] | None = None,
     ):
         if n_panels < 1:
             raise ValueError("a canvas needs at least one panel")
         self.style = style or ViewStyle()
         self.panel_width = panel_width
-        n_rows, n_cols = panel_grid(n_panels)
+        n_rows, n_cols = grid or panel_grid(n_panels)
+        if cells is None:
+            cells = [divmod(index, n_cols) for index in range(n_panels)]
+        if len(cells) != n_panels:
+            raise ValueError(f"{len(cells)} cells for {n_panels} panels")
+        self._colorbars: list[tuple[Axes, list[Panel]]] = []
         self._figure = Figure(
             figsize=(
                 n_cols * panel_width,
@@ -135,10 +169,9 @@ class Canvas:
             layout="constrained",
         )
         FigureCanvasAgg(self._figure)
-        grid = self._figure.add_gridspec(n_rows, n_cols)
+        spec = self._figure.add_gridspec(n_rows, n_cols)
         self.panels = [
-            Panel(self._figure, self._figure.add_subplot(grid[divmod(index, n_cols)]), self.style)
-            for index in range(n_panels)
+            Panel(self, self._figure.add_subplot(spec[cell]), self.style) for cell in cells
         ]
         if title:
             self._figure.suptitle(title, color=self.style.theme.foreground, fontsize=TITLE_SIZE)
@@ -148,6 +181,25 @@ class Canvas:
             )
         self._settled = False
 
+    def colorbar(
+        self,
+        mappable: ScalarMappable,
+        panels: "list[Panel]",
+        units: str = "",
+        title: str = "",
+    ) -> Colorbar:
+        """One colorbar for a set of panels, snapped to them on finish.
+
+        Give a collage's whole group its bar in one call: the panels share a
+        scale, so they share the bar that reads it. title names which panels
+        those are, for a figure holding more than one bar.
+        """
+        bar = draw.colorbar(
+            self._figure, mappable, [panel.ax for panel in panels], units, self.style, title
+        )
+        self._colorbars.append((bar.ax, list(panels)))
+        return bar
+
     def figure(self) -> Figure:
         """The finished matplotlib figure: layout resolved, panels corrected.
 
@@ -156,14 +208,30 @@ class Canvas:
         if self._settled:
             return self._figure
         self._figure.draw_without_rendering()
-        measured = [
-            (panel.ax.get_position(), panel.ax.get_window_extent().width) for panel in self.panels
-        ]
+        boxes = {id(panel): panel.ax.get_position() for panel in self.panels}
+        widths = {
+            id(panel): panel.ax.get_window_extent().width * 72.0 / self._figure.dpi
+            for panel in self.panels
+        }
         self._figure.set_layout_engine("none")
-        for panel, (box, width_px) in zip(self.panels, measured, strict=True):
-            panel._settle(box, width_px * 72.0 / self._figure.dpi)
+        for panel in self.panels:
+            panel._settle_values(widths[id(panel)])
+        for colorbar_ax, panels in self._colorbars:
+            self._snap(colorbar_ax, [boxes[id(panel)] for panel in panels])
         self._settled = True
         return self._figure
+
+    @staticmethod
+    def _snap(colorbar_ax: Axes, panel_boxes) -> None:
+        """Pull a colorbar back onto the maps it reads.
+
+        A map has a locked aspect, so it shrinks inside its cell while the
+        bar fills the cell; the bar is sized to span its panels instead.
+        """
+        box = colorbar_ax.get_position()
+        bottom = min(panel_box.y0 for panel_box in panel_boxes)
+        top = max(panel_box.y1 for panel_box in panel_boxes)
+        colorbar_ax.set_position([box.x0, bottom, box.width, top - bottom])
 
     def save(self, path: str | Path, dpi: int = DEFAULT_DPI) -> Path:
         """Write the finished figure. Format follows the suffix."""

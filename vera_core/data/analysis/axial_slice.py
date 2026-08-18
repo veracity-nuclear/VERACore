@@ -6,8 +6,7 @@ import numpy as np
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource, VeraOutCore
 from ..thresholds import ThresholdCondition, apply_thresholds
-from .color import array_range
-from .vera_slices import GroupedSlice, convert_ji_to_node
+from .vera_slices import GroupedSlice, build_dataset_ranges, convert_ji_to_node
 
 X_AXIS = "x"
 Y_AXIS = "y"
@@ -185,7 +184,7 @@ class AxialSlice(GroupedSlice):
             core_map=vera_source.core.get_map(array),
             units=array.physical_units,
             dtype=array.dataset_type,
-            dataset_range=array_range(array),
+            dataset_ranges=build_dataset_ranges(array),
             cell_width=cell_width,
             assembly_indices=assembly_indices,
             x_labels=x_labels,

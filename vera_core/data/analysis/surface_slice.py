@@ -48,6 +48,30 @@ class SurfaceSlice(GroupedSlice):
     def n_nodes(self) -> int:
         return self.data_groups[0].shape[1]
 
+    def to_grid(self, group: int = 0) -> np.ndarray:
+        """One group laid out on the node grid: (n_rows * side, n_cols * side,
+        n_faces), the last axis in `faces` order.
+
+        Nodes run row-major inside an assembly, the order
+        serialize_dataset_groups hands the web view, so a report and the web
+        view place the same face in the same corner. Empty core positions are
+        left NaN.
+        """
+        side = self.node_side
+        n_rows, n_cols = self.grid_shape
+        values = self.data_groups[group]
+        grid = np.full((n_rows * side, n_cols * side, len(self.faces)), np.nan)
+        for row in range(n_rows):
+            for col in range(n_cols):
+                index = int(self.core_map[row, col]) - 1
+                if index < 0:
+                    continue
+                cell = np.asarray(values[:, :, index], dtype=float)
+                grid[row * side : (row + 1) * side, col * side : (col + 1) * side] = cell.T.reshape(
+                    side, side, len(self.faces)
+                )
+        return grid
+
     def validate(self) -> list[str]:
         """Return contract violations, empty when the slice is well formed."""
         problems = super().validate()

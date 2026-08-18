@@ -41,6 +41,17 @@ class AssemblySurfaceSlice(GroupedSlice):
     def n_nodes(self) -> int:
         return self.side**2
 
+    def to_grid(self, group: int = 0) -> np.ndarray:
+        """One group laid out on the node grid: (side, side, n_faces), the
+        last axis in `faces` order.
+
+        Nodes run row-major, the order serialize_data_groups hands the web
+        view, so a report and the web view put the same face in the same
+        corner of the same cell.
+        """
+        values = np.asarray(self.data_groups[group], dtype=float)
+        return values.T.reshape(self.side, self.side, len(self.faces))
+
     def validate(self) -> list[str]:
         """Return contract violations, empty when the slice is well formed."""
         problems = super().validate()

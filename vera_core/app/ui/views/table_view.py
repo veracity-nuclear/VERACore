@@ -152,7 +152,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         surface_label = f" {Surface(state.selected_surface).str}"
         node_label = f"Node {convert_ji_to_node(selected_j, selected_i) + 1}"
         is_node = array_dtype.is_nodal()
-        is_surface = array_dtype.is_surface()
+        is_surface = array_dtype.has_surface_dim()
         label = pin_label if not is_node else (node_label + (surface_label if is_surface else ""))
         columns = [
             "Dataset",

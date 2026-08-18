@@ -3,7 +3,7 @@ from typing import ClassVar, Sequence
 
 import numpy as np
 
-from ..dtypes import VeraDataset, VeraDtype
+from ..dtypes import VeraDataset, VeraDim, VeraDtype
 from ..model import VeraDataSource
 from ..thresholds import ThresholdCondition, apply_thresholds
 from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core_labels
@@ -123,30 +123,12 @@ class CoreSlice(GroupedSlice):
         if ds_dtype not in ALLOWED_DTYPES_:
             return None
         is_comp = ds_dtype.is_computational()
-        layer_list: list[VeraDataset] = []
-        match ds_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
-                layer_list.append(dataset[:, :, z].swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.POINT_DETECTOR:
-                layer_list.append(dataset[z, :])
-            case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
-                layer_list.append(dataset[0, z, :])
-            case VeraDtype.RADIAL:
-                layer_list.append(dataset.swapaxes(0, 2).swapaxes(1, 2))
-            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
-                layer_list.append(dataset)
-            case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-                layer_list.append(dataset[:, z, :].swapaxes(0, 1))
-            case VeraDtype.COMP_ASSY_ENERGY:
-                num_energy_groups = np.shape(dataset)[0]
-                for energy_group in range(num_energy_groups):
-                    layer_list.append(dataset[energy_group, 0, z, :])
-            case VeraDtype.COMP_NODAL_ENERGY:
-                num_energy_groups = np.shape(dataset)[0]
-                for energy_group in range(num_energy_groups):
-                    layer_list.append(dataset[energy_group, :, z, :].swapaxes(0, 1))
-            case _:
-                raise RuntimeError(f"Core View cannot visualize a dataset of type {str(ds_dtype)} ")
+        layer_list: list[VeraDataset] = dataset.arrange(
+            order=(VeraDim.ASSEMBLY, VeraDim.NODE, VeraDim.PIN_Y, VeraDim.PIN_X),
+            require=(VeraDim.ASSEMBLY,),
+            split=(VeraDim.GROUP,),
+            axial=z,
+        )
         core = vera_source.core
         for idx, layer in enumerate(layer_list):
             if ds_dtype.has_fuel_pins():

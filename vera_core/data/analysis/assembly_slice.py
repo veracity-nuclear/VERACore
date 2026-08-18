@@ -48,6 +48,15 @@ class AssemblySlice(GroupedSlice):
     def y_labels(self) -> list[str] | list[int]:
         return list(range(1, self.side + 1))
 
+    def to_grid(self, group: int = 0) -> np.ndarray:
+        """One group as the lattice: (side, side), origin at the top left.
+
+        A nodal group arrives as a flat run of nodes and is laid out
+        row-major, the order serialize_data_groups hands the web view, so a
+        report and the web view put the same value in the same cell.
+        """
+        return np.asarray(self.data_groups[group], dtype=float).reshape(self.side, self.side)
+
     def validate(self) -> list[str]:
         """Return contract violations for an assembly slice."""
         problems = super().validate()

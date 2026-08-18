@@ -2,13 +2,7 @@
 
 A Canvas is one output image. It holds one Panel per group, sizes the figure,
 and runs the correction pass that only a drawn figure can settle. It does not
-know what a panel contains: a view draws into panel.ax with the artists in
-draw.py and tells the panel about the two things that need measuring.
-
-    draw.py       artists, one Axes at a time
-    canvas.py     the figure and its panels        <- you are here
-    view.py       the selection interface
-    *_view.py     one concrete view, wiring the three together
+know what a panel contains.
 """
 
 import math

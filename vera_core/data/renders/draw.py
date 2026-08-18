@@ -1,14 +1,4 @@
-"""Artists: functions that draw into one Axes.
-
-The bottom layer of the renders package. Nothing here knows what a VERA
-dataset is, and nothing here owns a figure. Every function takes an Axes a
-caller has already made, so a view composes only the parts it needs.
-
-    draw.py       artists, one Axes at a time      <- you are here
-    canvas.py     the figure and its panels
-    view.py       the selection interface
-    *_view.py     one concrete view, wiring the three together
-"""
+"""Artists: functions that draw into one Axes."""
 
 import re
 from collections.abc import Callable, Sequence
@@ -17,8 +7,10 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
+from matplotlib.collections import PolyCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
+from matplotlib.patches import Polygon, Rectangle
 
 from ..analysis.color import ColorSpec
 from .styles import CHAR_WIDTH_RATIO, ViewStyle, ViewTheme
@@ -184,6 +176,239 @@ def cell_values(
         ax.text(
             col + 0.5,
             row + 0.5,
+            write(float(value)),
+            ha="center",
+            va="center",
+            fontsize=size,
+            color=contrast_color(cmap(float(color.normalize(value))), style.theme),
+        )
+
+
+FACE_CORNERS = (
+    ((0.0, 0.0), (0.0, 1.0)),
+    ((0.0, 0.0), (1.0, 0.0)),
+    ((1.0, 0.0), (1.0, 1.0)),
+    ((0.0, 1.0), (1.0, 1.0)),
+)
+"""The two corners of each face, W N E S, as offsets within one cell. A face
+is drawn as those corners and the cell center, so the four of them cut the
+cell into triangles meeting in the middle."""
+
+FACE_ANCHORS = ((1 / 6, 0.5), (0.5, 1 / 6), (5 / 6, 0.5), (0.5, 5 / 6))
+"""Where a face's label sits, a third of the way out from the center: far
+enough apart that four labels in one cell do not collide."""
+
+
+def face_cells(
+    ax: Axes,
+    faces: np.ndarray,
+    color: ColorSpec,
+    style: ViewStyle,
+    *,
+    aspect_ratio: float = 1.0,
+) -> ScalarMappable:
+    """A grid of cells cut into four triangles, one per lateral face.
+
+    faces is (n_rows, n_cols, 4), the last axis ordered W N E S. Coordinates
+    are cells with the origin at the top left, as in cells(), so a caller
+    places ticks and text the same way for either.
+
+    A face that is not finite is left undrawn rather than painted the
+    background color, so an empty core position shows nothing at all.
+    """
+    n_rows, n_cols = faces.shape[:2]
+    polygons, values = [], []
+    for (row, col, face), value in np.ndenumerate(faces):
+        if not np.isfinite(value):
+            continue
+        corners = FACE_CORNERS[face]
+        polygons.append([(col + dx, row + dy) for dx, dy in corners] + [(col + 0.5, row + 0.5)])
+        values.append(value)
+    collection = PolyCollection(
+        polygons,
+        array=np.asarray(values, dtype=float),
+        cmap=colormap(color, style.theme),
+        norm=mpl.colors.Normalize(vmin=color.vmin, vmax=color.vmax),
+        edgecolors=style.theme.edge,
+        linewidths=style.edge_width,
+    )
+    ax.add_collection(collection)
+    frame_axes(ax, (0.0, n_cols), (n_rows, 0.0), 1.0 / (aspect_ratio or 1.0), style)
+    return collection
+
+
+def face_values(
+    ax: Axes,
+    faces: np.ndarray,
+    color: ColorSpec,
+    style: ViewStyle,
+    write: Callable[[float], str],
+):
+    """One label per finite face, inside its triangle. The counterpart of
+    cell_values for a map drawn by face_cells."""
+    cmap = colormap(color, style.theme)
+    size = style.value_size or FALLBACK_VALUE_SIZE
+    for (row, col, face), value in np.ndenumerate(faces):
+        if not np.isfinite(value):
+            continue
+        offset_x, offset_y = FACE_ANCHORS[face]
+        ax.text(
+            col + offset_x,
+            row + offset_y,
+            write(float(value)),
+            ha="center",
+            va="center",
+            fontsize=size,
+            color=contrast_color(cmap(float(color.normalize(value))), style.theme),
+        )
+
+
+def highlight_span(
+    ax: Axes,
+    x_span: tuple[float, float],
+    y_span: tuple[float, float],
+    style: ViewStyle,
+):
+    """An outline around a rectangle of the map, in data coordinates."""
+    (x0, x1), (y0, y1) = x_span, y_span
+    ax.add_patch(
+        Rectangle(
+            (x0, y0),
+            x1 - x0,
+            y1 - y0,
+            fill=False,
+            edgecolor=style.theme.highlight,
+            linewidth=style.highlight_width,
+            zorder=5,
+        )
+    )
+
+
+def highlight_block(ax: Axes, row: int, col: int, side: int, style: ViewStyle):
+    """An outline around one block of `side` cells: the chosen assembly."""
+    highlight_span(ax, (col * side, (col + 1) * side), (row * side, (row + 1) * side), style)
+
+
+def highlight_face(ax: Axes, row: int, col: int, face: int, style: ViewStyle):
+    """An outline around one face's triangle in one cell: the chosen surface.
+
+    face indexes FACE_CORNERS, so a caller passes the same order it drew in.
+    """
+    corners = FACE_CORNERS[face]
+    ax.add_patch(
+        Polygon(
+            [(col + dx, row + dy) for dx, dy in corners] + [(col + 0.5, row + 0.5)],
+            closed=True,
+            fill=False,
+            edgecolor=style.theme.highlight,
+            linewidth=style.highlight_width,
+            zorder=6,
+        )
+    )
+
+
+# -- artists on an explicit mesh --------------------------------------------
+
+
+def mesh_cells(
+    ax: Axes,
+    grid: np.ndarray,
+    x_edges: Sequence[float],
+    y_edges: Sequence[float],
+    color: ColorSpec,
+    style: ViewStyle,
+    *,
+    aspect: float = 1.0,
+) -> ScalarMappable:
+    """A grid of cells on explicit boundaries, for a map whose rows are not
+    all the same height: an axial cut, where a layer is as tall as its mesh.
+
+    Data coordinates are whatever the edges are measured in, cm for an axial
+    cut, so a caller places ticks and text in those units too. grid is
+    (len(y_edges) - 1, len(x_edges) - 1), row 0 against the first edge.
+    aspect is the vertical scale over the horizontal one: 1.0 draws both in
+    the same units, which is what makes an elevation read as a height.
+    """
+    mesh = ax.pcolormesh(
+        np.asarray(x_edges, dtype=float),
+        np.asarray(y_edges, dtype=float),
+        grid,
+        cmap=colormap(color, style.theme),
+        vmin=color.vmin,
+        vmax=color.vmax,
+        shading="flat",
+    )
+    frame_axes(ax, (x_edges[0], x_edges[-1]), (y_edges[0], y_edges[-1]), aspect, style)
+    return mesh
+
+
+def mesh_grid(
+    ax: Axes,
+    x_lines: Sequence[float],
+    y_lines: Sequence[float],
+    style: ViewStyle,
+):
+    """Lines at explicit positions: block_grid for a map whose cells are not
+    all the same size. Either sequence may be empty."""
+    ax.set_xticks(list(x_lines), minor=True)
+    ax.set_yticks(list(y_lines), minor=True)
+    ax.grid(which="minor", color=style.theme.grid, linewidth=style.grid_width, alpha=0.9)
+    ax.tick_params(which="minor", length=0)
+
+
+def mesh_axis_labels(
+    ax: Axes,
+    x_labels: Sequence,
+    x_centers: Sequence[float],
+    style: ViewStyle,
+    y_title: str = "",
+):
+    """Column labels above at given positions, a continuous scale down the
+    left. The vertical axis of a cut is a measurement, not a row index, so it
+    keeps matplotlib's own ticks instead of one label per row."""
+    ax.set_xticks(list(x_centers), labels=[str(label) for label in x_labels])
+    ax.xaxis.set_ticks_position("top")
+    ax.tick_params(
+        axis="x",
+        which="major",
+        length=0,
+        colors=style.theme.foreground,
+        labelsize=fit_axis_label_size(len(x_labels), style),
+    )
+    ax.tick_params(
+        axis="y",
+        which="major",
+        length=3,
+        colors=style.theme.foreground,
+        labelsize=style.axis_label_size,
+    )
+    if y_title:
+        ax.set_ylabel(y_title, color=style.theme.foreground, fontsize=style.axis_label_size)
+
+
+def mesh_values(
+    ax: Axes,
+    grid: np.ndarray,
+    x_edges: Sequence[float],
+    y_edges: Sequence[float],
+    color: ColorSpec,
+    style: ViewStyle,
+    write: Callable[[float], str],
+):
+    """One label per finite cell, centered in it. cell_values for a map drawn
+    by mesh_cells."""
+    cmap = colormap(color, style.theme)
+    size = style.value_size or FALLBACK_VALUE_SIZE
+    x_edges = np.asarray(x_edges, dtype=float)
+    y_edges = np.asarray(y_edges, dtype=float)
+    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+    for (row, col), value in np.ndenumerate(grid):
+        if not np.isfinite(value):
+            continue
+        ax.text(
+            x_centers[col],
+            y_centers[row],
             write(float(value)),
             ha="center",
             va="center",

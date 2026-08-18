@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import TypedDict
+from typing import Mapping, Sequence, TypedDict
 
 import numpy as np
 
@@ -19,6 +19,16 @@ NUM_NODES = 4
 LATERAL_SURFACES = slice(0, 4)
 
 
+class VeraDim(StrEnum):
+    PIN_Y = "pin_y"
+    PIN_X = "pin_x"
+    AXIAL = "axial"
+    ASSEMBLY = "assembly"
+    NODE = "node"
+    GROUP = "group"
+    SURFACE = "surface"
+
+
 @dataclass(frozen=True)
 class _Info:
     assembly_id_idx: int | None = None  # None = no assembly axis
@@ -35,6 +45,10 @@ class _Info:
     channel: bool = False
     detector: bool = False
 
+    # Physical axes that have no semantic meaning and are always fixed.
+    # Maps axis -> required index.
+    fixed_idxs: dict[int, int] = field(default_factory=dict)
+
     ndim: int = field(init=False)
 
     def __post_init__(self):
@@ -46,6 +60,9 @@ class _Info:
             "node_dim_idx": self.node_dim_idx,
             "surface_idx": self.surface_idx,
         }
+
+        for axis in self.fixed_idxs:
+            indices[f"fixed_idxs[{axis}]"] = axis
 
         if self.pin_idxs is not None:
             if len(self.pin_idxs) != 2:
@@ -64,6 +81,16 @@ class _Info:
 
             if idx < 0:
                 raise ValueError(f"{name} must be non-negative, got {idx}")
+
+        for axis, value in self.fixed_idxs.items():
+            if not isinstance(axis, int) or isinstance(axis, bool):
+                raise TypeError("fixed axis must be an int")
+
+            if axis < 0:
+                raise ValueError("fixed axis must be non-negative")
+
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError("fixed index value must be an int")
 
         ndim = len(indices)
 
@@ -234,11 +261,39 @@ class VeraDtype(Enum):
             assembly_id=assembly_id,
         )
 
+    @property
+    def dim_axes(self) -> dict[VeraDim, int]:
+        """Map semantic dimensions to physical NumPy axes."""
+        info = self._info
+
+        axes: dict[VeraDim, int] = {}
+
+        if info.pin_idxs is not None:
+            axes[VeraDim.PIN_Y] = info.pin_idxs[0]
+            axes[VeraDim.PIN_X] = info.pin_idxs[1]
+
+        if info.axial_idx is not None:
+            axes[VeraDim.AXIAL] = info.axial_idx
+
+        if info.assembly_id_idx is not None:
+            axes[VeraDim.ASSEMBLY] = info.assembly_id_idx
+
+        if info.node_dim_idx is not None:
+            axes[VeraDim.NODE] = info.node_dim_idx
+
+        if info.group_idx is not None:
+            axes[VeraDim.GROUP] = info.group_idx
+
+        if info.surface_idx is not None:
+            axes[VeraDim.SURFACE] = info.surface_idx
+
+        return axes
+
 
 # the single place per-dtype facts are declared
 _INFO = {
     VeraDtype.PIN: _Info(pin_idxs=(0, 1), axial_idx=2, assembly_id_idx=3, fuel_pin=True),
-    VeraDtype.ASSEMBLY: _Info(node_dim_idx=0, axial_idx=1, assembly_id_idx=2, assembly=True),
+    VeraDtype.ASSEMBLY: _Info(fixed_idxs={0: 0}, axial_idx=1, assembly_id_idx=2, assembly=True),
     VeraDtype.AXIAL: _Info(axial_idx=0),
     VeraDtype.NODAL: _Info(node_dim_idx=0, axial_idx=1, assembly_id_idx=2, nodal=True),
     VeraDtype.RADIAL: _Info(pin_idxs=(0, 1), assembly_id_idx=2, fuel_pin=True),
@@ -265,11 +320,11 @@ _INFO = {
         surface=True,
     ),
     VeraDtype.COMP_ASSY: _Info(
-        node_dim_idx=0, axial_idx=1, assembly_id_idx=2, computational=True, assembly=True
+        fixed_idxs={0: 0}, axial_idx=1, assembly_id_idx=2, computational=True, assembly=True
     ),
     VeraDtype.COMP_ASSY_ENERGY: _Info(
         group_idx=0,
-        node_dim_idx=1,
+        fixed_idxs={1: 0},
         axial_idx=2,
         assembly_id_idx=3,
         computational=True,
@@ -278,7 +333,7 @@ _INFO = {
     VeraDtype.COMP_ASSY_SURFACE: _Info(
         surface_idx=0,
         group_idx=1,
-        node_dim_idx=2,
+        fixed_idxs={2: 0},
         axial_idx=3,
         assembly_id_idx=4,
         computational=True,
@@ -304,6 +359,9 @@ def make_slice(
     assembly_id: int | None = None,
 ) -> tuple[int | slice, ...]:
     result = [slice(None)] * vdtype.ndim
+
+    for axis, value in vdtype._info.fixed_idxs.items():
+        result[axis] = value
 
     dims = [
         (vdtype._info.surface_idx, surface_idx),
@@ -383,6 +441,217 @@ class VeraDataset(np.ndarray):
 
     def is_assembly(self) -> bool:
         return self.dataset_type.is_assembly()
+
+    def select(
+        self,
+        indices: Mapping[VeraDim, int] | None = None,
+    ) -> "VeraDataset":
+        """
+        Select semantic dimensions from the dataset.
+
+        Dimensions that do not exist on this dataset type are ignored.
+
+        Unselected semantic dimensions retain their original physical order.
+
+        Parameters
+        ----------
+        indices
+            Mapping from semantic dimension to the index to select.
+
+            Example::
+
+                {
+                    VeraDim.NODE: node_idx,
+                    VeraDim.ASSEMBLY: assembly_id,
+                }
+
+        Returns
+        -------
+        VeraDataset
+            The selected dataset.
+        """
+        indices = dict(indices or {})
+
+        dtype = self.dataset_type
+        axis_map = dtype.dim_axes
+
+        selected = {dim: value for dim, value in indices.items() if dim in axis_map}
+
+        pin_idxs = None
+
+        if VeraDim.PIN_Y in selected and VeraDim.PIN_X in selected:
+            pin_idxs = (
+                selected[VeraDim.PIN_Y],
+                selected[VeraDim.PIN_X],
+            )
+        elif VeraDim.PIN_Y in selected or VeraDim.PIN_X in selected:
+            raise ValueError("PIN_Y and PIN_X must be selected together")
+
+        slice_ = dtype.make_slice(
+            surface_idx=selected.get(VeraDim.SURFACE),
+            group_idx=selected.get(VeraDim.GROUP),
+            node_idx=selected.get(VeraDim.NODE),
+            pin_idxs=pin_idxs,
+            axial_idx=selected.get(VeraDim.AXIAL),
+            assembly_id=selected.get(VeraDim.ASSEMBLY),
+        )
+
+        return self[slice_]
+
+    def arrange(
+        self,
+        *,
+        order: Sequence[VeraDim],
+        split: Sequence[VeraDim] = (),
+        require: Sequence[VeraDim] = (),
+        surface: int | None = None,
+        group: int | None = None,
+        node: int | None = None,
+        pin: tuple[int, int] | None = None,
+        axial: int | None = None,
+        assembly: int | None = None,
+    ) -> list["VeraDataset"]:
+        """
+        Select, reorder, and split a dataset using semantic dimensions.
+
+        Selectors for dimensions that do not exist on the dataset are ignored.
+
+        Every surviving semantic dimension must be explicitly accounted for
+        by either ``order`` or ``split``.
+
+        Parameters
+        ----------
+        order
+            Desired semantic dimension order for each returned array.
+
+            Dimensions in ``order`` that do not exist on this dtype are
+            ignored.
+
+        split
+            Semantic dimensions to split into separate arrays.
+
+            Dimensions in ``split`` that do not exist on this dtype are
+            ignored.
+
+        require
+            Semantic dimensions that must exist on this dtype.
+
+        surface
+            Surface index to select, if the dtype has a surface dimension.
+
+        group
+            Energy-group index to select, if the dtype has a group dimension.
+
+        node
+            Node index to select, if the dtype has a node dimension.
+
+        pin
+            ``(pin_y, pin_x)`` indices to select, if the dtype has pin
+            dimensions.
+
+        axial
+            Axial index to select, if the dtype has an axial dimension.
+
+        assembly
+            Assembly index to select, if the dtype has an assembly dimension.
+
+        Returns
+        -------
+        list[VeraDataset]
+            One arranged array if no active split dimensions exist, otherwise
+            one array for every combination of split-dimension indices.
+        """
+        order = tuple(order)
+        split = tuple(split)
+        require = tuple(require)
+
+        dtype = self.dataset_type
+        axis_map = dtype.dim_axes
+
+        # validate
+
+        if len(set(order)) != len(order):
+            raise ValueError(f"Duplicate dimensions in order: {order}")
+
+        if len(set(split)) != len(split):
+            raise ValueError(f"Duplicate dimensions in split: {split}")
+
+        if len(set(require)) != len(require):
+            raise ValueError(f"Duplicate dimensions in require: {require}")
+
+        overlap = set(order) & set(split)
+
+        if overlap:
+            raise ValueError(
+                "Dimensions cannot appear in both order and split: "
+                + ", ".join(sorted(dim.value for dim in overlap))
+            )
+
+        missing_required = set(require) - set(axis_map)
+
+        if missing_required:
+            raise ValueError(
+                f"{dtype} is missing required dimensions: "
+                + ", ".join(sorted(dim.value for dim in missing_required))
+            )
+
+        # build semantic axis selections, if an axis does not exist in this dataset ignore it
+        requested: dict[VeraDim, int | None] = {
+            VeraDim.SURFACE: surface,
+            VeraDim.GROUP: group,
+            VeraDim.NODE: node,
+            VeraDim.AXIAL: axial,
+            VeraDim.ASSEMBLY: assembly,
+        }
+
+        if pin is not None:
+            requested[VeraDim.PIN_Y] = pin[0]
+            requested[VeraDim.PIN_X] = pin[1]
+
+        selected = {
+            dim: value for dim, value in requested.items() if value is not None and dim in axis_map
+        }
+
+        data = self.select(selected)
+
+        selected_dims = set(selected)
+
+        surviving = tuple(
+            dim
+            for dim, _axis in sorted(
+                axis_map.items(),
+                key=lambda item: item[1],
+            )
+            if dim not in selected_dims
+        )  # these are the dims that weren't selected, they must be in required or ordering
+
+        active_order = tuple(dim for dim in order if dim in surviving)  # order dims
+
+        active_split = tuple(dim for dim in split if dim in surviving)  # split dims
+
+        accounted_for = set(active_order) | set(active_split)
+
+        unhandled = set(surviving) - accounted_for
+
+        if unhandled:
+            raise ValueError(
+                f"Arrangement for {dtype} leaves dimensions unhandled: "
+                + ", ".join(sorted(dim.value for dim in unhandled))
+            )
+
+        desired = active_split + active_order
+
+        permutation = tuple(surviving.index(dim) for dim in desired)
+
+        if permutation != tuple(range(data.ndim)):
+            data = data.transpose(permutation)
+
+        if not active_split:
+            return [data]
+
+        split_shape = data.shape[: len(active_split)]
+
+        return [data[idx] for idx in np.ndindex(split_shape)]
 
 
 def derive_recipe(

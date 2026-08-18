@@ -1,17 +1,7 @@
 """The selection interface: pick what to look at, then render it.
 
-    shot = vera.core_view.select("pin_powers", z=10)
-    shot.savefig("pin_powers.png")
-
-A view holds the source, the default render options, and the drawing. A
-selection holds what the caller picked, and is the only thing a caller
-renders from. Each view's select() names its own parameters, so that
-signature is the one place a view's inputs are declared.
-
-    draw.py       artists, one Axes at a time
-    canvas.py     the figure and its panels
-    view.py       the selection interface          <- you are here
-    *_view.py     one concrete view, wiring the three together
+shot = vera.core_view.select("pin_powers", z=10)
+shot.savefig("pin_powers.png")
 """
 
 from collections.abc import Sequence
@@ -220,7 +210,7 @@ class Selection:
         if over not in self.params:
             raise TypeError(f"{type(self.view).__name__} does not select on {over!r}")
         if values is None:
-            values = self.view.sweep_values(over)
+            values = self.view.sweep_values(over, self)
         frames = [self.replace(**{over: value}) for value in values]
         if not frames:
             raise ValueError(f"no {over} values to draw")
@@ -304,7 +294,7 @@ class Selection:
         if over not in self.params:
             raise TypeError(f"{type(self.view).__name__} does not select on {over!r}")
         if values is None:
-            values = self.view.sweep_values(over)
+            values = self.view.sweep_values(over, self)
         frames = [self.replace(**{over: value}) for value in values]
         if not frames:
             raise ValueError(f"no {over} values to draw")
@@ -371,15 +361,34 @@ class View:
         """Every frame in one canvas. Views that cannot do this say so."""
         raise NotImplementedError(f"{type(self).__name__} has no collage")
 
-    def sweep_values(self, over: str) -> Sequence:
-        """Everything `over` can be, when a collage is not given values.
+    def sweep_values(self, over: str, selection: Selection) -> Sequence:
+        """Everything `over` can be, when a sweep is not given values.
 
-        Only states are known here; a view that can enumerate its own
-        choices, e.g. axial levels, extends this.
+        States and axial levels are known from the source; a view that can
+        enumerate its own other choices extends this. The selection is passed
+        because what a choice ranges over can depend on what was picked: an
+        array's axial extent is a property of that array, not of the view.
         """
         if over == "state":
             return range(len(self.source.states))
+        if over == "z":
+            return self.axial_levels(selection)
         raise ValueError(f"{type(self).__name__} cannot enumerate {over!r}; pass values")
+
+    def axial_levels(self, selection: Selection) -> range:
+        """Every axial level the selection's array has.
+
+        Which mesh that is depends on the array: a computational one is on
+        the computational mesh and a detector on the detector's, so the count
+        comes from the source rather than from a single nax.
+        """
+        dtype = self.source.get_dataset_dtype(selection.array, selection.state)
+        if not dtype.has_axial_dim():
+            raise ValueError(
+                f"{selection.array!r} reads as {dtype}, which has no axial dimension;"
+                " check the name or pass values"
+            )
+        return range(len(self.source.core.get_axial_mesh_means(dataset_type=dtype)))
 
     def frame_title(self, selection: Selection, over: str) -> str:
         """The heading over one frame of a collage."""

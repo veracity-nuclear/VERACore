@@ -197,6 +197,36 @@ class AxialSlice(GroupedSlice):
             axis="x" if is_x else "y",
         )
 
+    def column_edges(self) -> np.ndarray:
+        """x boundaries of every drawn column: each assembly cell cut into
+        cell_width equal parts, so a cell holding several values across its
+        width gets one column per value."""
+        offsets = np.linspace(0.0, 1.0, self.cell_width + 1)[:-1]
+        widths = np.diff(self.x_edges)
+        starts = self.x_edges[:-1, None] + widths[:, None] * offsets
+        return np.append(starts.ravel(), self.x_edges[-1])
+
+    def to_grid(self, group: int = 0) -> np.ndarray:
+        """One group laid out on the cut: (n_layers, n_cells * cell_width).
+
+        Row 0 is the lowest elevation, so rows line up with the ascending
+        y_edges rather than with the top-down order the web view draws in.
+        Empty core positions are NaN. The values themselves are the ones
+        serialize_data_groups sends the web view, in the same order.
+        """
+        values = self.data_groups[group]
+        width = self.cell_width
+        grid = np.full((self.n_layers, len(self.assembly_indices) * width), np.nan)
+        column = 0
+        for cell, index in enumerate(self.assembly_indices):
+            if index < 0:
+                continue
+            grid[:, cell * width : (cell + 1) * width] = values[
+                :, column * width : (column + 1) * width
+            ]
+            column += 1
+        return grid[::-1]
+
     def serialize_data_groups(self) -> list[list[list]]:
         serialized = []
         is_assembly = self.dtype.is_assembly()

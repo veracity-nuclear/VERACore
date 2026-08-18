@@ -1,14 +1,4 @@
-"""The core map view: one axial layer on the assembly grid, a panel per group.
-
-The matplotlib counterpart of the trame core view. Both read a CoreSlice, so
-what a report shows and what the web view shows cannot drift apart. This is
-the layer that knows both halves: it reads VERA data and calls the artists.
-
-    draw.py       artists, one Axes at a time
-    canvas.py     the figure and its panels
-    view.py       the selection interface
-    core_view.py  one concrete view, wiring the three together  <- here
-"""
+"""The core map view: one axial layer on the assembly grid, a panel per group."""
 
 from collections.abc import Sequence
 

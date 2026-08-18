@@ -1,18 +1,6 @@
 """Many figures, one animated file.
 
 Sits beside canvas.py: a canvas is one image, this is a sequence of them.
-Nothing here knows what a VERA dataset is.
-
-    draw.py       artists, one Axes at a time
-    canvas.py     the figure and its panels
-    animation.py  a sequence of figures as a gif or a video   <- you are here
-    view.py       the selection interface
-    *_view.py     one concrete view, wiring the three together
-
-Frames must all be the same size, and a cropped figure is not: the caption
-changes width as the state number does. Frames are therefore padded to the
-largest of them, in the figure's own background color, rather than cropped
-to a common box that would clip whichever frame is widest.
 """
 
 import io

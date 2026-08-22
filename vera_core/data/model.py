@@ -1015,7 +1015,6 @@ class VeraDataSource:
             ds_src = self.states[state_idx]
         else:
             ds_src = self.active_state
-
         ds = ds_src.get(ds_name, None)
         if not isinstance(ds, VeraDataset):
             return None
@@ -1024,6 +1023,7 @@ class VeraDataSource:
     def get_dataset(
         self,
         array_name: str,
+        *,
         mask_reflected: bool = True,
         state_idx: int | None = None,
     ) -> VeraDataset:

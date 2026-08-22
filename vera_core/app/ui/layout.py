@@ -133,10 +133,20 @@ def build_grid_card(ctrl: Controller):
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
-                    click="set(`locked_${item.i}`, !get(`locked_${item.i}`))",
+                    click=(ctrl.toggle_lock, "[item.i]"),
                 ):
                     vuetify.VIcon(
-                        v_text="get(`locked_${item.i}`) ? 'mdi-lock' : 'mdi-lock-open-variant'",
+                        v_text="""
+                        (
+                            get(`locked_${item.i}`) === true ||
+                            (
+                                typeof get(`locked_${item.i}`) === 'object' &&
+                                Object.keys(get(`locked_${item.i}`) || {}).length > 0
+                            )
+                        )
+                        ? 'mdi-lock'
+                        : 'mdi-lock-open-variant'
+                        """,
                         small=True,
                     )
 

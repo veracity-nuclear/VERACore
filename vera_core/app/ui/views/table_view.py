@@ -57,10 +57,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             selected_assembly,
             selected_src_id,
             selected_array,
+            time,
+            surface,
         ) = indices
 
         src: VeraDataSource = registry.get(selected_src_id)
-        array = src.get_dataset(selected_array)
+        array = src.get_dataset(selected_array, state_idx=time)
         array_dtype = array.dataset_type
         indices_list = []
         match array_dtype:
@@ -135,7 +137,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             data_dict[f"{base_label}{group_label}"] = value
         for scalar_dataset in src.active_state.scalar_datasets:
             data_dict[scalar_dataset.replace("_", " ").title()] = np.asarray(
-                src.get_dataset(scalar_dataset)
+                src.get_dataset(scalar_dataset, state_idx=time)
             ).item()
 
         # Round floats so we don't display too many sig figs (7 matches veraview).

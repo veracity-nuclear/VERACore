@@ -110,20 +110,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(src_id)
         if src is None or not array_name:
             return figure
-        full_array = src.get_dataset(array_name)
+        indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
+        if not indices:
+            return figure
+        j, i, layer, assy, _, _, time, surface = indices
+        full_array = src.get_dataset(array_name, state_idx=time)
 
         units = full_array.physical_units
         units_label = f" ({units})" if units != "unitless" else ""
         array_dtype: VeraDtype = full_array.dataset_type
 
-        indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
-        if not indices:
-            return figure
-        j, i, layer, assy, _, _ = indices
-
         radial = state[f"hist_radial_{view_id}"]
         axial = state[f"hist_axial_{view_id}"]
-        surface = state.selected_surface
         groups = group_arrays(full_array, array_dtype, surface)
 
         for suffix, arr, layout in groups:

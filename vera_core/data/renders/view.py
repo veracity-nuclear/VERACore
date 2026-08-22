@@ -80,7 +80,11 @@ class Selection:
 
     def label(self) -> str:
         """The choices, for messages and repr."""
-        shown = [(k, v) for k, v in self.params.items() if v is not None and v != ()]
+        shown = [
+            (k, v)
+            for k, v in self.params.items()
+            if v is not None and not (isinstance(v, tuple) and not v)
+        ]
         return " ".join(str(v) if k == "array" else f"{k}={v}" for k, v in shown)
 
     def savefig(
@@ -207,31 +211,12 @@ class Selection:
         panel_width: float | None = None,
     ) -> Figure:
         """The finished collage figure. Options are savecollage's."""
-        if over not in self.params:
-            raise TypeError(f"{type(self.view).__name__} does not select on {over!r}")
-        if values is None:
-            values = self.view.sweep_values(over, self)
-        frames = [self.replace(**{over: value}) for value in values]
-        if not frames:
-            raise ValueError(f"no {over} values to draw")
-        slices = [frame.slice() for frame in frames]
-        options = self.options(
-            style=style,
-            color=color if color is not None else self._shared_color(slices, color_scope),
-            title=title,
-            caption=caption,
-            panel_width=panel_width,
-            color_scope=color_scope,
+        frames, slices, options = self._sweep(
+            over, values, color, color_scope, style, title, caption, panel_width
         )
         return self.view.render_collage(
             slices, frames, options, over=over, columns=columns
         ).figure()
-
-    def _shared_color(self, slices, scope: ColorSpec | None = None) -> list[ColorSpec]:
-        """One scale per group, spanning every frame."""
-        cmap = self.view.options.color
-        cmap = cmap.cmap if isinstance(cmap, ColorSpec) else DEFAULT_CMAP
-        return shared_group_specs(slices, cmap=cmap, scope=scope)
 
     def canvas(self, options: RenderOptions | None = None, slice_=None) -> Canvas:
         """The drawn canvas, before it is finished, for callers that want to
@@ -301,7 +286,7 @@ class Selection:
         slices = [frame.slice() for frame in frames]
         options = self.options(
             style=style,
-            color=color if color is not None else self._shared_color(slices, color_scope),
+            color=color if color is not None else self.view.shared_color(slices, color_scope),
             title=title,
             caption=caption,
             panel_width=panel_width,
@@ -360,6 +345,17 @@ class View:
     ) -> Canvas:
         """Every frame in one canvas. Views that cannot do this say so."""
         raise NotImplementedError(f"{type(self).__name__} has no collage")
+
+    def shared_color(self, slices, scope: ColorScope | None = None) -> list[ColorSpec] | None:
+        """One scale per group, spanning every frame of a sweep.
+
+        A sweep holds its frames to one scale so that a change between them
+        is a change in the data and not in the colorbar. A view that does not
+        color by value has no such scale, and says so with None.
+        """
+        cmap = self.options.color
+        cmap = cmap.cmap if isinstance(cmap, ColorSpec) else DEFAULT_CMAP
+        return shared_group_specs(slices, cmap=cmap, scope=scope)
 
     def sweep_values(self, over: str, selection: Selection) -> Sequence:
         """Everything `over` can be, when a sweep is not given values.

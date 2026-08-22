@@ -48,4 +48,10 @@ linked, interactive views arranged in a configurable grid.
 
 - This version adds functionality for changing the decimals displayed on the Surface Assembly View.
 
-[2.0.1]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.2
+[2.0.2]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.2
+
+## [2.0.3] - 2026-08-22
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.3]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.3

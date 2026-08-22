@@ -761,6 +761,7 @@ class VeraDataSource:
         states: list[VeraOutState],
         provenance: str,
         filename: str | None = None,
+        name: str | None = None,
         close_callback: Callable[[], None] | None = None,
         state_caching: bool = True,
     ):
@@ -782,6 +783,7 @@ class VeraDataSource:
         self._determine_time_axes()
         self._provenance = provenance
         self._close_callback = close_callback
+        self.name = name if name is not None else ""
 
     def _determine_time_axes(self):
         self._time_axes = {}
@@ -999,6 +1001,9 @@ class VeraDataSource:
         Returns None if the name is unknown. Raises IndexError if `state_idx` is
         out of range. Reads are lazy: an uncached name is read on access.
         """
+        state_idx = (
+            max(0, min(state_idx, len(self.states) - 1)) if state_idx is not None else state_idx
+        )
         if state_idx is not None and not 0 <= state_idx < len(self.states):
             raise IndexError(f"{state_idx} out of index range")
         arrays_on_core = [

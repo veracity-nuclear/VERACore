@@ -37,6 +37,7 @@ class VeraDataRegistry:
             self.global_axial_mesh = core.gross_axial_mesh
         else:
             self.global_axial_mesh = np.union1d(self.global_axial_mesh, core.gross_axial_mesh)
+        src.name = src_id
 
     @property
     def default_src(self) -> VeraDataSource | None:

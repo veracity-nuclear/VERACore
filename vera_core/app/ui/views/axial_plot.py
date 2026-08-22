@@ -11,8 +11,6 @@ from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
 SEP = "\x1f"
 
-print(type(AxialLines.ALLOWED_DTYPES))
-
 
 def option_for(view_id):
     return {
@@ -45,7 +43,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
                 continue
-            j, i, layer, assy, _, _ = indices
+            j, i, layer, assy, _, _, time, surface = indices
             vera_sources.append(src)
             dataset_names.append(array_name)
             all_indices.append(
@@ -53,7 +51,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     VeraDim.PIN_Y: j,
                     VeraDim.PIN_X: i,
                     VeraDim.NODE: convert_ji_to_node(j, i),
-                    VeraDim.SURFACE: int(state.selected_surface),
+                    VeraDim.SURFACE: surface,
                     VeraDim.AXIAL: layer,
                     VeraDim.ASSEMBLY: assy,
                 }

@@ -72,12 +72,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, _, selected_src_id, selected_array = indices
+        _, _, selected_layer, _, selected_src_id, selected_array, time, _ = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
         core_surface_slice = SurfaceSlice.create_surface_slice(
             vera_source=vera_source,
             selected_array=selected_array,
             z=selected_layer,
+            state=time,
         )
         if not core_surface_slice:
             return

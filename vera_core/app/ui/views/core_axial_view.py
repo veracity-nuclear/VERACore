@@ -6,7 +6,7 @@ from vera_core.data.dtypes import VeraDtype
 from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
-from ..helpers import is_non_active_view
+from ..helpers import get_time, is_non_active_view
 
 ALLOWED_DTYPES = [
     VeraDtype.ASSEMBLY,
@@ -141,7 +141,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(state[selected_src_key])
         if src is None:
             return
-        array = src.get_dataset(state[selected_array_key])
+        array = src.get_dataset(state[selected_array_key], state_idx=get_time(state, view_id))
         core = src.core
         dtype = array.dataset_type
         if dtype not in ALLOWED_DTYPES:

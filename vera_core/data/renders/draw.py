@@ -417,6 +417,118 @@ def mesh_values(
         )
 
 
+# -- artists for a plot ----------------------------------------------------
+
+LINE_CMAP = "tab10"
+"""Where the line cycle comes from. Lines are separate series, not points on
+a scale, so they take a qualitative map rather than the data's own."""
+
+TICK_LABEL_RATIO = 0.8
+"""Tick text against the style's axis label size."""
+
+LEGEND_SIZE = 8.0
+
+
+def line_colors(n_lines: int, cmap: str = LINE_CMAP) -> list:
+    """n colors from a qualitative map, repeating once it runs out."""
+    colors = mpl.colormaps[cmap].colors
+    return [colors[index % len(colors)] for index in range(n_lines)]
+
+
+def plot_axes(
+    ax: Axes,
+    style: ViewStyle,
+    *,
+    x_label: str = "",
+    y_label: str = "",
+):
+    """A framed plot: themed background, spines, ticks and grid.
+
+    frame_axes() locks an aspect and hides every spine, which is right for a
+    map and wrong for a plot, where the axes are a scale to read against.
+    """
+    ax.set_facecolor(style.theme.background)
+    for side, spine in ax.spines.items():
+        spine.set_visible(side in ("left", "bottom"))
+        spine.set_color(style.theme.grid)
+    ax.tick_params(
+        colors=style.theme.foreground,
+        labelsize=style.axis_label_size * TICK_LABEL_RATIO,
+    )
+    if style.show_grid:
+        ax.grid(color=style.theme.grid, linewidth=style.grid_width, alpha=0.4)
+        ax.set_axisbelow(True)
+    if style.show_axis_labels:
+        ax.set_xlabel(x_label, color=style.theme.foreground, fontsize=style.axis_label_size)
+        ax.set_ylabel(y_label, color=style.theme.foreground, fontsize=style.axis_label_size)
+
+
+def lines(
+    ax: Axes,
+    traces: Sequence,
+    style: ViewStyle,
+    *,
+    colors: Sequence | None = None,
+    width: float = 1.6,
+    marker_size: float = 4.0,
+) -> list:
+    """One line per trace, each ((x, y), label, mode).
+
+    A non-finite value breaks the line rather than joining across it, which
+    is what draws a slice built of region segments as one bar per region.
+    Returns the handles, for a legend the caller places.
+    """
+    traces = list(traces)
+    colors = list(colors) if colors is not None else line_colors(len(traces))
+    handles = []
+    for index, ((x, y), label, mode) in enumerate(traces):
+        (handle,) = ax.plot(
+            x,
+            y,
+            label=label,
+            color=colors[index % len(colors)],
+            linewidth=0.0 if mode == "markers" else width,
+            linestyle="none" if mode == "markers" else "-",
+            marker="o" if "markers" in mode else None,
+            markersize=marker_size,
+        )
+        handles.append(handle)
+    return handles
+
+
+def rule(ax: Axes, y: float, style: ViewStyle, *, color: str = "", label: str = ""):
+    """A dashed line across the plot at one height: the chosen layer."""
+    return ax.axhline(
+        y,
+        color=color or style.theme.highlight,
+        linestyle="--",
+        linewidth=style.highlight_width / 2,
+        label=label or None,
+        zorder=1.5,
+    )
+
+
+def legend(figure: Figure, handles: Sequence, style: ViewStyle, *, columns: int = 1):
+    """A legend under the whole figure, below the caption.
+
+    A plot names its lines where a map names its colors with a bar, so this
+    is the counterpart of colorbar() and sits in the same place. It is
+    anchored just below the figure rather than given to the layout engine,
+    which would otherwise put it in the strip the caption already holds; the
+    crop on save is what brings it back into the image.
+    """
+    return figure.legend(
+        handles=list(handles),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.0),
+        bbox_transform=figure.transFigure,
+        ncols=columns,
+        frameon=False,
+        labelcolor=style.theme.foreground,
+        fontsize=LEGEND_SIZE,
+    )
+
+
 def colorbar(
     figure: Figure,
     mappable: ScalarMappable,

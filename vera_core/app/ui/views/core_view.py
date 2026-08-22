@@ -84,7 +84,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, _, selected_src_id, selected_array = indices
+        _, _, selected_layer, _, selected_src_id, selected_array, time, _ = indices
         thres_key = format_label(selected_src_id, selected_array)
         thresholds_to_apply = state["thresholds"].get(thres_key, [])
         vera_source: VeraDataSource = registry.get(selected_src_id)
@@ -95,6 +95,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             selected_array,
             selected_layer,
             thresholds=thresholds_to_apply,
+            state_idx=time,
         )
         if not core_slice:
             return

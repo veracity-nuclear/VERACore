@@ -66,7 +66,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array, time, _ = indices
         selected_time = state["selected_time"]
         vera_source: VeraDataSource = registry.get(selected_src_id)
         thres_key = format_label(selected_src_id, selected_array)
@@ -101,7 +101,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 selected_array=selected_array,
                 z=selected_layer,
                 assembly_id=selected_assembly,
-                state=vera_source.active_state_index,
+                state=time,
                 thresholds_to_apply=thresholds_to_apply,
             )
             if not assembly_slice:

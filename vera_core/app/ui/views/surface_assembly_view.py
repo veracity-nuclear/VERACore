@@ -68,7 +68,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, selected_assembly, selected_src_id, selected_array = indices
+        _, _, selected_layer, selected_assembly, selected_src_id, selected_array, time, _ = indices
         vera_source: VeraDataSource = registry.get(selected_src_id)
 
         assembly_surface_slice = AssemblySurfaceSlice.create_assemlby_surface_slice(
@@ -76,6 +76,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             selected_array=selected_array,
             assembly_id=selected_assembly,
             z=selected_layer,
+            state=time,
         )
         if not assembly_surface_slice:
             return

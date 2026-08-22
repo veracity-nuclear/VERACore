@@ -42,16 +42,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             time_axis = src.time_axes()[state[time_axis_key]]
-            array_shape = np.shape(src.get_dataset(array_name, mask_reflected=False))
-            array_dtype = src.get_dataset_dtype(array_name)
-            is_comp = array_dtype.is_computational()
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
                 continue
-            ny, nx, nax, nass, _, _ = indices
+            ny, nx, nax, nass, _, _, time, selected_surface = indices
+            array_shape = np.shape(
+                src.get_dataset(array_name, mask_reflected=False, state_idx=time)
+            )
+            array_dtype = src.get_dataset_dtype(array_name)
+            is_comp = array_dtype.is_computational()
             assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
             axial_label = src.core.get_axial_mesh_means(dataset_type=array_dtype)[nax]
-            units = src.get_dataset_units(array_name)
+            units = src.get_dataset_units(array_name, state_idx=time)
             units_label = f" ({units}) " if units != "unitless" else ""
             indices_list = []
             match array_dtype:
@@ -94,7 +96,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         indices_list.append((n_group, node_idx, nax, nass))
                     identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
                 case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
-                    selected_surface = state.selected_surface
                     num_energy_groups = array_shape[1]
                     nodal_idx = (
                         0
@@ -103,7 +104,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     )
                     for group_n in range(num_energy_groups):
                         indices_list.append((selected_surface, group_n, nodal_idx, nax, nass))
-                    surface_label = f" {Surface(state.selected_surface).str}"
+                    surface_label = f" {Surface(selected_surface).str}"
                     identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
                 case _:
                     continue

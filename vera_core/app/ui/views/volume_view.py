@@ -22,7 +22,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
-from ..helpers import format_label, is_view_locked
+from ..helpers import format_label, get_time, is_view_locked
 
 _OPACITY_POINTS = [
     (-10.0, 1.0),
@@ -319,7 +319,7 @@ def _update_volume(server, registry: VeraDataRegistry, view_id):
     vera_out_file = registry.get(src_id)
     if vera_out_file is None or not array_name:
         return
-    array = vera_out_file.get_dataset(array_name)
+    array = vera_out_file.get_dataset(array_name, state_idx=get_time(state, view_id))
     if array.dataset_type.title not in option_for(0)["allowed_categories"]:
         return
 

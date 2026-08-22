@@ -71,9 +71,11 @@ def _ordered_pairs(tokens):
     return pairs[:MAX_METRICS]
 
 
-def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresholds):
+def _metric_values(
+    vera_source: VeraDataSource, array_name: str, z: int, thresholds, time: int | None
+):
     """One metric as a core-shaped grid of floats/None, plus its value range."""
-    dataset = vera_source.get_dataset(array_name)
+    dataset = vera_source.get_dataset(array_name, state_idx=time)
     ds_dtype = dataset.dataset_type
     match ds_dtype:
         case VeraDtype.RADIAL_ASSEMBLY:
@@ -92,7 +94,9 @@ def _metric_values(vera_source: VeraDataSource, array_name: str, z: int, thresho
     return values, array_range(layer)
 
 
-def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_state: dict):
+def create_cips_view(
+    registry: VeraDataRegistry, tokens, z: int, thresholds_state: dict, time: int | None
+):
     """Build the full widget payload. Returns None when nothing is selectable.
 
     metrics are ordered by CIPS_ROLES; the list index is the band position, top
@@ -105,17 +109,20 @@ def create_cips_view(registry: VeraDataRegistry, tokens, z: int, thresholds_stat
     source = None
     for src_id, array_name in _ordered_pairs(tokens):
         vera_source = registry.get(src_id)
-        if vera_source is None or vera_source.get_dataset_dtype(array_name) not in ALLOWED_DTYPES:
+        if (
+            vera_source is None
+            or vera_source.get_dataset_dtype(array_name, time) not in ALLOWED_DTYPES
+        ):
             continue
         thresholds = thresholds_state.get(format_label(src_id, array_name), [])
-        values, value_range = _metric_values(vera_source, array_name, z, thresholds)
+        values, value_range = _metric_values(vera_source, array_name, z, thresholds, time)
         metrics.append(
             {
                 "index": len(metrics),
                 "label": _role_label(array_name),
                 "name": array_name,
                 "src_id": src_id,
-                "units": vera_source.get_dataset_units(array_name),
+                "units": vera_source.get_dataset_units(array_name, state_idx=time),
                 "values": values,
             }
         )
@@ -194,8 +201,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         indices = get_safe_idxs(view_id, state, registry)
         if not indices:
             return
-        _, _, selected_layer, _, _, _ = indices
-        payload = create_cips_view(registry, state[multi_key], selected_layer, state["thresholds"])
+        _, _, selected_layer, _, _, _, time, _ = indices
+        payload = create_cips_view(
+            registry, state[multi_key], selected_layer, state["thresholds"], time
+        )
         if payload is None:
             return
         metrics = payload["metrics"]

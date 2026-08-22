@@ -135,9 +135,9 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
         if not indices:
             return
         if is_x:
-            selected_pin, _, _, selected_assembly, src_id, selected_array = indices
+            selected_pin, _, _, selected_assembly, src_id, selected_array, time, _ = indices
         else:
-            _, selected_pin, _, selected_assembly, src_id, selected_array = indices
+            _, selected_pin, _, selected_assembly, src_id, selected_array, time, _ = indices
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
 
@@ -151,6 +151,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             assembly_id=selected_assembly,
             dim="x" if is_x else "y",
             thresholds_to_apply=thres,
+            state=time,
         )
         if not axial_slice:
             return

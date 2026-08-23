@@ -1,8 +1,4 @@
-"""The selection interface: pick what to look at, then render it.
-
-shot = vera.core_view.select("pin_powers", z=10)
-shot.savefig("pin_powers.png")
-"""
+"""The selection interface: pick what to look at, then render it."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -39,6 +35,9 @@ class RenderOptions:
     """A heading, True for one the view derives, False for none."""
     caption: bool = True
     panel_width: float = PANEL_WIDTH_IN
+    value_limits: tuple[float, float] | None = None
+    """The span an axis of values is held to, for a view that reads values
+    off an axis rather than a colorbar. None lets each render scale itself"""
 
     def resolved_title(self, view: "View", selection: "Selection") -> str | None:
         return view.default_title(selection) if self.title is True else (self.title or None)
@@ -291,6 +290,7 @@ class Selection:
             caption=caption,
             panel_width=panel_width,
             color_scope=color_scope,
+            value_limits=self.view.shared_limits(slices),
         )
         return frames, slices, options
 
@@ -357,14 +357,12 @@ class View:
         cmap = cmap.cmap if isinstance(cmap, ColorSpec) else DEFAULT_CMAP
         return shared_group_specs(slices, cmap=cmap, scope=scope)
 
-    def sweep_values(self, over: str, selection: Selection) -> Sequence:
-        """Everything `over` can be, when a sweep is not given values.
+    def shared_limits(self, slices) -> tuple[float, float] | None:
+        """The span of values every frame of a sweep is held to."""
+        return None
 
-        States and axial levels are known from the source; a view that can
-        enumerate its own other choices extends this. The selection is passed
-        because what a choice ranges over can depend on what was picked: an
-        array's axial extent is a property of that array, not of the view.
-        """
+    def sweep_values(self, over: str, selection: Selection) -> Sequence:
+        """Everything `over` can be, when a sweep is not given values."""
         if over == "state":
             return range(len(self.source.states))
         if over == "z":
@@ -372,12 +370,7 @@ class View:
         raise ValueError(f"{type(self).__name__} cannot enumerate {over!r}; pass values")
 
     def axial_levels(self, selection: Selection) -> range:
-        """Every axial level the selection's array has.
-
-        Which mesh that is depends on the array: a computational one is on
-        the computational mesh and a detector on the detector's, so the count
-        comes from the source rather than from a single nax.
-        """
+        """Every axial level the selection's array has."""
         dtype = self.source.get_dataset_dtype(selection.array, selection.state)
         if not dtype.has_axial_dim():
             raise ValueError(

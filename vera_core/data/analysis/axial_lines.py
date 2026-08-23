@@ -83,9 +83,18 @@ class AxialLines:
         return zip(self.axial_arrays, self.identifiers, self.modes, strict=False)
 
     def axial_extents(self) -> tuple[float, float]:
+        """The (lo, hi) the axial meshs span"""
         axial_min = min(np.nanmin(y) for _, y in self.axial_arrays)
         axial_max = max(np.nanmax(y) for _, y in self.axial_arrays)
         return float(axial_min), float(axial_max)
+
+    def value_extents(self) -> tuple[float, float]:
+        """The (lo, hi) the values span"""
+        finite = [x[np.isfinite(x)] for x, _ in self.axial_arrays]
+        finite = [values for values in finite if values.size]
+        if not finite:
+            return 0.0, 1.0
+        return float(min(v.min() for v in finite)), float(max(v.max() for v in finite))
 
     @beartype
     @classmethod

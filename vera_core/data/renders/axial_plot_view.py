@@ -21,14 +21,22 @@ LEGEND_COLUMNS = 1
 """One line's name carries its source, dataset, units, position and group,
 so two of them will not sit side by side."""
 
+AXIS_MARGIN = 0.05
+"""Slack either side of a fixed axis, so a line at the extreme does not sit
+on the frame."""
+
+
+def pad_limits(low: float, high: float, margin: float = AXIS_MARGIN) -> tuple[float, float]:
+    """A span with room either side. A flat line has no span of its own, so
+    it is given one rather than collapsing the axis onto it."""
+    span = high - low
+    if span <= 0:
+        return low - 1.0, high + 1.0
+    return low - span * margin, high + span * margin
+
 
 class AxialLinesView(View):
-    """Plots one or more datasets against elevation, over one or more sources.
-
-    Built with a single source by Vera, and with several by VeraSet. The
-    lines carry their source's name, so a plot over several reads as a
-    comparison without the caller labelling anything.
-    """
+    """Plots one or more datasets against elevation, over one or more sources."""
 
     def __init__(self, sources, options: RenderOptions | None = None):
         self.sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
@@ -110,6 +118,12 @@ class AxialLinesView(View):
         them from each frame's own extents."""
         return None
 
+    def shared_limits(self, slices) -> tuple[float, float]:
+        """One value axis for every frame, so a line that moves between
+        frames has moved in the data rather than under a rescaled axis."""
+        extents = [lines_.value_extents() for lines_ in slices]
+        return pad_limits(min(lo for lo, _ in extents), max(hi for _, hi in extents))
+
     def sweep_values(self, over: str, selection: Selection) -> Sequence:
         """`layer` moves the marker, which is the only axial choice here: the
         lines themselves always span every level."""
@@ -164,16 +178,20 @@ class AxialLinesView(View):
 
     # -- drawing -----------------------------------------------------------
 
-    def draw_plot(self, panel, lines_: AxialLines, selection: Selection, style) -> list:
-        """One AxialLines into one panel: the whole of the drawing.
-
-        Both render() and render_collage() go through here, so a frame of a
-        collage and a still of the same plot are the same picture. Returns
-        the line handles, which the caller names in a legend.
-        """
+    def draw_plot(
+        self,
+        panel,
+        lines_: AxialLines,
+        selection: Selection,
+        style,
+        limits: tuple[float, float] | None = None,
+    ) -> list:
+        """One AxialLines into one panel: the whole of the drawing."""
         handles = draw.lines(panel.ax, lines_.lines(), style)
         draw.plot_axes(panel.ax, style, y_label=ELEVATION_TITLE)
         panel.ax.set_ylim(*lines_.axial_extents())
+        if limits is not None:
+            panel.ax.set_xlim(*limits)
         if selection.layer is not None:
             elevations = self.elevations(selection)
             draw.rule(panel.ax, float(elevations[selection.layer]), style)
@@ -189,7 +207,7 @@ class AxialLinesView(View):
             panel_width=options.panel_width,
         )
         panel = canvas.panels[0]
-        handles = self.draw_plot(panel, lines_, selection, options.style)
+        handles = self.draw_plot(panel, lines_, selection, options.style, options.value_limits)
         draw.legend(panel.figure, handles, options.style, columns=LEGEND_COLUMNS)
         return canvas
 
@@ -221,7 +239,7 @@ class AxialLinesView(View):
         )
         handles = []
         for panel, lines_, selection in zip(canvas.panels, slices, selections, strict=True):
-            handles = self.draw_plot(panel, lines_, selection, options.style)
+            handles = self.draw_plot(panel, lines_, selection, options.style, options.value_limits)
             panel.title(self.frame_title(selection, over))
         draw.legend(canvas.panels[0].figure, handles, options.style, columns=LEGEND_COLUMNS)
         return canvas

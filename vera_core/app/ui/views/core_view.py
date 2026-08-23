@@ -8,7 +8,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.renders import CoreView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
+from ..helpers import format_label, get_safe_idxs, get_thresholds, is_non_active_view, set_info
 from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
@@ -85,11 +85,9 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if not indices:
             return
         _, _, selected_layer, _, selected_src_id, selected_array, time, _ = indices
-        thres_key = format_label(selected_src_id, selected_array)
-        thresholds_to_apply = state["thresholds"].get(thres_key, [])
         vera_source: VeraDataSource = registry.get(selected_src_id)
         state[aspect_ratio_key] = vera_source.core.aspect_ratio
-
+        thresholds_to_apply = get_thresholds(state, view_id)
         core_slice = CoreSlice.create_core_slice(
             vera_source,
             selected_array,

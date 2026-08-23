@@ -6,6 +6,7 @@ from trame_server.core import State
 from vera_core.data.dtypes import NUM_NODES, VeraDtype
 from vera_core.data.model import VeraOutCore
 from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import ThresholdCondition
 
 
 def format_label(file: str, key: str):
@@ -160,3 +161,11 @@ def default_dataset_name(names: dict) -> str | None:
     if pin in names:
         return names[pin]
     return next(iter(names.values()))
+
+
+def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
+    selected_src_id = state[f"selected_src_id_{view_id}"]
+    selected_array = state[f"selected_array_{view_id}"]
+    thres_key = format_label(selected_src_id, selected_array)
+    thresholds_to_apply = state["thresholds"].get(thres_key, [])
+    return thresholds_to_apply

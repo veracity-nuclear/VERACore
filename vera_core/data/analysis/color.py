@@ -6,15 +6,18 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
+from ..thresholds import ThresholdCondition, threshold_mask
+
 DEFAULT_CMAP = "jet"
 
 
-def array_range(array) -> tuple[float, float]:
+def array_range(array, thres: Sequence[ThresholdCondition] | None = None) -> tuple[float, float]:
     """Finite (lo, hi) of an array, widened when flat and (0, 1) when empty."""
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        lo = float(np.nanmin(array))
-        hi = float(np.nanmax(array))
+        keep = True if thres is None else threshold_mask(array, thres)
+        lo = float(np.nanmin(array, where=keep, initial=np.inf))
+        hi = float(np.nanmax(array, where=keep, initial=-np.inf))
     if not np.isfinite(lo) or not np.isfinite(hi):
         return (0.0, 1.0)
     if lo == hi:

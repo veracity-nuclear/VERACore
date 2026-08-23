@@ -22,13 +22,17 @@ class ThresholdCondition(TypedDict):
     value: float
 
 
+def threshold_mask(
+    array: VeraDataset | np.ndarray, conditions: Sequence[ThresholdCondition]
+) -> np.ndarray:
+    keep = np.ones(array.shape, dtype=bool)
+    for c in conditions:
+        keep &= THRESHOLD_OPS[c["op"]](array, c["value"])
+    return keep
+
+
 def apply_thresholds(
     array: VeraDataset | np.ndarray, conditions: Sequence[ThresholdCondition]
 ) -> VeraDataset:
-    keep = np.ones(array.shape, dtype=bool)
-    dtype = VeraDtype.UNKNOWN
-    if isinstance(array, VeraDataset):
-        dtype = array.dataset_type
-    for c in conditions:
-        keep &= THRESHOLD_OPS[c["op"]](array, c["value"])
-    return VeraDataset(np.where(keep, array, np.nan), dtype)
+    dtype = array.dataset_type if isinstance(array, VeraDataset) else VeraDtype.UNKNOWN
+    return VeraDataset(np.where(threshold_mask(array, conditions), array, np.nan), dtype)

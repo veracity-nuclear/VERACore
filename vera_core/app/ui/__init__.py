@@ -27,6 +27,7 @@ from .helpers import (
     default_dataset_name,
     format_label,
     get_next_y_from_layout,
+    get_thresholds,
     get_time,
     is_view_locked,
 )
@@ -244,7 +245,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         _set_multi_selection(view_id, [])
 
     @requires_src
-    def _recompute_card_range(view_id):
+    def _recompute_card_range(view_id: int):
         """Rescale a card's shared color bar to its current data."""
         if state[f"grid_view_{view_id}"].get("owns_color_bar", False):
             return
@@ -253,10 +254,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         src = _src(src_id)
         if src is None or not array_name:
             return
+        thresholds = get_thresholds(state, view_id)
         for g, group_array in enumerate(
             _group_arrays(src.get_dataset(array_name, state_idx=get_time(state, view_id)))
         ):
-            state[f"color_range_{view_id}_{g}"] = array_range(group_array)
+            state[f"color_range_{view_id}_{g}"] = array_range(group_array, thresholds)
 
     def _init_global_state():
         # selected_time: STATE_n being visualized (2 -> STATE_0002).
@@ -330,6 +332,12 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                 state[f"color_units_{view_id}"] = src.get_dataset_units(
                     array_name, state_idx=get_time(state, view_id)
                 )
+
+        @state.change("thresholds")
+        def _on_thres_range_changed(**kwargs):
+            if is_view_locked(state, view_id):
+                return
+            _recompute_card_range(view_id)
 
         @state.change(f"grid_view_{view_id}")
         @requires_src

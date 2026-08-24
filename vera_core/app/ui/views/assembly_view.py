@@ -9,7 +9,7 @@ from vera_core.data.registry import VeraDataRegistry
 # from vera_core.data.renders import AssemblyView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import format_label, get_safe_idxs, is_non_active_view, set_info
+from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, set_info
 from .save_image import register_photo_state
 
 
@@ -69,12 +69,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         _, _, selected_layer, selected_assembly, selected_src_id, selected_array, time, _ = indices
         selected_time = state["selected_time"]
         vera_source: VeraDataSource = registry.get(selected_src_id)
-        thres_key = format_label(selected_src_id, selected_array)
-        thres = state["thresholds"]
         thres_hash = 0
-        if thres.get(thres_key):
-            for condition in thres[thres_key]:
-                thres_hash += hash(condition["op"]) + hash(condition["value"])
+        thresholds_to_apply = get_thresholds(state, view_id)
+        for condition in thresholds_to_apply:
+            thres_hash += hash(condition["op"]) + hash(condition["value"])
 
         images_dataset = None
 
@@ -94,8 +92,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         # Extract data from H5 + add to cache
         if images_dataset is None:
-            thres_key = format_label(selected_src_id, selected_array)
-            thresholds_to_apply = state["thresholds"].get(thres_key, [])
             assembly_slice = AssemblySlice.create_assembly_slice(
                 vera_source=vera_source,
                 selected_array=selected_array,

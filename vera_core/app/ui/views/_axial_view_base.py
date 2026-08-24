@@ -8,12 +8,7 @@ from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
-from ..helpers import (
-    format_label,
-    get_safe_idxs,
-    is_non_active_view,
-    set_info,
-)
+from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, set_info
 from .save_image import register_photo_state
 
 MAX_VIS_GROUPS = 4
@@ -141,8 +136,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         vera_source: VeraDataSource = registry.get(state[selected_src_key])
 
-        thres_key = format_label(src_id, selected_array)
-        thres = state["thresholds"].get(thres_key)
+        thresholds_to_apply = get_thresholds(state, view_id)
 
         axial_slice = AxialSlice.create_axial_slice(
             vera_source=vera_source,
@@ -150,7 +144,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
             pin=selected_pin,
             assembly_id=selected_assembly,
             dim="x" if is_x else "y",
-            thresholds_to_apply=thres,
+            thresholds_to_apply=thresholds_to_apply,
             state=time,
         )
         if not axial_slice:

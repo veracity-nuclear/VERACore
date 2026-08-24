@@ -9,6 +9,7 @@ from vera_core.data.model import CorePropMissing
 from vera_core.data.readers.h5 import open_vera_file_data_source
 from vera_core.data.registry import VeraDataRegistry
 
+from ..helpers import get_multi_selected_src
 from .appdata import load_prefs, save_prefs
 from .DatasetPicker import refresh_src_tree
 from .file_picker_entry import launch_picker
@@ -17,7 +18,7 @@ file_menu_state_initialized = False
 
 
 def register_file_menu_state_ctrl(
-    state: State, ctrl: Controller, registry: VeraDataRegistry
+    state: State, ctrl: Controller, registry: VeraDataRegistry, view_ids: list[str]
 ) -> None:
     """
     Register trame state for file menu
@@ -39,11 +40,43 @@ def register_file_menu_state_ctrl(
     recent_file_paths, file_overrides = load_prefs()
     state.recent_file_paths = recent_file_paths
     state.file_overrides = file_overrides
+    state.file_refreshing = False
 
     @ctrl.set("open_file_dialog")
     def open_file_dialog() -> None:
         state.file_error = ""
         state.show_file_dialog = True
+
+    @ctrl.set("refresh_file")
+    def refresh_file(file_id) -> None:
+        try:
+            state.file_error = ""
+            src = registry.get(src_id=file_id)
+            if src is None:
+                state.file_error = f"Could not find file: {file_id}"
+                return
+            raw_path = src.provenance
+            if not Path(raw_path).is_file():
+                state.file_error = f"Could not refresh file, could not find file path: {raw_path}"
+                return
+            file_overrides: FileOverrides = state.file_overrides
+            refreshed_src = open_vera_file_data_source(
+                file_path=raw_path,
+                active_state_idx=src.active_state_index,
+                core_overrides=file_overrides.get(raw_path, {}),
+            )
+            registry.replace_src(src_id=file_id, src=refreshed_src)
+            refresh_src_tree(state, registry)
+            for view_id in view_ids:
+                if state[f"selected_src_id_{view_id}"] == file_id:
+                    state.dirty(f"selected_src_id_{view_id}")
+                for src_id, _ in get_multi_selected_src(state, view_id):
+                    if src_id == file_id:
+                        state.dirty(f"multi_selected_{view_id}")
+                        break
+        except Exception as e:
+            print(e)
+            state.file_error = f"Could not refresh file: {file_id}"
 
     @ctrl.set("pick_file")
     async def pick_file() -> None:
@@ -262,6 +295,13 @@ def build_file_menu_dialog(ctrl: Controller) -> None:
                             html.Td("{{ info.shape }}")
                             html.Td("{{ info.states }}")
                             with html.Td():
+                                with vuetify.VBtn(
+                                    icon=True,
+                                    x_small=True,
+                                    disabled=("file_refreshing",),
+                                    click=(ctrl.refresh_file, "[file]"),
+                                ):
+                                    vuetify.VIcon("mdi-refresh", small=True)
                                 with vuetify.VBtn(
                                     icon=True,
                                     x_small=True,

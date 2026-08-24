@@ -8,6 +8,8 @@ from vera_core.data.model import VeraOutCore
 from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.thresholds import ThresholdCondition
 
+MULTI_SEP = "\x1f"
+
 
 def format_label(file: str, key: str, *, source_identifier: bool = True):
     if source_identifier:
@@ -175,3 +177,7 @@ def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
         global_thres_key, []
     )
     return thresholds_to_apply
+
+
+def get_multi_selected_src(state: State, view_id: int | str) -> list[tuple[str, str]]:
+    return [token.split(MULTI_SEP, 1) for token in state[f"multi_selected_{view_id}"]]

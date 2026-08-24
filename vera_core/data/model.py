@@ -763,6 +763,7 @@ class VeraDataSource:
         filename: str | None = None,
         name: str | None = None,
         close_callback: Callable[[], None] | None = None,
+        active_state_idx: int = 0,
         state_caching: bool = True,
     ):
         self._state_caching = state_caching
@@ -779,7 +780,7 @@ class VeraDataSource:
                 self.vera_calculator = None
         self._core = core
         self._states = states
-        self.active_state_index = 0
+        self.active_state_index = max(0, min(active_state_idx, len(self._states) - 1))
         self._determine_time_axes()
         self._provenance = provenance
         self._close_callback = close_callback

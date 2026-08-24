@@ -4,6 +4,12 @@ from .dtypes import VeraAxes, VeraDtype
 from .model import VeraDataSource
 
 
+def _recipe_sources(recipe: dict) -> set[str]:
+    if recipe.get("all_sources", False):
+        return set()
+    return {recipe[key] for key in ("src_id", "ref_src_id", "comp_src_id") if recipe.get(key)}
+
+
 class VeraDataRegistry:
     """Holds the open data sources keyed by id, with one marked as default.
 
@@ -16,6 +22,7 @@ class VeraDataRegistry:
         self._srcs: dict[str, VeraDataSource] = {}
         self.default_src_id: str = None
         self.gross_axial_mesh = np.asarray([], dtype=np.float64)
+        self._recipes: list[dict] = []
         self._auto_derivation: list[dict] = []
 
     def _compose_global_axial_mesh(self):
@@ -154,6 +161,9 @@ class VeraDataRegistry:
         src.close()
         if self.default_src_id == src_id:
             self.default_src_id = next(iter(self._srcs), None)
+        self._recipes = [
+            recipe for recipe in self._recipes if src_id not in _recipe_sources(recipe)
+        ]
         self._compose_global_axial_mesh()
 
     def all_sources(self) -> dict[str, str]:
@@ -166,6 +176,8 @@ class VeraDataRegistry:
         for src in self._srcs.values():
             src.close()
         self._srcs = {}
+        self._recipes = []
+        self._auto_derivation = []
         self.default_src_id = None
 
     def apply_recipe(self, recipe: dict):
@@ -211,6 +223,52 @@ class VeraDataRegistry:
             )
         else:
             raise ValueError(f"Unknown recipe kind: {kind}")
+        self._recipes.append(recipe)
+
+    def replace_src(self, src_id: str, src: VeraDataSource):
+        if src_id not in self._srcs:
+            raise ValueError(f"Could not find {src_id} in registry")
+        old = self._srcs[src_id]
+        self._srcs[src_id] = src
+        src.name = src_id
+        old.close()
+        self._compose_global_axial_mesh()
+        self._replay_recipes(src_id)
+
+    def _replay_recipes(self, src_id: str):
+        src = self.get(src_id)
+        if src is None:
+            return src
+        for recipe in self._recipes:
+            all_sources = recipe.get("all_sources", False)
+            derive_recipe_src_id = recipe.get("src_id")
+            diff_recipe_src_id = recipe.get("ref_src_id")
+            kind = recipe["kind"]
+            if not (kind == "derive" and (derive_recipe_src_id == src_id or all_sources)) and not (
+                kind == "diff" and diff_recipe_src_id == src_id
+            ):
+                continue
+            try:
+                if kind == "derive":
+                    src.add_new_derived_dataset(
+                        source_array_name=recipe["source_array"],
+                        new_dataset_name=recipe["name"],
+                        der_method=recipe["method"],
+                        axes=VeraAxes[recipe["axes"]],
+                    )
+                elif kind == "diff":
+                    src.add_new_diff_dataset(
+                        recipe["ref_array"],
+                        self.get(recipe["comp_src_id"]),
+                        recipe["comp_array"],
+                        recipe["name"],
+                        recipe["interp_degree"],
+                        recipe["ref_scale"],
+                        recipe["comp_scale"],
+                        recipe["units"],
+                    )
+            except Exception:
+                pass
 
     def __contains__(self, src_id):
         return src_id in self._srcs

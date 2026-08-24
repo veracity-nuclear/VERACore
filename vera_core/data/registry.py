@@ -16,6 +16,7 @@ class VeraDataRegistry:
         self._srcs: dict[str, VeraDataSource] = {}
         self.default_src_id: str = None
         self.gross_axial_mesh = np.asarray([], dtype=np.float64)
+        self._auto_derivation: list[dict] = []
 
     def _compose_global_axial_mesh(self):
         global_axial_mesh = np.asarray([], dtype=np.float64)
@@ -38,6 +39,18 @@ class VeraDataRegistry:
         else:
             self.global_axial_mesh = np.union1d(self.global_axial_mesh, core.gross_axial_mesh)
         src.name = src_id
+        for auto_derive_recipe in self._auto_derivation:
+            try:
+                src.add_new_derived_dataset(
+                    source_array_name=auto_derive_recipe["source_array"],
+                    new_dataset_name=auto_derive_recipe["name"],
+                    der_method=auto_derive_recipe["method"],
+                    axes=VeraAxes[auto_derive_recipe["axes"]],
+                )
+            except Exception as e:
+                print(
+                    f"Internal warning in auto applying derivation: {str(auto_derive_recipe)}, {str(e)}. This is auto so not a user error and can be safely ignored."
+                )
 
     @property
     def default_src(self) -> VeraDataSource | None:
@@ -158,12 +171,33 @@ class VeraDataRegistry:
     def apply_recipe(self, recipe: dict):
         kind = recipe["kind"]
         if kind == "derive":
-            self.get(recipe["src_id"]).add_new_derived_dataset(
-                source_array_name=recipe["source_array"],
-                new_dataset_name=recipe["name"],
-                der_method=recipe["method"],
-                axes=VeraAxes[recipe["axes"]],
-            )
+            src_array_name = recipe["source_array"]
+            all_sources = recipe.get("all_sources", False)
+            if not all_sources:
+                src = self.get(recipe["src_id"])
+                if src is None:
+                    raise ValueError(
+                        f"Cannot apply derivation, src with src id : {recipe['src_id']} not found in registry."
+                    )
+                if src.get_dataset_dtype(src_array_name) == VeraDtype.UNKNOWN:
+                    raise ValueError(
+                        f"Cannot apply derivation to src with src id : {recipe['src_id']}, {src_array_name} not found in src."
+                    )
+                srcs = [src]
+            else:
+                srcs = [
+                    src
+                    for src in self._srcs.values()
+                    if src.get_dataset_dtype(src_array_name) != VeraDtype.UNKNOWN
+                ]
+                self._auto_derivation.append(recipe)
+            for src in srcs:
+                src.add_new_derived_dataset(
+                    source_array_name=src_array_name,
+                    new_dataset_name=recipe["name"],
+                    der_method=recipe["method"],
+                    axes=VeraAxes[recipe["axes"]],
+                )
         elif kind == "diff":
             self.get(recipe["ref_src_id"]).add_new_diff_dataset(
                 recipe["ref_array"],

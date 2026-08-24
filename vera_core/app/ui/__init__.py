@@ -376,7 +376,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     DiffMenu.register_diff_state_ctrl(state, ctrl, registry)
     ThresholdMenu.register_threshold_state_ctrl(state, ctrl, registry)
     DeriveMenu.register_derived_state_ctrl(state, ctrl, registry)
-    FileMenu.register_file_menu_state_ctrl(state, ctrl, registry)
+    FileMenu.register_file_menu_state_ctrl(state, ctrl, registry, view_ids=all_view_ids)
     FileMenu.register_session_state_ctrl(state, ctrl, registry)
     SaveSession.register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids)
     StreamMenu.register_stream_menu_state_ctrl(state, ctrl, registry, state_queue)
@@ -402,6 +402,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     @state.change("src_tree_meta")
     def refresh_max_state(**kwargs):
         state.max_time = max(state.max_time, registry.max_state)
+        state.max_layer = max(len(registry.gross_axial_mesh) - 1, 0)
 
     def _reset_view_pool(used_ids=()):
         nonlocal available_view_ids

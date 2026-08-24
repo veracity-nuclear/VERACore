@@ -93,7 +93,7 @@ class H5DatasetSource(DatasetSource):
 
 
 def open_vera_file_data_source(
-    file_path: str, core_overrides: dict | None = None
+    file_path: str, core_overrides: dict | None = None, active_state_idx: int = 0
 ) -> VeraDataSource:
     file = h5py.File(file_path, "r", locking=False)
 
@@ -111,6 +111,7 @@ def open_vera_file_data_source(
     return VeraDataSource(
         core=core,
         states=states,
+        active_state_idx=active_state_idx,
         provenance=file_path,
         filename=file_path,
         close_callback=close_callback,

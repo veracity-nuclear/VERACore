@@ -9,8 +9,11 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.thresholds import ThresholdCondition
 
 
-def format_label(file: str, key: str):
-    return f"{key.replace('_', ' ').upper()} | {file}"
+def format_label(file: str, key: str, *, source_identifier: bool = True):
+    if source_identifier:
+        return f"{key.replace('_', ' ').upper()} | {file}"
+    else:
+        return f"{key.replace('_', ' ').upper()}"
 
 
 def get_next_y_from_layout(layout):
@@ -167,5 +170,8 @@ def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
     selected_src_id = state[f"selected_src_id_{view_id}"]
     selected_array = state[f"selected_array_{view_id}"]
     thres_key = format_label(selected_src_id, selected_array)
-    thresholds_to_apply = state["thresholds"].get(thres_key, [])
+    global_thres_key = format_label(selected_src_id, selected_array, source_identifier=False)
+    thresholds_to_apply = state["thresholds"].get(thres_key, []) + state["thresholds"].get(
+        global_thres_key, []
+    )
     return thresholds_to_apply

@@ -21,7 +21,7 @@ class VeraDataRegistry:
         """Create an empty registry with no default source."""
         self._srcs: dict[str, VeraDataSource] = {}
         self.default_src_id: str = None
-        self.gross_axial_mesh = np.asarray([], dtype=np.float64)
+        self.global_axial_mesh = np.asarray([], dtype=np.float64)
         self._recipes: list[dict] = []
         self._auto_derivation: list[dict] = []
 

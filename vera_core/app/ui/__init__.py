@@ -402,7 +402,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     @state.change("src_tree_meta")
     def refresh_max_state(**kwargs):
         state.max_time = max(state.max_time, registry.max_state)
-        state.max_layer = max(len(registry.gross_axial_mesh) - 1, 0)
+        state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
 
     def _reset_view_pool(used_ids=()):
         nonlocal available_view_ids
@@ -613,7 +613,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
 
         with state:
             state.selected_layer = nz // 2
-            state.max_layer = len(registry.global_axial_mesh) - 1
+            state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
             state.selected_i = max((nx // 2) - 1, 0)  # not a center pin
             state.selected_j = max((ny // 2) - 1, 0)
             center_assembly = _center_assembly(src.core.reduced_core_map)

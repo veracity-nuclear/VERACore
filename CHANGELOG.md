@@ -55,3 +55,9 @@ linked, interactive views arranged in a configurable grid.
 - This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
 
 [2.0.3]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.3
+
+## [2.0.4] - 2026-08-26
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.4]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.4

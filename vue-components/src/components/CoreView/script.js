@@ -1,16 +1,63 @@
 import { LookupTable } from '../../utils/Colors';
 import { toImageURL } from '../../utils/ImageGenerator';
+import { fitFontSize, formatValue } from '../../utils/format';
 
-const CELL = 30;
-// Labels are laid out in their own coordinate system, LABEL_UNIT per node.
-// Font sizes near 1.0 give browsers wrong glyph metrics, so keep them large
-// and let the viewBox scale them down.
-const LABEL_UNIT = 100;
-const LABEL_MAX_SIZE = 26; // cap, so short labels do not fill the cell
-const LABEL_WIDTH = 86; // width a label may occupy, leaving a margin
-const CHAR_EM = 0.62; // approximate digit advance, in em
+const CELL = 30; // unscaled px per assembly
+const LABEL_MAX_SIZE = 13; // unscaled px
+// A node smaller than this on screen cannot hold a legible number.
+const MIN_NODE_PX = 22;
+const MAX_LABELS = 4000;
 // Beyond nodal (2x2) there are too many values in a cell to label.
 const MAX_LABEL_SIDE = 2;
+
+const EMPTY_CORE = { url: null, filled: new Uint8Array(0), rows: 0, cols: 0 };
+
+// Layout is inline rather than class-based: a <style> block on this component
+// is not applied by the build, so anything layout-critical must be bound.
+const HEADER_STYLE = {
+  position: 'absolute',
+  width: `${CELL}px`,
+  height: `${CELL}px`,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '12px',
+  letterSpacing: '0.5px',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+};
+
+const IMAGE_STYLE = {
+  position: 'absolute',
+  top: '0',
+  left: '0',
+  width: '100%',
+  height: '100%',
+  pointerEvents: 'none',
+  imageRendering: 'pixelated',
+};
+
+const NOTE_STYLE = {
+  position: 'absolute',
+  left: '50%',
+  bottom: '2px',
+  transform: 'translateX(-50%)',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+  fontSize: '11px',
+  opacity: 0.6,
+};
+
+const VALUE_STYLE = {
+  position: 'absolute',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+  color: '#000',
+  textShadow: '0 0 2px rgba(255,255,255,0.85), 0 0 2px rgba(255,255,255,0.85)',
+};
 
 export default {
   name: 'VeraCore',
@@ -31,12 +78,21 @@ export default {
     yLabels: { type: Array, default: () => ['8', '9', '10', '11', '12', '13', '14', '15'] },
     assemblySize: { type: Number, default: 0 },
     coreCols: { type: Number, default: 0 },
-    scaling: { type: Number, default: 2 },
     busy: { type: Boolean, default: false },
     aspectRatio: { type: Number, default: 1 },
     dark: { type: Boolean, default: false },
     showLabels: { type: Boolean, default: false },
     decimals: { type: Number, default: 2 },
+  },
+  data() {
+    return {
+      activeI: this.selectedI,
+      activeJ: this.selectedJ,
+      overFilled: false,
+      scale: 1,
+      // Bumped when the lookup table is mutated outside Vue's reactivity.
+      revision: 0,
+    };
   },
   watch: {
     selectedI(i) {
@@ -48,32 +104,66 @@ export default {
     aspectRatio() {
       this.resize();
     },
+    coreWidth() {
+      this.resize();
+    },
+    coreHeight() {
+      this.resize();
+    },
     dark() {
       this.updateNanColor();
-      this.imagesReady++;
+      this.revision++;
     },
-    value() {
-      this.$nextTick(() => {
-        this.imagesReady++;
-        this.resize();
-      });
-    },
-  },
-  data() {
-    return {
-      activeI: this.selectedI,
-      activeJ: this.selectedJ,
-      sizeStyle: { width: '100px', height: '100px' },
-      scaleStyle: { scale: 1 },
-      imagesReady: 0,
-    };
   },
   computed: {
+    imageStyle() {
+      return IMAGE_STYLE;
+    },
+    noteStyle() {
+      return NOTE_STYLE;
+    },
     coreWidth() {
       return this.coreCols || (this.value || []).reduce((m, r) => Math.max(m, r.length), 0);
     },
-    assemblyWidth() {
-      return this.assemblySize;
+    coreHeight() {
+      return (this.value || []).length;
+    },
+    colorMap() {
+      return this.lookupTable.update(this.colorPreset, this.colorRange);
+    },
+    // One image for the whole core. Node n sits where the old per-cell call
+    // drew it: row-major from the top-left of its assembly.
+    core() {
+      this.revision;
+      const value = this.value || [];
+      const rows = this.coreHeight;
+      const cols = this.coreWidth;
+      const side = this.assemblySize || 1;
+      if (!rows || !cols) {
+        return EMPTY_CORE;
+      }
+      const width = cols * side;
+      const height = rows * side;
+      const pixels = new Float64Array(width * height).fill(NaN);
+      const filled = new Uint8Array(rows * cols);
+      const nodes = side * side;
+      for (let j = 0; j < rows; j++) {
+        const line = value[j] || [];
+        const stop = Math.min(cols, line.length);
+        for (let i = 0; i < stop; i++) {
+          const cell = line[i];
+          if (!Array.isArray(cell) || !cell.length) {
+            continue;
+          }
+          filled[j * cols + i] = 1;
+          const base = j * side * width + i * side;
+          for (let n = 0; n < cell.length && n < nodes; n++) {
+            const v = cell[n];
+            pixels[base + Math.floor(n / side) * width + (n % side)] = Number.isFinite(v) ? v : NaN;
+          }
+        }
+      }
+      return { url: toImageURL(this.colorMap, pixels, width, height), filled, rows, cols };
     },
     // Assembly-valued (1x1) and nodal (2x2) cells hold few enough values to
     // label; pin and channel cells do not.
@@ -83,59 +173,120 @@ export default {
     showValues() {
       return this.showLabels && this.canLabel;
     },
-    labelViewBox() {
-      const span = this.assemblySize * LABEL_UNIT;
-      return `0 0 ${span} ${span}`;
-    },
-    colorMap() {
-      return this.lookupTable.update(this.colorPreset, this.colorRange);
-    },
-    images() {
-      this.imagesReady;
-      const array = this.value || [];
-      const lut = this.colorMap;
-      const width = this.assemblyWidth;
-      const images = [];
-      for (let j = 0; j < array.length; j++) {
-        const line = array[j] || [];
-        const lineImages = [];
-        images.push(lineImages);
-        for (let i = 0; i < line.length; i++) {
-          const cell = line[i];
-          lineImages.push(
-            Array.isArray(cell) && cell.length
-              ? toImageURL(lut, cell, width, width, this.scaling, this.scaling)
-              : null
-          );
-        }
-      }
-      return images;
-    },
-    // labels[j][i] = one entry per node, positioned in node units. Node n
-    // sits where toImageURL draws it: row-major from the top-left.
-    labels() {
+    labelsHidden() {
       if (!this.showValues) {
+        return false;
+      }
+      const side = this.assemblySize;
+      const onScreen = (CELL / side) * Math.min(this.scale, this.scale * (this.aspectRatio || 1));
+      const count = this.coreHeight * this.coreWidth * side * side;
+      return onScreen < MIN_NODE_PX || count > MAX_LABELS;
+    },
+    cellLabels() {
+      if (!this.showValues || this.labelsHidden) {
         return [];
       }
       const side = this.assemblySize;
-      return (this.value || []).map((line) =>
-        (line || []).map((cell) => {
+      const node = CELL / side;
+      const out = [];
+      const value = this.value || [];
+      for (let j = 0; j < value.length; j++) {
+        const line = value[j] || [];
+        for (let i = 0; i < line.length; i++) {
+          const cell = line[i];
           if (!Array.isArray(cell) || !cell.length) {
-            return [];
+            continue;
           }
-          return cell
-            .map((v, n) => {
-              const text = this.toLabel(v);
-              return {
-                text,
-                x: ((n % side) + 0.5) * LABEL_UNIT,
-                y: (Math.floor(n / side) + 0.5) * LABEL_UNIT,
-                size: Math.min(LABEL_MAX_SIZE, LABEL_WIDTH / (text.length * CHAR_EM)),
-              };
-            })
-            .filter((label) => label.text);
-        })
-      );
+          for (let n = 0; n < cell.length; n++) {
+            const text = formatValue(cell[n], this.decimals);
+            if (!text) {
+              continue;
+            }
+            out.push({
+              key: `${j}_${i}_${n}`,
+              text,
+              style: {
+                ...VALUE_STYLE,
+                left: `${(i * side + (n % side)) * node}px`,
+                top: `${(j * side + Math.floor(n / side)) * node}px`,
+                width: `${node}px`,
+                height: `${node}px`,
+                fontSize: `${fitFontSize(text, LABEL_MAX_SIZE, node * 0.9)}px`,
+              },
+            });
+          }
+        }
+      }
+      return out;
+    },
+    frameStyle() {
+      const ar = this.aspectRatio || 1;
+      return {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        width: `${(this.coreWidth + 1) * CELL}px`,
+        height: `${(this.coreHeight + 1) * CELL}px`,
+        transform: `translate(-50%, -50%) scale(${ar * this.scale}, ${this.scale})`,
+        transformOrigin: 'center center',
+      };
+    },
+    dataStyle() {
+      return {
+        position: 'absolute',
+        left: `${CELL}px`,
+        top: `${CELL}px`,
+        width: `${this.coreWidth * CELL}px`,
+        height: `${this.coreHeight * CELL}px`,
+      };
+    },
+    // Gridline thickness is inverted through the frame scale so a line lands
+    // on about one device pixel instead of smearing when the core shrinks.
+    lineWidths() {
+      const ar = this.aspectRatio || 1;
+      const t = this.scale || 1;
+      return { v: Math.max(1, 1 / (ar * t)), h: Math.max(1, 1 / t) };
+    },
+    gridStyle() {
+      const { v, h } = this.lineWidths;
+      const c = this.dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
+      return {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        pointerEvents: 'none',
+        borderRight: `${v}px solid ${c}`,
+        borderBottom: `${h}px solid ${c}`,
+        backgroundImage: [
+          `repeating-linear-gradient(to right, ${c} 0, ${c} ${v}px,` +
+            ` transparent ${v}px, transparent ${CELL}px)`,
+          `repeating-linear-gradient(to bottom, ${c} 0, ${c} ${h}px,` +
+            ` transparent ${h}px, transparent ${CELL}px)`,
+        ].join(','),
+      };
+    },
+    highlightStyle() {
+      const { rows, cols } = this.core;
+      if (this.activeI < 0 || this.activeJ < 0 || this.activeI >= cols || this.activeJ >= rows) {
+        return { display: 'none' };
+      }
+      const { v, h } = this.lineWidths;
+      return {
+        position: 'absolute',
+        pointerEvents: 'none',
+        left: `${this.activeI * CELL}px`,
+        top: `${this.activeJ * CELL}px`,
+        width: `${CELL}px`,
+        height: `${CELL}px`,
+        boxSizing: 'border-box',
+        borderStyle: 'solid',
+        borderWidth: `${h}px ${v}px`,
+        borderColor: this.dark ? 'white' : 'black',
+        ...this.activeStyle,
+      };
     },
   },
   created() {
@@ -153,59 +304,63 @@ export default {
     this.resizeObserver = null;
   },
   methods: {
-    isFilled(i, j) {
-      const cell = this.value?.[j]?.[i];
-      return Array.isArray(cell) && cell.length > 0;
-    },
     resize() {
       const target = this.measureTarget || this.$el;
       const { width, height } = target.getBoundingClientRect();
-      if (width < 1 || height < 1 || this.coreWidth === 0) {
+      if (width < 1 || height < 1 || !this.coreWidth || !this.coreHeight) {
         return;
       }
-      const needed = (this.coreWidth + 1) * CELL;
       const ar = this.aspectRatio || 1;
-      const t = Math.min(width / (needed * ar), height / needed);
-      this.scaleStyle = { scale: `${ar * t} ${t}` };
-      this.sizeStyle = { width: `${needed}px`, height: `${needed}px` };
+      this.scale = Math.min(
+        width / ((this.coreWidth + 1) * CELL * ar),
+        height / ((this.coreHeight + 1) * CELL)
+      );
     },
-    hover(i, j) {
-      this.activeI = i;
-      this.activeJ = j;
+    headerStyle(offset, active) {
+      return {
+        ...HEADER_STYLE,
+        ...offset,
+        opacity: active ? 1 : 0.75,
+        fontWeight: active ? 700 : 400,
+      };
+    },
+    xLabelStyle(i) {
+      return this.headerStyle({ left: `${(i + 1) * CELL}px`, top: '0' }, i === this.activeI);
+    },
+    yLabelStyle(j) {
+      return this.headerStyle({ left: '0', top: `${(j + 1) * CELL}px` }, j === this.activeJ);
+    },
+    isFilled(i, j) {
+      const { filled, rows, cols } = this.core;
+      return i >= 0 && j >= 0 && i < cols && j < rows && filled[j * cols + i] === 1;
+    },
+    // offsetX/offsetY are in the data layer's own untransformed coordinate
+    // space, so the frame scale does not need to be undone here.
+    cellAt(event) {
+      const i = Math.floor(event.offsetX / CELL);
+      const j = Math.floor(event.offsetY / CELL);
+      return this.isFilled(i, j) ? { i, j } : null;
+    },
+    onHover(event) {
+      const cell = this.cellAt(event);
+      this.overFilled = !!cell;
+      if (!cell) {
+        this.exit();
+        return;
+      }
+      this.activeI = cell.i;
+      this.activeJ = cell.j;
+    },
+    onClick(event) {
+      const cell = this.cellAt(event);
+      if (cell) {
+        this.$emit('click', cell);
+      }
     },
     exit() {
       this.activeI = this.selectedI;
       this.activeJ = this.selectedJ;
-    },
-    toStyle(i, j) {
-      if (i != this.activeI || j != this.activeJ) {
-        return {};
-      }
-      return {
-        outline: this.dark ? 'solid 1px white' : 'solid 1px black',
-        outlineOffset: '-1px',
-        zIndex: 10,
-        ...this.activeStyle,
-      };
-    },
-    toUrl(i, j) {
-      return this.images?.[j]?.[i];
-    },
-    toLabel(v) {
-      if (v === undefined || v === null || Number.isNaN(v)) {
-        return '';
-      }
-      if (v === 0) {
-        return '0';
-      }
-      const d = this.decimals;
-      const abs = Math.abs(v);
-      if (abs < 1e-2 || abs >= 1e5) {
-        return Number(v)
-          .toExponential(d)
-          .replace(/\.?0+e/, 'e');
-      }
-      return Number(v).toFixed(d);
+      this.overFilled = false;
     },
     updateNanColor() {
       if (this.dark) {

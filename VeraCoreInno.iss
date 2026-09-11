@@ -1,7 +1,10 @@
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 
 [Setup]
 AppName=VeraCore
-AppVersion=1.3.1
+AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\VeraCore
 DefaultGroupName=VeraCore
 OutputBaseFilename=VeraCoreSetup
@@ -37,4 +40,29 @@ begin
   Result := not RegQueryStringValue(HKLM,
     'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
     'pv', Version);
+end;
+
+procedure RemoveStaleDistInfo(InternalDir: String);
+var
+  FindRec: TFindRec;
+  DirPath: String;
+begin
+  if FindFirst(InternalDir + '\*.dist-info', FindRec) then begin
+    try
+      repeat
+        if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then begin
+          DirPath := InternalDir + '\' + FindRec.Name;
+          DelTree(DirPath, True, True, True);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveStaleDistInfo(ExpandConstant('{app}\_internal'));
 end;

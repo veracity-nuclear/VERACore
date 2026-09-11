@@ -2,7 +2,7 @@ from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import client, grid, html, vuetify
 from trame_server.core import Controller, Server, State
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.data.registry import VeraDataRegistry
 
 from . import assets
 from .features import (
@@ -16,6 +16,8 @@ from .features import (
     ThresholdMenu,
     VersionChecker,
 )
+
+MAX_TICKS = 60
 
 
 def build_toolbar(tb, ctrl: Controller, registry):
@@ -56,8 +58,8 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-content-save")
 
-    # with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
-    #     vuetify.VIcon("mdi-access-point")
+    with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
+        vuetify.VIcon("mdi-access-point")
 
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
@@ -133,10 +135,20 @@ def build_grid_card(ctrl: Controller):
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
-                    click="set(`locked_${item.i}`, !get(`locked_${item.i}`))",
+                    click=(ctrl.toggle_lock, "[item.i]"),
                 ):
                     vuetify.VIcon(
-                        v_text="get(`locked_${item.i}`) ? 'mdi-lock' : 'mdi-lock-open-variant'",
+                        v_text="""
+                        (
+                            get(`locked_${item.i}`) === true ||
+                            (
+                                typeof get(`locked_${item.i}`) === 'object' &&
+                                Object.keys(get(`locked_${item.i}`) || {}).length > 0
+                            )
+                        )
+                        ? 'mdi-lock'
+                        : 'mdi-lock-open-variant'
+                        """,
                         small=True,
                     )
 
@@ -228,7 +240,7 @@ def build_footer(ft):
         max=("max_time", 0),
         dense=True,
         hide_details=True,
-        ticks="always",
+        ticks=(f"max_time <= {MAX_TICKS} ? 'always' : false",),
         tick_size="4",
         height=35,
     )

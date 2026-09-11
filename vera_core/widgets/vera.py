@@ -49,6 +49,8 @@ class SurfaceView(HtmlElement):
             ("y_labels", "yLabels"),
             ("aspect_ratio", "aspectRatio"),
             ("cell_size", "cellSize"),
+            ("show_labels", "showLabels"),
+            "decimals",
             "dark",
             "busy",
         ]
@@ -74,6 +76,7 @@ class AssemblySurfaceView(HtmlElement):
             ("cell_size", "cellSize"),
             "dark",
             "busy",
+            "decimals",
         ]
         self._event_names += [
             "click",
@@ -88,7 +91,6 @@ class CoreView(HtmlElement):
         )
         self._attr_names += [
             "value",
-            "labels",
             ("selected_i", "selectedI"),
             ("selected_j", "selectedJ"),
             ("aspect_ratio", "aspectRatio"),
@@ -99,6 +101,7 @@ class CoreView(HtmlElement):
             ("y_labels", "yLabels"),
             ("assembly_size", "assemblySize"),
             ("core_cols", "coreCols"),
+            ("show_labels", "showLabels"),
             "decimals",
             "dark",
             "scaling",
@@ -156,6 +159,9 @@ class AxialView(HtmlElement):
             ("y_scale", "yScale"),
             ("x_sizes", "xSizes"),
             ("y_sizes", "ySizes"),
+            ("label_count", "labelCount"),
+            ("show_labels", "showLabels"),
+            "decimals",
             "dark",
             "busy",
         ]

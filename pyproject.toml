@@ -11,8 +11,9 @@ extend-exclude = [
     "dist",
     "venv",
     ".venv",
+    "tests",
     "vera_core.egg-info",
-    "vera_core/app/core/vera_tools"
+    "vera_core/data/vera_tools"
 ]
 
 [tool.ruff.lint]

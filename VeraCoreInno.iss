@@ -1,7 +1,10 @@
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 
 [Setup]
 AppName=VeraCore
-AppVersion=1.3.1
+AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\VeraCore
 DefaultGroupName=VeraCore
 OutputBaseFilename=VeraCoreSetup

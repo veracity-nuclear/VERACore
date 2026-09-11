@@ -2,12 +2,9 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
-from vera_core.app.core import (
-    Surface,
-    VeraDataRegistry,
-    VeraDataSource,
-    VeraDtype,
-)
+from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.model import VeraDataSource
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
@@ -60,10 +57,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             selected_assembly,
             selected_src_id,
             selected_array,
+            time,
+            surface,
         ) = indices
 
         src: VeraDataSource = registry.get(selected_src_id)
-        array = src.array(selected_array)
+        array = src.get_dataset(selected_array, state_idx=time)
         array_dtype = array.dataset_type
         indices_list = []
         match array_dtype:
@@ -138,7 +137,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             data_dict[f"{base_label}{group_label}"] = value
         for scalar_dataset in src.active_state.scalar_datasets:
             data_dict[scalar_dataset.replace("_", " ").title()] = np.asarray(
-                src.array(scalar_dataset)
+                src.get_dataset(scalar_dataset, state_idx=time)
             ).item()
 
         # Round floats so we don't display too many sig figs (7 matches veraview).
@@ -155,7 +154,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         surface_label = f" {Surface(state.selected_surface).str}"
         node_label = f"Node {convert_ji_to_node(selected_j, selected_i) + 1}"
         is_node = array_dtype.is_nodal()
-        is_surface = array_dtype.is_surface()
+        is_surface = array_dtype.has_surface_dim()
         label = pin_label if not is_node else (node_label + (surface_label if is_surface else ""))
         columns = [
             "Dataset",

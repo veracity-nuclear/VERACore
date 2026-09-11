@@ -1,5 +1,4 @@
 import os
-import time
 from functools import partial
 from multiprocessing import Queue
 from pathlib import Path
@@ -10,9 +9,9 @@ from trame_server.core import Server
 
 from vera_core.version import __version__
 
+from ..data import VeraDataRegistry
+from ..data.readers.h5 import open_vera_file_data_source
 from . import ui
-from .core import VeraDataRegistry, VeraOutFile
-from .core.vera_data_stream import VeraDataStream
 
 # The user can set this via an environment variable
 DATA_PATH_ENV_NAME = "VERA_CORE_DATA_PATH"
@@ -53,32 +52,18 @@ def main(server: Server | None | str = None, **kwargs):
     #     data_kwargs["required"] = True
 
     server.cli.add_argument("--data", **data_kwargs, default=None)
-    server.cli.add_argument(
-        "--stream",
-        type=int,
-        default=None,
-        help="port to listen on for streamed data",
-        dest="stream_port",
-    )
     args, _ = server.cli.parse_known_args()
     data_file = args.data_file
-    stream_port = args.stream_port
 
     raw_queue = Queue()
     state_queue = StateQueue(raw_queue)
     registry: VeraDataRegistry = VeraDataRegistry()
 
-    if stream_port is not None:
-        vera_out_file = VeraDataStream(stream_port, state_queue)
-        # this is a crude fix to prevent reads on empty states from the vera data stream
-        # will fix change this
-        while len(vera_out_file.states) < 1:
-            time.sleep(0.3)
-    elif data_file is not None:
+    if data_file is not None:
         file_path = Path(data_file)
         if not file_path.is_file():
             raise FileNotFoundError(f"{data_file} must be an existing path to a file")
-        vera_out_file = VeraOutFile(data_file)
+        vera_out_file = open_vera_file_data_source(data_file)
         registry.add_src(src=vera_out_file, src_id=file_path.stem)
 
     f = partial(_reload, registry=registry, state_queue=state_queue)

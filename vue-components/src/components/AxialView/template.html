@@ -25,12 +25,7 @@
       ></div>
     </template>
     <template v-else>
-      <div
-        v-for="j in visibleRows"
-        :key="'y' + j"
-        class="vera-axial-label"
-        :style="yLabelStyle(j)"
-      >
+      <div v-for="j in visibleRows" :key="'y' + j" class="vera-axial-label" :style="yLabelStyle(j)">
         {{ yLabels[j] }}
       </div>
     </template>
@@ -41,38 +36,61 @@
       @mousemove="onHover"
       @mouseleave="exit"
     >
-      <img
-        v-for="row in renderedRows"
-        :key="row.j"
-        :src="row.url"
-        :style="rowStyle(row.j)"
-      />
+      <img v-for="row in renderedRows" :key="row.j" :src="row.url" :style="rowStyle(row.j)" />
+      <div
+        v-for="label in cellLabels"
+        :key="label.key"
+        class="vera-axial-value"
+        :style="label.style"
+      >
+        {{ label.text }}
+      </div>
       <div :style="highlightStyle"></div>
     </div>
-
   </div>
 
-  <!-- Hover readout: exact elevation of the cell under the cursor. -->
   <div class="vera-axial-tooltip" :style="tooltipStyle">{{ tooltipText }}</div>
+
+  <div v-if="labelsHidden" class="vera-axial-note">
+    Values do not fit at this size
+  </div>
 </div>
 
 <style scoped>
-.vera-axial-label {
-  white-space: nowrap;
-  pointer-events: none;
-}
+  .vera-axial-label {
+    white-space: nowrap;
+    pointer-events: none;
+  }
 
-.vera-axial-tick {
-  background: currentColor;
-  opacity: 0.5;
-  pointer-events: none;
-}
+  .vera-axial-tick {
+    background: currentColor;
+    opacity: 0.5;
+    pointer-events: none;
+  }
 
-.vera-axial-tooltip {
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-}
+  .vera-axial-value {
+    white-space: nowrap;
+    pointer-events: none;
+    color: #000;
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.85), 0 0 2px rgba(255, 255, 255, 0.85);
+  }
+
+  .vera-axial-note {
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    pointer-events: none;
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  .vera-axial-tooltip {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+  }
 </style>

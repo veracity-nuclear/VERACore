@@ -4,18 +4,14 @@ from pathlib import Path
 
 import numpy as np
 from trame.app.asynchronous import StateQueue
+from trame.app.dev import remove_change_listeners
 from trame_server.core import Server
 
-from vera_core.app.core import (
-    LATERAL_SURFACES,
-    MAX_NUM_GROUPS,
-    Session,
-    VeraDataRegistry,
-    VeraDtype,
-    VeraOutFile,
-    ViewSession,
-    recipe_sources,
-)
+from vera_core.data.analysis.color import array_range
+from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.readers.h5 import open_vera_file_data_source
+from vera_core.data.readers.rom_reciever import generate_stream_identifier
+from vera_core.data.registry import VeraDataRegistry
 
 from .features import (
     DatasetPicker,
@@ -30,13 +26,15 @@ from .features import (
 )
 from .features.appdata import validate_file_overrides
 from .helpers import (
-    array_range,
     default_dataset_name,
     format_label,
     get_next_y_from_layout,
+    get_thresholds,
+    get_time,
     is_view_locked,
 )
 from .layout import build_layout
+from .session import Session, ViewSession, recipe_sources
 from .views import (
     assembly_view,
     axial_plot,
@@ -189,7 +187,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             return "pin_powers" if "pin_powers" in names.values() else names[pin]
         return names[sorted(candidates)[0]]
 
-    def _resolve_pair(option, src_id, array_name):
+    def _resolve_pair(option, src_id, array_name, view_id):
         """(src_id, array_name) satisfying `option`, or None if nothing can.
 
         Keeps the current selection when it is still valid, then falls back to a
@@ -199,7 +197,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         src = _src(src_id)
         # array_dtype returns None for a name that no longer exists, e.g. one
         # left behind by a removed source or recipe.
-        dtype = src.array_dtype(array_name) if src is not None and array_name else None
+        dtype = (
+            src.get_dataset_dtype(array_name, state_idx=get_time(state, view_id))
+            if src is not None and array_name
+            else None
+        )
         if dtype is not None and (allowed is None or dtype.title in allowed):
             return (src_id, array_name)
         others = [s for s in registry.src_ids() if s and s != src_id]
@@ -245,7 +247,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         _set_multi_selection(view_id, [])
 
     @requires_src
-    def _recompute_card_range(view_id):
+    def _recompute_card_range(view_id: int):
         """Rescale a card's shared color bar to its current data."""
         if state[f"grid_view_{view_id}"].get("owns_color_bar", False):
             return
@@ -254,8 +256,11 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         src = _src(src_id)
         if src is None or not array_name:
             return
-        for g, group_array in enumerate(_group_arrays(src.array(array_name))):
-            state[f"color_range_{view_id}_{g}"] = array_range(group_array)
+        thresholds = get_thresholds(state, view_id)
+        for g, group_array in enumerate(
+            _group_arrays(src.get_dataset(array_name, state_idx=get_time(state, view_id)))
+        ):
+            state[f"color_range_{view_id}_{g}"] = array_range(group_array, thresholds)
 
     def _init_global_state():
         # selected_time: STATE_n being visualized (2 -> STATE_0002).
@@ -298,7 +303,8 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         state[f"selected_label_{view_id}"] = NO_DATASET_LABEL
         state[f"multi_selected_{view_id}"] = []
         state[f"multi_label_{view_id}"] = NO_SELECTION_LABEL
-        state[f"locked_{view_id}"] = False
+        state[f"locked_{view_id}"] = {}
+        state[f"view_loading_{view_id}"] = True  # flag to indicate this view is loading
         state[f"color_units_{view_id}"] = "unitless"
         state[f"label_info_{view_id}"] = {
             "Exposure": "-",
@@ -325,7 +331,15 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             array_name = state[f"selected_array_{view_id}"]
             src = _src(src_id)
             if src is not None and array_name:
-                state[f"color_units_{view_id}"] = src.array_units(array_name)
+                state[f"color_units_{view_id}"] = src.get_dataset_units(
+                    array_name, state_idx=get_time(state, view_id)
+                )
+
+        @state.change("thresholds")
+        def _on_thres_range_changed(**kwargs):
+            if is_view_locked(state, view_id):
+                return
+            _recompute_card_range(view_id)
 
         @state.change(f"grid_view_{view_id}")
         @requires_src
@@ -345,7 +359,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                 ]
             resolved = _dedupe(
                 pair
-                for pair in (_resolve_pair(option, *pair) for pair in pairs)
+                for pair in (_resolve_pair(option, *pair, view_id=view_id) for pair in pairs)
                 if pair is not None
             )
             if not resolved:
@@ -364,7 +378,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     DiffMenu.register_diff_state_ctrl(state, ctrl, registry)
     ThresholdMenu.register_threshold_state_ctrl(state, ctrl, registry)
     DeriveMenu.register_derived_state_ctrl(state, ctrl, registry)
-    FileMenu.register_file_menu_state_ctrl(state, ctrl, registry)
+    FileMenu.register_file_menu_state_ctrl(state, ctrl, registry, view_ids=all_view_ids)
     FileMenu.register_session_state_ctrl(state, ctrl, registry)
     SaveSession.register_session_menu_state_ctrl(state, ctrl, registry, all_view_ids)
     StreamMenu.register_stream_menu_state_ctrl(state, ctrl, registry, state_queue)
@@ -390,6 +404,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
     @state.change("src_tree_meta")
     def refresh_max_state(**kwargs):
         state.max_time = max(state.max_time, registry.max_state)
+        state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
 
     def _reset_view_pool(used_ids=()):
         nonlocal available_view_ids
@@ -422,6 +437,26 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         state.grid_layout = [item for item in state.grid_layout if item.get("i") != view_id]
         state.grid_rebuild_key += 1
 
+    @ctrl.set("toggle_lock")
+    def toggle_lock(view_id):
+        SELECTION_KEYS = (
+            "selected_time",
+            "selected_layer",
+            "selected_i",
+            "selected_j",
+            "selected_surface",
+            "selected_assembly_ij",
+        )
+
+        lock_key = f"locked_{view_id}"
+
+        if state[lock_key]:
+            state[lock_key] = {}
+        else:
+            state[lock_key] = {
+                selection_key: state[selection_key] for selection_key in SELECTION_KEYS
+            }
+
     def _place(module, src_id, x, y, w, h):
         """Add a card running `module`, unless no dataset on src_id satisfies it."""
         if not available_view_ids:
@@ -444,6 +479,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             return
         nonlocal activation_done
         registry.remove_src(src_id)
+        stream_id = src_id if state.ports_opened.pop(src_id, None) is not None else None
+        if stream_id is not None:
+            stream_full_id = generate_stream_identifier(stream_id)
+            state_count_key = f"{stream_full_id}_state_count"
+            state[stream_full_id] = None
+            state[state_count_key] = None
+            remove_change_listeners(server, stream_full_id, state_count_key)
         state.recipes = [r for r in state.recipes if src_id not in recipe_sources(r)]
 
         fallback_id = registry.default_src_id
@@ -508,53 +550,65 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         session = Session(
             version=int(raw_data.get("version", 1)),
             file_paths=dict(raw_data.get("file_paths", {})),
+            stream_ports=dict(raw_data.get("stream_ports", {})),
             file_overrides=file_overrides,
             default_src_id=raw_data.get("default_src_id"),
             globals=dict(raw_data.get("globals", {})),
             views=views,
             recipes=list(raw_data.get("recipes", [])),
         )
-        for path in session.file_paths.values():
-            if not Path(path).is_file():
-                state.file_error = f"Session file not found: {path}"
-                return
+        with state:
+            for path in session.file_paths.values():
+                if not Path(path).is_file():
+                    state.file_error = f"Session file not found: {path}"
+                    return
 
-        registry.clear()
-        file_overrides = session.file_overrides
-        for src_id, path in session.file_paths.items():
-            registry.add_src(
-                VeraOutFile(path, core_overrides=file_overrides.get(path, {})),
-                src_id=src_id,
-            )
-        if session.default_src_id in registry:
-            registry.default_src_id = session.default_src_id
+            registry.clear()
+            file_overrides = session.file_overrides
+            for src_id, path in session.file_paths.items():
+                registry.add_src(
+                    open_vera_file_data_source(path, core_overrides=file_overrides.get(path, {})),
+                    src_id=src_id,
+                )
+            for src_id, port in session.stream_ports.items():
+                print("connecting to stream", port)
+                ctrl.connect_stream(port, src_id)
+            if session.default_src_id in registry:
+                registry.default_src_id = session.default_src_id
 
-        errors = _replay_recipes(session.recipes, set(session.file_paths))
-        if errors:
-            state.file_error = "Some datasets failed to rebuild: " + "; ".join(errors)
+            errors = _replay_recipes(session.recipes, set(session.file_paths))
+            if errors:
+                state.file_error = "Some datasets failed to rebuild: " + "; ".join(errors)
 
-        DatasetPicker.refresh_src_tree(state, registry)
-        state.grid_layout = [dict(v.layout) for v in session.views if v.layout]
+            DatasetPicker.refresh_src_tree(state, registry)
+            state.grid_layout = [dict(v.layout) for v in session.views if v.layout]
 
-        for view in session.views:
-            vid = view.view_id
-            for field in SESSION_VIEW_FIELDS:
-                state[f"{field}_{vid}"] = _copy_value(getattr(view, field))
-            state[f"camera_{vid}"] = view.camera
-            state.dirty(f"camera_{vid}")
-            state[f"grid_view_{vid}"] = view.option
+            for view in session.views:
+                vid = view.view_id
+                for field in SESSION_VIEW_FIELDS:
+                    state[f"{field}_{vid}"] = _copy_value(getattr(view, field))
+                state[f"camera_{vid}"] = view.camera
+                state.dirty(f"camera_{vid}")
+                state[f"grid_view_{vid}"] = view.option
 
-        for key, value in session.globals.items():
-            state[key] = value
+            state.max_time = registry.max_state
+            for key, value in session.globals.items():
+                state[key] = value
+            registry.change_all_active_state(session.globals["selected_time"])
 
-        # Slots used by the session must not be handed out again, and the
-        # default arrangement must not overwrite the restored one.
-        _reset_view_pool(item["i"] for item in state.grid_layout)
-        activation_done = True
+            # Slots used by the session must not be handed out again, and the
+            # default arrangement must not overwrite the restored one.
+            _reset_view_pool(item["i"] for item in state.grid_layout)
+            activation_done = True
 
-        state.grid_rebuild_key += 1
-        state.dirty("grid_layout")
-        state.has_data = True
+            state.grid_rebuild_key += 1
+            state.dirty("grid_layout")
+            state.has_data = True
+            # Mark all views as finished loading
+        with state:
+            for view_id in all_view_ids:
+                state[f"view_loading_{view_id}"] = False
+        print("loaded session")
 
     def activate_src():
         """Run the data-dependent setup once, when the first source exists.
@@ -571,26 +625,31 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         default_name = default_dataset_name(src.default_datasets())
         ny, nx, nz = src.core.core_shape[:3]
 
-        state.selected_layer = nz // 2
-        state.max_layer = len(registry.global_axial_mesh) - 1
-        state.selected_i = max((nx // 2) - 1, 0)  # not a center pin
-        state.selected_j = max((ny // 2) - 1, 0)
-        center_assembly = _center_assembly(src.core.reduced_core_map)
-        assembly_i, assembly_j = src.core.reduced_core_map_ij(center_assembly)
-        state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}
-        state.max_time = registry.max_state
-        state.selected_time = 0
+        with state:
+            state.selected_layer = nz // 2
+            state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
+            state.selected_i = max((nx // 2) - 1, 0)  # not a center pin
+            state.selected_j = max((ny // 2) - 1, 0)
+            center_assembly = _center_assembly(src.core.reduced_core_map)
+            assembly_i, assembly_j = src.core.reduced_core_map_ij(center_assembly)
+            state.selected_assembly_ij = {"i": assembly_i, "j": assembly_j}
+            state.max_time = registry.max_state
+            state.selected_time = 0
 
-        for view_id in all_view_ids:
-            select_dataset(view_id, default_id, default_name)
-            _set_multi_selection(view_id, [(default_id, default_name)])
-            _recompute_card_range(view_id)
-        for module, x, y, w, h in DEFAULT_ARRANGEMENT:
-            _place(module, default_id, x, y, w, h)
+            for view_id in all_view_ids:
+                select_dataset(view_id, default_id, default_name)
+                _set_multi_selection(view_id, [(default_id, default_name)])
+                _recompute_card_range(view_id)
+            for module, x, y, w, h in DEFAULT_ARRANGEMENT:
+                _place(module, default_id, x, y, w, h)
 
-        state.dirty("grid_layout")
-        state.has_data = True
-        activation_done = True
+            state.dirty("grid_layout")
+            state.has_data = True
+            activation_done = True
+        # Mark all views as finished loading
+        with state:
+            for view_id in all_view_ids:
+                state[f"view_loading_{view_id}"] = False
 
     ctrl.activate_src = activate_src
 

@@ -10,6 +10,7 @@ skip =
     bundles,
     vue-components/node_modules,
     VeraCore.spec,
+    vera_core/data/vera_tools*,
 ignore-words-list =
     vera,
     veracore,

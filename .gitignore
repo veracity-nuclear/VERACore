@@ -12,9 +12,12 @@ dist_pylauncher
 vera_out_inspector.py
 temp.txt
 *.dmg
+*.app
 *.patch
 VeraCore.zip
-
+temp.py
+test_images
+/dev/
 # local env files
 .env.local
 .env.*.local

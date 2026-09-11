@@ -1,7 +1,7 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.data.registry import VeraDataRegistry
 
 MENU_MAX_HEIGHT = "60vh"
 
@@ -25,7 +25,7 @@ def refresh_src_tree(state: State, registry: VeraDataRegistry):
                 "category": cat.replace("_", " ").title(),
                 "entries": [{"text": k.replace("_", " ").title(), "value": k} for k in names],
             }
-            for cat, names in registry.get(fid).active_state_grouped_keys
+            for cat, names in registry.get(fid).active_state.grouped_full_core_keys
         ]
         for fid in registry.src_ids()
     }

@@ -3,11 +3,9 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import plotly
 
-from vera_core.app.core import (
-    Surface,
-    VeraDataRegistry,
-    VeraDtype,
-)
+from vera_core.data.analysis.axial_lines import AxialLines
+from vera_core.data.dtypes import VeraDim
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
@@ -20,33 +18,8 @@ def option_for(view_id):
         "label": "Axial Plot",
         "multi_picker": True,
         "icon": "mdi-align-horizontal-center",
-        "allowed_categories": [
-            VeraDtype.PIN.title,
-            VeraDtype.CHANNEL.title,
-            VeraDtype.AXIAL.title,
-            VeraDtype.ASSEMBLY.title,
-            VeraDtype.COMP_NODAL.title,
-            VeraDtype.COMP_NODAL_ENERGY.title,
-            VeraDtype.COMP_NODAL_SURFACE.title,
-            VeraDtype.COMP_ASSY_SURFACE.title,
-            VeraDtype.COMP_ASSY.title,
-            VeraDtype.COMP_ASSY_ENERGY.title,
-            VeraDtype.NODAL.title,
-            VeraDtype.POINT_DETECTOR.title,
-            VeraDtype.CONTINOUS_DETECTOR.title,
-        ],
+        "allowed_categories": [vdtype.title for vdtype in AxialLines.ALLOWED_DTYPES],
     }
-
-
-def region_segments(values, intervals):
-    n = values.size
-    x = np.full(3 * n, np.nan)
-    y = np.full(3 * n, np.nan)
-    x[0::3] = values
-    x[1::3] = values
-    y[0::3] = intervals[:, 0]
-    y[1::3] = intervals[:, 1]
-    return x, y
 
 
 def initialize(server, registry: VeraDataRegistry, view_id):
@@ -61,87 +34,39 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     def create_line():
         figure = go.Figure()
+        vera_sources = []
+        dataset_names = []
+        all_indices = []
         for token in state[selected_set_key]:
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
-            full_array = src.array(array_name)
-            units = full_array.physical_units
-            units_label = f" ({units}) " if units != "unitless" else ""
-            array_dtype: VeraDtype = full_array.dataset_type
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
                 continue
-            j, i, layer, assy, _, _ = indices
-            assembly_label = src.core.reduced_core_map_label(assy, array_dtype.is_computational())
-            identifier: str = ""
-            mode = "lines"
-            axial_arrays = []
-            match array_dtype:
-                case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    axial_arrays.append(full_array[j, i, :, assy])
-                    identifier = f" | {assembly_label} @({i + 1},{j + 1})"
-                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
-                    axial_arrays.append(full_array[0, :, assy])
-                    identifier = f" | {assembly_label}"
-                case VeraDtype.POINT_DETECTOR:
-                    axial_arrays.append(full_array[:, assy])
-                    identifier = f" | {assembly_label} Detector"
-                    mode = "lines+markers"
-                case VeraDtype.AXIAL:
-                    axial_arrays.append(full_array)
-                case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-                    node_idx = convert_ji_to_node(j, i)
-                    axial_arrays.append(full_array[node_idx, :, assy])
-                    identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
-                case VeraDtype.COMP_NODAL_ENERGY | VeraDtype.COMP_ASSY_ENERGY:
-                    idx = (
-                        convert_ji_to_node(j, i)
-                        if array_dtype == VeraDtype.COMP_NODAL_ENERGY
-                        else 0
-                    )
-                    num_energy_groups = full_array.shape[0]
-                    for n_group in range(num_energy_groups):
-                        axial_arrays.append(full_array[n_group, idx, :, assy])
-                    identifier = (
-                        f" | {assembly_label} @(NODE {idx + 1})"
-                        if array_dtype == VeraDtype.COMP_NODAL_ENERGY
-                        else f" | {assembly_label}"
-                    )
-                case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
-                    selected_surface = state.selected_surface
-                    num_energy_groups = full_array.shape[1]
-                    nodal_idx = (
-                        0
-                        if array_dtype == VeraDtype.COMP_ASSY_SURFACE
-                        else convert_ji_to_node(j, i)
-                    )
-                    for group_n in range(num_energy_groups):
-                        axial_arrays.append(
-                            full_array[selected_surface, group_n, nodal_idx, :, assy]
-                        )
-                    surface_label = f" {Surface(state.selected_surface).str}"
-                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
-                case VeraDtype.CONTINOUS_DETECTOR:
-                    axial_arrays.append(full_array[:, assy])
-                    identifier = f" | {assembly_label} Detector"
-                case _:
-                    continue
-            axial_mesh_means = src.core.get_axial_mesh_means(dataset_type=array_dtype)
-            for idx, axial_array in enumerate(axial_arrays):
-                group_label = "" if len(axial_arrays) <= 1 else f" GROUP {idx + 1}"
-                x, y = (
-                    (axial_array, axial_mesh_means)
-                    if axial_mesh_means.ndim != 2
-                    else region_segments(axial_array, axial_mesh_means)
+            j, i, layer, assy, _, _, time, surface = indices
+            vera_sources.append(src)
+            dataset_names.append(array_name)
+            all_indices.append(
+                {
+                    VeraDim.PIN_Y: j,
+                    VeraDim.PIN_X: i,
+                    VeraDim.NODE: convert_ji_to_node(j, i),
+                    VeraDim.SURFACE: surface,
+                    VeraDim.AXIAL: layer,
+                    VeraDim.ASSEMBLY: assy,
+                }
+            )
+
+        axial_lines = AxialLines.create_axial_lines(vera_sources, dataset_names, all_indices)
+        for (x, y), identifier, mode in axial_lines.lines():
+            figure.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=y,
+                    mode=mode,
+                    name=identifier,
                 )
-                figure.add_trace(
-                    go.Scatter(
-                        x=x,
-                        y=y,
-                        mode=mode,
-                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{units_label}{identifier + group_label}",
-                    )
-                )
+            )
 
         # add_hline only spans x in [0, 1], so draw the layer marker manually.
         float_info = np.finfo(np.float64)

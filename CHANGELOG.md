@@ -37,3 +37,27 @@ linked, interactive views arranged in a configurable grid.
 - In-application version notifications when a newer release is available.
 
 [2.0.0]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.0
+
+## [2.0.1] - 2026-08-06
+
+- This version adds functionality for viewing numeric values of nodal and assembly valued datasets on the core view, axial view, and surface core view.
+
+[2.0.1]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.1
+
+## [2.0.2] - 2026-08-07
+
+- This version adds functionality for changing the decimals displayed on the Surface Assembly View.
+
+[2.0.2]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.2
+
+## [2.0.3] - 2026-08-22
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.3]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.3
+
+## [2.0.4] - 2026-08-26
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.4]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.4

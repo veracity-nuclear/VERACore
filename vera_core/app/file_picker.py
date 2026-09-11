@@ -10,6 +10,11 @@ FILTERS = {
         "exts": ["json"],
         "mac_types": ["public.json", "json"],
     },
+    "image": {
+        "label": "Image files",
+        "exts": ["png", "pdf", "svg", "jpg"],
+        "mac_types": ["png", "pdf", "svg", "jpg", "jpeg"],
+    },
 }
 
 

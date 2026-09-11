@@ -1,7 +1,8 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import DerivationMethod, VeraDataRegistry, derive_recipe
+from vera_core.data.dtypes import DerivationMethod, derive_recipe
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
@@ -47,6 +48,7 @@ def register_derived_state_ctrl(state: State, ctrl: Controller, registry: VeraDa
     state.derivation_src_dataset = ""
     state.derivation_src_id = None
     state.derivation_source_label = "Select dataset"
+    state.derive_auto_apply = True
 
     state.axes_to_derive = "ASSEMBLY"
     state.derivation_method = "Average"
@@ -81,6 +83,7 @@ def register_derived_state_ctrl(state: State, ctrl: Controller, registry: VeraDa
             use_factors=state["derivation_use_factors"],
             exclude_non_fuel_rods=state["derivation_exclude_non_fuel"],
         )
+        recipe["all_sources"] = state.derive_auto_apply
         registry.apply_recipe(recipe)
         state.recipes = state.recipes + [recipe]
         refresh_src_tree(state, registry)
@@ -89,6 +92,7 @@ def register_derived_state_ctrl(state: State, ctrl: Controller, registry: VeraDa
         state.derivation_source_label = "Select dataset"
         state.derived_name = ""
         state.derived_error = ""
+        state.derive_auto_apply = True
         return True
 
     @ctrl.set("create_derived_dataset")
@@ -163,6 +167,13 @@ def build_derived_dialog(state, ctrl, registry):
                                 hide_details=True,
                                 dense=True,
                                 disabled=True,
+                            )
+                        with vuetify.VCol(cols="auto", classes="pa-0 pl-4"):
+                            vuetify.VCheckbox(
+                                v_model=("derive_auto_apply",),
+                                label="Auto apply to all sources",
+                                hide_details=True,
+                                dense=True,
                             )
                 with vuetify.VCard(outlined=True, classes="pa-3"):
                     html.Div(

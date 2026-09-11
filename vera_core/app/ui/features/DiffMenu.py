@@ -1,9 +1,7 @@
 from trame.widgets import html, vuetify
 
-from vera_core.app.core import (
-    VeraDataRegistry,
-    diff_recipe,
-)
+from vera_core.data.dtypes import diff_recipe
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
@@ -46,13 +44,16 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return ""
-        return src.array_units(dataset_name)
+        return src.get_dataset_units(dataset_name)
 
     def _ds_info(src_id, dataset_name):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return None
-        return src.array_shape(dataset_name), src.array_dtype(dataset_name)
+        ds_shape = src.get_dataset_shape(dataset_name)
+        if ds_shape is None:
+            return tuple(), "unitless"
+        return ds_shape, src.get_dataset_dtype(dataset_name)
 
     def _drop_axis(shape, axis):
         if axis is None:
@@ -187,7 +188,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Reference operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-2"):
-                    html.Div("Reference (A)", classes="text-caption font-weight-medium mb-2")
+                    html.Div("Comparison (A)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(
@@ -230,7 +231,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Comparison operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("Comparison (B)", classes="text-caption font-weight-medium mb-2")
+                    html.Div("Reference (B)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(

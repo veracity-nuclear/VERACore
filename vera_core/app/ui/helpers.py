@@ -3,27 +3,19 @@ import functools
 import numpy as np
 from trame_server.core import State
 
-from vera_core.app.core import (
-    NUM_NODES,
-    VeraDataRegistry,
-    VeraDtype,
-    VeraOutCore,
-)
+from vera_core.data.dtypes import NUM_NODES, VeraDtype
+from vera_core.data.model import VeraOutCore
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import ThresholdCondition
+
+MULTI_SEP = "\x1f"
 
 
-def format_label(file: str, key: str):
-    return f"{key.replace('_', ' ').upper()} | {file}"
-
-
-def array_range(array):
-    lo = float(np.nanmin(array))
-    hi = float(np.nanmax(array))
-    if not np.isfinite(lo) or not np.isfinite(hi):
-        return (0.0, 1.0)
-    if lo == hi:
-        eps = max(abs(hi) * 1e-9, 1e-12)
-        return (lo, hi + eps)
-    return (lo, hi)
+def format_label(file: str, key: str, *, source_identifier: bool = True):
+    if source_identifier:
+        return f"{key.replace('_', ' ').upper()} | {file}"
+    else:
+        return f"{key.replace('_', ' ').upper()}"
 
 
 def get_next_y_from_layout(layout):
@@ -35,12 +27,20 @@ def get_next_y_from_layout(layout):
     return next_y
 
 
-def is_view_locked(state, view_id):
-    return bool(state[f"locked_{view_id}"])
+def is_view_locked(state: State, view_id):
+    view_loading = False
+    if state.has(f"view_loading_{view_id}"):
+        view_loading = state[f"view_loading_{view_id}"]
+    return bool(state[f"locked_{view_id}"]) and not bool(view_loading)
 
 
 def is_non_active_view(state: State, view_id: int, option: dict[str, str]) -> bool:
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
+
+
+def get_time(state: State, view_id) -> int | None:
+    frozen_sels = state[f"locked_{view_id}"]
+    return frozen_sels.get("selected_time", None) if isinstance(frozen_sels, dict) else None
 
 
 def _layer_elevation(axial_mesh, layer):
@@ -53,19 +53,23 @@ def _layer_elevation(axial_mesh, layer):
 
 
 def set_info(view_id: int, state: State, registry: VeraDataRegistry):
+    if is_view_locked(state=state, view_id=view_id):
+        return
     indices = get_safe_idxs(view_id, state, registry)
     if not indices:
         return
-    j, i, layer, assy, src_id, ds_name = indices
+    j, i, layer, assy, src_id, ds_name, time, surface = indices
     vera_source = registry.get(src_id)
-    dtype = vera_source.array_dtype(ds_name)
+    dtype = vera_source.get_dataset_dtype(ds_name, state_idx=time)
     is_comp = dtype.is_computational()
     axial_mesh = vera_source.core.get_axial_mesh_means(dataset_type=dtype)
-    exposure = None
-    if vera_source.active_state.has_dataset("exposure"):
-        exposure = vera_source.active_state.exposure[0]
+    exposure = (
+        vera_source.get_dataset("exposure", state_idx=time)
+        if vera_source.get_dataset_shape("exposure", state_idx=time) is not None
+        else None
+    )
     state[f"label_info_{view_id}"] = {
-        "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
+        "Exposure": np.round(exposure[0], decimals=3) if exposure is not None else "not recorded",
         "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
         "Layer": _layer_elevation(axial_mesh, layer),
         "Pin_x": int(i),
@@ -73,10 +77,17 @@ def set_info(view_id: int, state: State, registry: VeraDataRegistry):
     }
 
 
-def _get_assy_idx(ds_dtype: VeraDtype, state: State, src_core: VeraOutCore):
+def _get_assy_idx(ds_dtype: VeraDtype, state: State, src_core: VeraOutCore, view_id: int):
     is_comp = ds_dtype.is_computational()
     is_detector = ds_dtype.is_detector()
-    i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
+    frozen_selections = state[f"locked_{view_id}"]
+    if isinstance(frozen_selections, dict) and frozen_selections:
+        i, j = (
+            frozen_selections["selected_assembly_ij"]["i"],
+            frozen_selections["selected_assembly_ij"]["j"],
+        )
+    else:
+        i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
     assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp, is_detector=is_detector)
     return assy
 
@@ -88,22 +99,28 @@ def get_safe_idxs(
     sel_src_id: str | None = None,
     sel_dataset_name: str | None = None,
 ) -> tuple | None:
-    """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name)"""
+    """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name, selected_time, selected_surface)"""
     dataset_name = state[f"selected_array_{view_id}"] if not sel_dataset_name else sel_dataset_name
     src_id = state[f"selected_src_id_{view_id}"] if not sel_src_id else sel_src_id
     vera_source = registry.get(src_id)
     if vera_source is None:
         return None
     core = vera_source.core
-    vdtype = vera_source.array_dtype(dataset_name)
+    vdtype = vera_source.get_dataset_dtype(dataset_name)
     if vdtype == VeraDtype.UNKNOWN:
         return None
-    sel_assy = _get_assy_idx(vdtype, state, core)
+    sel_assy = _get_assy_idx(vdtype, state, core, view_id)
     if sel_assy < 0:
         return None
-    sel_j = int(state.selected_j)
-    sel_i = int(state.selected_i)
-    sel_layer = registry.global_axial_idx_to_src_idx(src_id, vdtype, int(state.selected_layer))
+    frozen_selections = state[f"locked_{view_id}"]
+    selections = (
+        frozen_selections if frozen_selections and isinstance(frozen_selections, dict) else state
+    )
+    sel_j = int(selections["selected_j"])
+    sel_i = int(selections["selected_i"])
+    sel_layer = registry.global_axial_idx_to_src_idx(
+        src_id, vdtype, int(selections["selected_layer"])
+    )
 
     core_shape = core.get_core_shape(dataset_type=vdtype)
     if len(core_shape) != 4:
@@ -119,7 +136,9 @@ def get_safe_idxs(
     safe_layer = int(np.clip(sel_layer, 0, nax - 1))
     safe_assy_idx = int(np.clip(sel_assy, 0, nass - 1))
 
-    return (safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name)
+    sel_time = get_time(state, view_id)
+    surface = int(selections["selected_surface"])
+    return (safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name, sel_time, surface)
 
 
 def convert_ji_to_node(selected_j, selected_i):
@@ -151,3 +170,18 @@ def default_dataset_name(names: dict) -> str | None:
     if pin in names:
         return names[pin]
     return next(iter(names.values()))
+
+
+def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
+    selected_src_id = state[f"selected_src_id_{view_id}"]
+    selected_array = state[f"selected_array_{view_id}"]
+    thres_key = format_label(selected_src_id, selected_array)
+    global_thres_key = format_label(selected_src_id, selected_array, source_identifier=False)
+    thresholds_to_apply = state["thresholds"].get(thres_key, []) + state["thresholds"].get(
+        global_thres_key, []
+    )
+    return thresholds_to_apply
+
+
+def get_multi_selected_src(state: State, view_id: int | str) -> list[tuple[str, str]]:
+    return [token.split(MULTI_SEP, 1) for token in state[f"multi_selected_{view_id}"]]

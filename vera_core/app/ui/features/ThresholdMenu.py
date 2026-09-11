@@ -1,8 +1,8 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import VeraDataRegistry
-from vera_core.app.core.thresholds import ThresholdCondition
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import ThresholdCondition
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker
@@ -31,6 +31,7 @@ def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: Vera
     state.threshold_error = ""
     state.threshold_operator = ">"
     state.threshold_operators = [">", ">=", "<", "<=", "==", "!="]
+    state.thres_auto_apply = True
 
     @ctrl.set("set_threshold")
     def set_threshold(file: str, array: str):
@@ -49,7 +50,9 @@ def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: Vera
                 state.threshold_error = "Please select a threshold value"
                 return
             name = format_label(
-                state.threshold_src_id, state.threshold_dataset
+                state.threshold_src_id,
+                state.threshold_dataset,
+                source_identifier=not state.thres_auto_apply,
             )  # use src_id and dataset name as key for threshold
             entry: ThresholdCondition = {
                 "op": state.threshold_operator,
@@ -65,6 +68,7 @@ def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: Vera
             state.threshold_label = "Select dataset"
             state.threshold_dataset = ""
             state.threshold_error = ""
+            state.thres_auto_apply = True
         except Exception as e:
             state.threshold_error = str(e)
 
@@ -78,7 +82,7 @@ def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: Vera
 
 
 def build_threshold_dialog(ctrl: Controller):
-    with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=580, persistent=True):
+    with vuetify.VDialog(v_model=("show_threshold_dialog",), max_width=780, persistent=True):
         with vuetify.VCard():
             vuetify.VCardTitle("Dataset Thresholds", classes="text-subtitle-1")
             vuetify.VDivider()
@@ -109,6 +113,13 @@ def build_threshold_dialog(ctrl: Controller):
                         dense=True,
                         style="flex: 0 0 90px; width: 90px;",
                     )
+                    with vuetify.VCol(cols="auto", classes="pa-0 pl-4"):
+                        vuetify.VCheckbox(
+                            v_model=("thres_auto_apply",),
+                            label="Auto apply to all sources",
+                            hide_details=True,
+                            dense=True,
+                        )
                     with vuetify.VBtn(
                         icon=True,
                         small=True,

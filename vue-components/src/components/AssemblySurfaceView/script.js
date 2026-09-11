@@ -1,11 +1,17 @@
 import vtkColorMaps from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction/ColorMaps';
 import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction';
 
+import { fitFontSize, formatValue } from '../../utils/format';
+
 // Face order per cell: WEST, NORTH, EAST, SOUTH.
 const WEST = 0;
 const NORTH = 1;
 const EAST = 2;
 const SOUTH = 3;
+
+const LABEL_MAX_SIZE = 0.11;
+const LABEL_WIDTH = 0.34;
+const LABEL_HALO = 0.16;
 
 export default {
   name: 'VeraAssemblySurface',
@@ -27,16 +33,36 @@ export default {
     busy: { type: Boolean, default: false },
     dark: { type: Boolean, default: false },
     cellSize: { type: Number, default: 60 },
+    decimals: { type: Number, default: 2 },
   },
   watch: {
-    selectedI(i) { this.activeI = i + 1; },
-    selectedJ(j) { this.activeJ = j + 1; },
-    selectedSurface(s) { this.activeSurface = s; },
-    value() { this.updateColors(); },
-    colorPreset() { this.updateLookupTable(); this.updateColors(); },
-    colorRange() { this.updateLookupTable(); this.updateColors(); },
-    dark() { this.updateLookupTable(); this.updateColors(); },
-    sideCount() { this.resize(); },
+    selectedI(i) {
+      this.activeI = i + 1;
+    },
+    selectedJ(j) {
+      this.activeJ = j + 1;
+    },
+    selectedSurface(s) {
+      this.activeSurface = s;
+    },
+    value() {
+      this.updateColors();
+    },
+    colorPreset() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    colorRange() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    dark() {
+      this.updateLookupTable();
+      this.updateColors();
+    },
+    sideCount() {
+      this.resize();
+    },
   },
   data() {
     return {
@@ -73,6 +99,22 @@ export default {
         [WEST]: [s / 6, s / 2],
         [EAST]: [(s * 5) / 6, s / 2],
       };
+    },
+    faceLabels() {
+      const max = this.cellSize * LABEL_MAX_SIZE;
+      const avail = this.cellSize * LABEL_WIDTH;
+      return this.value.map((cell) => {
+        if (!Array.isArray(cell) || cell.length < 4) {
+          return null;
+        }
+        const out = [];
+        for (let surface = 0; surface < 4; surface += 1) {
+          const text = formatValue(cell[surface], this.decimals);
+          const size = fitFontSize(text, max, avail);
+          out.push({ text, size, halo: size * LABEL_HALO });
+        }
+        return out;
+      });
     },
   },
   created() {
@@ -144,31 +186,12 @@ export default {
       };
     },
     isSelectedTriangle(i, j, surface) {
-      return (
-        i === this.activeI &&
-        j === this.activeJ &&
-        surface === this.activeSurface
-      );
+      return i === this.activeI && j === this.activeJ && surface === this.activeSurface;
     },
     triangleFill(i, j, surface) {
       const cellColors = this.colors[this.toIdx(i, j)];
       if (!cellColors) return this.dark ? 'rgb(30,30,30)' : 'rgb(255,255,255)';
       return cellColors[surface];
-    },
-    faceValue(i, j, surface) {
-      const cell = this.value[this.toIdx(i, j)];
-      if (!Array.isArray(cell) || cell.length < 4) return null;
-      return cell[surface];
-    },
-    faceText(i, j, surface) {
-      const v = this.faceValue(i, j, surface);
-      if (v === null || v === undefined || Number.isNaN(v)) return '';
-      if (v === 0) return '0';
-      const abs = Math.abs(v);
-      if (abs < 1e-2 || abs >= 1e5) {
-        return v.toExponential(1).replace(/\.?0+e/, 'e');
-      }
-      return v.toFixed(2);
     },
     updateLookupTable() {
       const preset = vtkColorMaps.getPresetByName(this.colorPreset);

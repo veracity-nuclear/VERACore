@@ -44,19 +44,25 @@ end;
 procedure RemoveStaleDistInfo(InternalDir: String);
 var
   FindRec: TFindRec;
-  DirPath: String;
+  DirsToDelete: TStringList;
+  I: Integer;
 begin
-  if FindFirst(InternalDir + '\*.dist-info', FindRec) then begin
-    try
-      repeat
-        if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then begin
-          DirPath := InternalDir + '\' + FindRec.Name;
-          DelTree(DirPath, True, True, True);
-        end;
-      until not FindNext(FindRec);
-    finally
-      FindClose(FindRec);
+  DirsToDelete := TStringList.Create;
+  try
+    if FindFirst(InternalDir + '\*.dist-info', FindRec) then begin
+      try
+        repeat
+          if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+            DirsToDelete.Add(InternalDir + '\' + FindRec.Name);
+        until not FindNext(FindRec);
+      finally
+        FindClose(FindRec);
+      end;
     end;
+    for I := 0 to DirsToDelete.Count - 1 do
+      DelTree(DirsToDelete.Strings[I], True, True, True);
+  finally
+    DirsToDelete.Free;
   end;
 end;
 

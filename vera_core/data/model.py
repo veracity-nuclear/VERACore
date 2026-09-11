@@ -102,6 +102,11 @@ class DatasetStore:
         """Where this dataset came from"""
         return self._source.provenance
 
+    @property
+    def source(self) -> DatasetSource:
+        """The backend this store reads from."""
+        return self._source
+
     def _make_dataset(self, name: str) -> VeraDataset | None:
         return self._source.load(name)
 
@@ -180,6 +185,15 @@ class CorePropMissing(Exception):
         self.missing = missing
         self.inferred = inferred
         super().__init__(f"Core props missing: {', '.join(missing)}")
+
+
+def col_label(index: int) -> str:
+    label = ""
+    while index >= 0:
+        index, rem = divmod(index, 26)
+        label = chr(ord("A") + rem) + label
+        index -= 1
+    return label
 
 
 class VeraOutCore(DatasetStore):
@@ -405,7 +419,7 @@ class VeraOutCore(DatasetStore):
         if (raw_xlabels := self.get("xlabel")) is not None:
             xlabels = [char.decode() for char in raw_xlabels[start_index:]]
         else:
-            xlabels = list(reversed(alphabet[:num_cols]))
+            xlabels = list(reversed([col_label(i) for i in range(num_cols)]))
         self.reduced_core_map_column_labels = xlabels
 
         if (raw_ylabels := self.get("ylabel")) is not None:
@@ -747,6 +761,14 @@ class VeraOutState(DatasetStore):
         self.categorized_ds_names[ds_dtype].add(dataset_name)
 
 
+_TIME_AXIS_NAMES = (
+    "exposure",
+    "core_exposure",
+    "exposure_efpd",
+    "time_us",
+)
+
+
 class VeraDataSource:
     """One loaded VERA calculation: a core, its states, and lookup across both.
 
@@ -780,28 +802,51 @@ class VeraDataSource:
                 self.vera_calculator = None
         self._core = core
         self._states = states
+        self._time_axes_dirty = True
         self.active_state_index = max(0, min(active_state_idx, len(self._states) - 1))
         self._determine_time_axes()
         self._provenance = provenance
         self._close_callback = close_callback
         self.name = name if name is not None else ""
 
+    def _sample_time_axis_value(self, state, name):
+        sampler = getattr(state.source, "sample", None)
+
+        if sampler is not None:
+            value = sampler(name, ())
+        else:
+            dataset = state.get(name)
+            value = dataset.item() if dataset is not None else None
+
+        if value is None:
+            return None
+
+        return np.asarray(value).item()
+
     def _determine_time_axes(self):
-        self._time_axes = {}
-        for time_data_point in ("exposure", "core_exposure", "exposure_efpd"):
-            time_axis = [
-                state.get(time_data_point).item()
-                for state in self.states
-                if time_data_point in state
-            ]
-            if (
-                np.shape(time_axis) != np.shape(self.states)
-                or not np.all(np.asarray(time_axis) >= 0)
-                or not np.all(np.diff(time_axis) >= 0)
-            ):
+        """
+        Determine time-axis names from the first state.
+        NOTE this relies on the assumption that all states contains same time dataset
+        """
+        self._time_axes = {
+            "state_count": list(range(len(self._states))),
+        }
+
+        if not self._states:
+            return
+
+        first_state = self._states[0]
+
+        for name in _TIME_AXIS_NAMES:
+            if name not in first_state:
                 continue
-            self._time_axes[time_data_point] = time_axis
-        self._time_axes["state_count"] = [state_num for state_num in range(len(self.states))]
+
+            self._time_axes[name] = [
+                self._sample_time_axis_value(state, name) for state in self._states
+            ]
+
+    def time_axes(self):
+        return self._time_axes
 
     @property
     def provenance(self) -> str:
@@ -832,9 +877,6 @@ class VeraDataSource:
         if "pin_powers" in categorized_ds_names.get(VeraDtype.PIN, ()):
             default_names[VeraDtype.PIN.title] = "pin_powers"
         return default_names
-
-    def time_axes(self):
-        return self._time_axes
 
     @property
     def states(self):
@@ -869,6 +911,54 @@ class VeraDataSource:
         self._active_state_index = index
         if self._state_caching:
             self.active_state.cache_all()
+
+    def add_state(self, state):
+        """
+        Add one state.
+        Assumes it has the same time axes as the existing states.
+        """
+        self._states.append(state)
+        self._time_axes["state_count"].append(len(self._states) - 1)
+        if len(self._states) == 1:
+            self._determine_time_axes()
+            return
+        for name, values in self._time_axes.items():
+            if name == "state_count":
+                continue
+            values.append(self._sample_time_axis_value(state, name))
+
+    def replace_state(self, idx, state):
+        """
+        Replace one state.
+        Assumes the replacement has the same time axes.
+        """
+        self._states[idx] = state
+        for name, values in self._time_axes.items():
+            if name == "state_count":
+                continue
+            values[idx] = self._sample_time_axis_value(state, name)
+
+    def remove_state(self, idx):
+        """
+        Remove one state.
+        Removing a state cannot change which time axes exist unless this was
+        the final state. (Again assuming all states had uniform time dataset headers)
+        """
+        removed = self._states.pop(idx)
+        if not self._states:
+            self._time_axes = {
+                "state_count": [],
+            }
+            return removed
+        for name, values in self._time_axes.items():
+            if name == "state_count":
+                continue
+            values.pop(idx)
+
+        # state_count is always [0, 1, ..., N - 1].
+        self._time_axes["state_count"].pop()
+
+        return removed
 
     def add_new_diff_dataset(
         self,
@@ -1071,11 +1161,11 @@ class VeraDataSource:
         ds = self._get_dataset(array_name, state_idx)
         return ds.physical_units if ds is not None else "Unitless"
 
-    def get_dataset_shape(self, array_name: str, state_idx: int | None = None) -> tuple:
+    def get_dataset_shape(self, array_name: str, state_idx: int | None = None) -> tuple | None:
         """Return the shape of a named array, or an empty tuple if not found.
 
         Resolves against the core for core arrays and `state_idx` (or the active
         state) otherwise. Raises IndexError if `state_idx` is out of range.
         """
         ds = self._get_dataset(array_name, state_idx)
-        return tuple(np.shape(ds)) if ds is not None else tuple()
+        return tuple(np.shape(ds)) if ds is not None else None

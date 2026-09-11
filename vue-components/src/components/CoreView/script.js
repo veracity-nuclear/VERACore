@@ -10,6 +10,15 @@ const MAX_LABELS = 4000;
 // Beyond nodal (2x2) there are too many values in a cell to label.
 const MAX_LABEL_SIDE = 2;
 
+// Each assembly carries its own ring, so a boundary between two of them shows
+// twice this and the outer edge shows one. Thickness is on-screen px, inverted
+// through the frame scale, and capped so it cannot swallow a shrunken cell.
+const SEPARATOR_PX = 1;
+const SEPARATOR_MAX = CELL / 8;
+const SEPARATOR_DARK = '#121212';
+const SEPARATOR_LIGHT = '#e0e0e0';
+const HIGHLIGHT_PX = 2;
+
 const EMPTY_CORE = { url: null, filled: new Uint8Array(0), rows: 0, cols: 0 };
 
 // Layout is inline rather than class-based: a <style> block on this component
@@ -240,32 +249,17 @@ export default {
         height: `${this.coreHeight * CELL}px`,
       };
     },
-    // Gridline thickness is inverted through the frame scale so a line lands
-    // on about one device pixel instead of smearing when the core shrinks.
-    lineWidths() {
-      const ar = this.aspectRatio || 1;
-      const t = this.scale || 1;
-      return { v: Math.max(1, 1 / (ar * t)), h: Math.max(1, 1 / t) };
-    },
     gridStyle() {
-      const { v, h } = this.lineWidths;
-      const c = this.dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
+      const { v, h } = this.deviceToUnits(SEPARATOR_PX, SEPARATOR_MAX);
+      const c = this.dark ? SEPARATOR_DARK : SEPARATOR_LIGHT;
       return {
         position: 'absolute',
         top: '0',
         left: '0',
         width: '100%',
         height: '100%',
-        boxSizing: 'border-box',
         pointerEvents: 'none',
-        borderRight: `${v}px solid ${c}`,
-        borderBottom: `${h}px solid ${c}`,
-        backgroundImage: [
-          `repeating-linear-gradient(to right, ${c} 0, ${c} ${v}px,` +
-            ` transparent ${v}px, transparent ${CELL}px)`,
-          `repeating-linear-gradient(to bottom, ${c} 0, ${c} ${h}px,` +
-            ` transparent ${h}px, transparent ${CELL}px)`,
-        ].join(','),
+        backgroundImage: `${this.ring(v, 'right', c)},${this.ring(h, 'bottom', c)}`,
       };
     },
     highlightStyle() {
@@ -273,7 +267,7 @@ export default {
       if (this.activeI < 0 || this.activeJ < 0 || this.activeI >= cols || this.activeJ >= rows) {
         return { display: 'none' };
       }
-      const { v, h } = this.lineWidths;
+      const { v, h } = this.deviceToUnits(HIGHLIGHT_PX, SEPARATOR_MAX);
       return {
         position: 'absolute',
         pointerEvents: 'none',
@@ -314,6 +308,22 @@ export default {
       this.scale = Math.min(
         width / ((this.coreWidth + 1) * CELL * ar),
         height / ((this.coreHeight + 1) * CELL)
+      );
+    },
+    // On-screen px to frame units. The axes scale unequally, so a line that
+    // should look square needs a different width on each.
+    deviceToUnits(px, cap) {
+      const t = this.scale || 1;
+      const ar = this.aspectRatio || 1;
+      return { v: Math.min(cap, px / (ar * t)), h: Math.min(cap, px / t) };
+    },
+    // A line on both edges of every cell, so each assembly gets a full ring.
+    ring(w, direction, color) {
+      return (
+        `repeating-linear-gradient(to ${direction},` +
+        ` ${color} 0, ${color} ${w}px,` +
+        ` transparent ${w}px, transparent ${CELL - w}px,` +
+        ` ${color} ${CELL - w}px, ${color} ${CELL}px)`
       );
     },
     headerStyle(offset, active) {

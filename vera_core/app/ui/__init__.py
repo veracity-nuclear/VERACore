@@ -4,11 +4,13 @@ from pathlib import Path
 
 import numpy as np
 from trame.app.asynchronous import StateQueue
+from trame.app.dev import remove_change_listeners
 from trame_server.core import Server
 
 from vera_core.data.analysis.color import array_range
 from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDtype
 from vera_core.data.readers.h5 import open_vera_file_data_source
+from vera_core.data.readers.rom_reciever import generate_stream_identifier
 from vera_core.data.registry import VeraDataRegistry
 
 from .features import (
@@ -477,6 +479,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             return
         nonlocal activation_done
         registry.remove_src(src_id)
+        stream_id = src_id if state.ports_opened.pop(src_id, None) is not None else None
+        if stream_id is not None:
+            stream_full_id = generate_stream_identifier(stream_id)
+            state_count_key = f"{stream_full_id}_state_count"
+            state[stream_full_id] = None
+            state[state_count_key] = None
+            remove_change_listeners(server, stream_full_id, state_count_key)
         state.recipes = [r for r in state.recipes if src_id not in recipe_sources(r)]
 
         fallback_id = registry.default_src_id
@@ -541,6 +550,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         session = Session(
             version=int(raw_data.get("version", 1)),
             file_paths=dict(raw_data.get("file_paths", {})),
+            stream_ports=dict(raw_data.get("stream_ports", {})),
             file_overrides=file_overrides,
             default_src_id=raw_data.get("default_src_id"),
             globals=dict(raw_data.get("globals", {})),
@@ -560,6 +570,9 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                     open_vera_file_data_source(path, core_overrides=file_overrides.get(path, {})),
                     src_id=src_id,
                 )
+            for src_id, port in session.stream_ports.items():
+                print("connecting to stream", port)
+                ctrl.connect_stream(port, src_id)
             if session.default_src_id in registry:
                 registry.default_src_id = session.default_src_id
 
@@ -595,6 +608,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         with state:
             for view_id in all_view_ids:
                 state[f"view_loading_{view_id}"] = False
+        print("loaded session")
 
     def activate_src():
         """Run the data-dependent setup once, when the first source exists.

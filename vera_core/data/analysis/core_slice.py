@@ -48,7 +48,7 @@ class CoreSlice(GroupedSlice):
 
     @property
     def max_columns(self) -> int:
-        return int(self.core_map.shape[0])
+        return int(max(self.core_map.shape[0], self.core_map.shape[1]))
 
     @property
     def assembly_side(self) -> int:
@@ -152,12 +152,12 @@ class CoreSlice(GroupedSlice):
     def serialize_data_groups(self) -> list[tuple[list, list]]:
         cm = self.core_map
         is_assembly_avg = self.dtype.is_assembly()
-        core_width = cm.shape[0]
+        core_height, core_width = cm.shape
         results = []
         for dataset in self.data_groups:
             result = []
             labels = []
-            for i in range(core_width):
+            for i in range(core_height):
                 line = [None] * core_width
                 result.append(line)
                 if is_assembly_avg:

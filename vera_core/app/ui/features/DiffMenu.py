@@ -50,7 +50,10 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return None
-        return src.get_dataset_shape(dataset_name), src.get_dataset_dtype(dataset_name)
+        ds_shape = src.get_dataset_shape(dataset_name)
+        if ds_shape is None:
+            return tuple(), "unitless"
+        return ds_shape, src.get_dataset_dtype(dataset_name)
 
     def _drop_axis(shape, axis):
         if axis is None:

@@ -5,7 +5,7 @@ from trame.app.asynchronous import StateQueue
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.data.readers.stream import VeraDataStream, generate_stream_identifier
+from vera_core.data.readers.rom_reciever import RomStream
 from vera_core.data.registry import VeraDataRegistry
 
 from .DatasetPicker import refresh_src_tree
@@ -30,17 +30,28 @@ def register_stream_menu_state_ctrl(
     state.stream_source_name = ""
     state.stream_error = ""
     state.stream_connecting = False
+    state.ports_opened = {}
 
-    # factory function that produces watchers that wait for stream to provided data
-    def _make_stream_watcher(stream_source_name, stream_source):
-        @state.change(generate_stream_identifier(stream_source_name))
+    # Keep the actual stream objects out of Trame state.
+    streams: dict[str, RomStream] = {}
+
+    def _make_stream_watcher(
+        stream_source_name: str,
+        stream: RomStream,
+    ):
+        stream_id = stream.stream_id
+
+        @state.change(stream_id)
         def _on_stream_data_ready(**kwargs):
-            # adds stream_source to registry once data has actually arrived
             if stream_source_name in registry.src_ids():
+                return
+            stream_source = stream.source
+            if stream_source is None:
                 return
             was_empty = registry.default_src_id is None
             registry.add_src(stream_source, stream_source_name)
             refresh_src_tree(state, registry)
+            state.has_data = True
             if was_empty:
                 ctrl.activate_src()
             state.stream_connecting = False
@@ -48,15 +59,31 @@ def register_stream_menu_state_ctrl(
             state.stream_port = None
             state.stream_source_name = ""
 
-        @state.change(f"{generate_stream_identifier(stream_source_name)}_state_count")
-        def _on_state_recieved(**kwargs):
-            # updates max state if a stream delivers data to a new high state
+        state_count_key = f"{stream_id}_state_count"
+
+        @state.change(state_count_key)
+        def _on_state_received(**kwargs):
             if stream_source_name not in registry.src_ids():
                 return
-            if registry.max_state > state.max_time:
-                state.max_time = registry.max_state
+            state_count = state[state_count_key]
+            with state:
+                state.selected_time = state_count
+                if registry.max_state > state.max_time:
+                    state.max_time = registry.max_state
 
-        return (_on_stream_data_ready, _on_state_recieved)
+        error_key = f"{stream_id}_error"
+
+        @state.change(error_key)
+        def _on_stream_error(**kwargs):
+            state.stream_error = state[error_key]
+            state.stream_connecting = False
+            streams.pop(stream_source_name, None)
+
+        return (
+            _on_stream_data_ready,
+            _on_state_received,
+            _on_stream_error,
+        )
 
     @ctrl.set("open_stream_dialog")
     def open_stream_dialog():
@@ -64,16 +91,30 @@ def register_stream_menu_state_ctrl(
         state.show_stream_dialog = True
 
     @ctrl.set("connect_stream")
-    def connect_stream(stream_port, stream_source_name):
+    def connect_stream(
+        stream_port,
+        stream_source_name,
+    ):
         port = int(stream_port)
-        stream_source = VeraDataStream(stream_source_name, port, state_queue)
-        _make_stream_watcher(stream_source_name, stream_source)
-        stream_source.start()
+
+        stream = RomStream(
+            port=port,
+            stream_id=stream_source_name,
+            queue=state_queue,
+        )
+
+        # Register UI listeners before networking begins.
+        _make_stream_watcher(
+            stream_source_name,
+            stream,
+        )
+
+        streams[stream_source_name] = stream
+        state.ports_opened[stream_source_name] = port
+
         state.stream_connecting = True
-        state.stream_port = None
-        state.stream_source_name = ""
         state.stream_error = ""
-        # state.show_stream_dialog = False
+        stream.start()
 
     global stream_menu_state_initialized
     stream_menu_state_initialized = True

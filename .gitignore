@@ -17,7 +17,7 @@ temp.txt
 VeraCore.zip
 temp.py
 test_images
-
+/dev/
 # local env files
 .env.local
 .env.*.local

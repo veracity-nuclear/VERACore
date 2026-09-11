@@ -17,6 +17,8 @@ from .features import (
     VersionChecker,
 )
 
+MAX_TICKS = 60
+
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
@@ -56,8 +58,8 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-content-save")
 
-    # with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
-    #     vuetify.VIcon("mdi-access-point")
+    with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
+        vuetify.VIcon("mdi-access-point")
 
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
@@ -238,7 +240,7 @@ def build_footer(ft):
         max=("max_time", 0),
         dense=True,
         hide_details=True,
-        ticks="always",
+        ticks=(f"max_time <= {MAX_TICKS} ? 'always' : false",),
         tick_size="4",
         height=35,
     )

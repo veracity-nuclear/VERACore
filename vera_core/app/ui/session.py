@@ -46,6 +46,7 @@ class ViewSession:
 @dataclass
 class Session:
     version: int
+    stream_ports: list[tuple[str, int]]
     file_paths: dict[str, str]
     file_overrides: FileOverrides
     default_src_id: str | None
@@ -92,7 +93,12 @@ def build_session(state: State, registry: "VeraDataRegistry", all_view_ids: list
             )
         )
 
-    file_paths = registry.all_sources()
+    open_ports = state.ports_opened
+    file_paths = {
+        src_id: src_prov
+        for src_id, src_prov in registry.all_sources().items()
+        if src_id not in open_ports
+    }
     globals_ = {k: state[k] for k in SESSION_GLOBAL_KEYS if state.has(k)}
     recipes = state.derived_recipes if state.has("derived_recipes") else []
     all_recipes = state.recipes if state.has("recipes") else []
@@ -102,6 +108,7 @@ def build_session(state: State, registry: "VeraDataRegistry", all_view_ids: list
     session = Session(
         version=SESSION_VERSION,
         file_paths=file_paths,
+        stream_ports=open_ports,
         file_overrides=file_overrides,
         default_src_id=registry.default_src_id,
         globals=globals_,

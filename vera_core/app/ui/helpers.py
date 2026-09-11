@@ -63,7 +63,11 @@ def set_info(view_id: int, state: State, registry: VeraDataRegistry):
     dtype = vera_source.get_dataset_dtype(ds_name, state_idx=time)
     is_comp = dtype.is_computational()
     axial_mesh = vera_source.core.get_axial_mesh_means(dataset_type=dtype)
-    exposure = vera_source.get_dataset("exposure", state_idx=time)
+    exposure = (
+        vera_source.get_dataset("exposure", state_idx=time)
+        if vera_source.get_dataset_shape("exposure", state_idx=time) is not None
+        else None
+    )
     state[f"label_info_{view_id}"] = {
         "Exposure": np.round(exposure[0], decimals=3) if exposure is not None else "not recorded",
         "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),

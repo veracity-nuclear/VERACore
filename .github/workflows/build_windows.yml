@@ -94,7 +94,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes "Release ${{ steps.ver.outputs.clean }}" 2>/dev/null || true
+          gh release create "$TAG" \
+          --repo "${{ github.repository }}" \
+          --target "${{ github.sha }}" \
+          --title "$TAG" \
+          --notes "Release ${{ steps.ver.outputs.clean }}"
           gh release upload "$TAG" "Output/VeraCoreSetup.exe" --repo "${{ github.repository }}" --clobber
 
       # ========================= Publish update manifest =================================

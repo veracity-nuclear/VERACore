@@ -1,2 +1,21 @@
 [codespell]
-skip = **/package-lock.json
+skip =
+    .git,
+    .venv,
+    venv,
+    build,
+    dist,
+    *.egg-info,
+    package-lock.json,
+    bundles,
+    vue-components/node_modules,
+    VeraCore.spec,
+ignore-words-list =
+    vera,
+    veracore,
+    trame,
+    vtk,
+    vuetify,
+    pywebview,
+    cips,
+    nax,

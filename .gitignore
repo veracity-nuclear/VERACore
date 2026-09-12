@@ -2,6 +2,8 @@
 node_modules
 pyvera_lite
 .venv
+.pytest_cache
+.ruff_cache
 venv
 build
 .ipynb_checkpoints
@@ -10,6 +12,7 @@ dist_pylauncher
 vera_out_inspector.py
 temp.txt
 *.dmg
+*.patch
 VeraCore.zip
 
 # local env files

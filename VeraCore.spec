@@ -3,12 +3,13 @@ import sys
 
 is_mac = sys.platform == 'darwin'
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all, copy_metadata
 
 datas, binaries, hiddenimports = [], [], []
 
 datas += collect_data_files("vera_core")
 hiddenimports += collect_submodules("vera_core")
+datas += copy_metadata("vera-core")
 
 for pkg in ["trame", "trame_client", "trame_server", "trame_vuetify", "trame_vtk"]:
     datas += collect_data_files(pkg)

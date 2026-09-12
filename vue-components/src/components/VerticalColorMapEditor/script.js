@@ -29,6 +29,10 @@ export default {
       type: String,
       default: 'erdc_rainbow_bright',
     },
+    units: { 
+      type: String, 
+      default: '' ,
+    },
   },
   data() {
     return {

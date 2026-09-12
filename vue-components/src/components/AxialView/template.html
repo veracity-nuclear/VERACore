@@ -1,51 +1,78 @@
-<div class="container" style="width: 100%; height: 100%; overflow: hidden;">
-  <div :style="scaleStyle" style="position: relative; width: 100%; height: 100%;">
-    <div :style="sizeStyle" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-      <div style="position: relative;" @mouseleave="exit">
-
-        <!-- Column header row -->
-        <div style="display: flex;">
-          <div style="width: 30px; height: 30px; flex: none;"></div>
-          <div
-            v-for="(cell, i) in (value[0] || [])"
-            :key="i"
-            :style="{ width: xSizes[i] * xScale + 'px' }"
-            style="height: 30px; flex: none; display: flex; align-items: center; justify-content: center;"
-            class="text-overline"
-          >
-            {{ xLabels[i] }}
-          </div>
-        </div>
-
-        <!-- One <img> per row. mousemove updates the hovered column from
-             the cursor x position; click emits the same { i, j } as before. -->
-        <div
-          v-for="(line, j) in value"
-          :key="j"
-          style="display: flex;"
-        >
-          <div
-            :style="{ height: ySizes[j] * yScale + 'px' }"
-            style="width: 30px; flex: none; display: flex; align-items: center; justify-content: center;"
-            class="text-overline"
-          >
-            {{ yLabels[j] }}
-          </div>
-          <div
-            :style="{ width: rowWidthPx + 'px', height: ySizes[j] * yScale + 'px' }"
-            style="flex: none; position: relative;"
-            :class="{ busy, pointerCursor: !busy }"
-            @click="onRowClick($event, j)"
-            @mousemove="onRowHover($event, j)"
-          >
-            <img :src="rowUrl(j)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block;" />
-          </div>
-        </div>
-
-        <!-- Single highlight overlay -->
-        <div :style="highlightStyle"></div>
-
-      </div>
+<div class="vera-axial" style="position: relative; width: 100%; height: 100%; overflow: hidden;">
+  <div :style="frameStyle">
+    <div
+      v-for="i in visibleColumns"
+      :key="'x' + i"
+      class="vera-axial-label"
+      :style="xLabelStyle(i)"
+    >
+      {{ xLabels[i] }}
     </div>
+    <template v-if="useTicks">
+      <div
+        v-for="tick in yTicks"
+        :key="'t' + tick.value"
+        class="vera-axial-label"
+        :style="tickLabelStyle(tick.y)"
+      >
+        {{ tick.text }}
+      </div>
+      <div
+        v-for="tick in yTicks"
+        :key="'m' + tick.value"
+        class="vera-axial-tick"
+        :style="tickMarkStyle(tick.y)"
+      ></div>
+    </template>
+    <template v-else>
+      <div
+        v-for="j in visibleRows"
+        :key="'y' + j"
+        class="vera-axial-label"
+        :style="yLabelStyle(j)"
+      >
+        {{ yLabels[j] }}
+      </div>
+    </template>
+    <div
+      :style="dataStyle"
+      :class="{ busy, pointerCursor: !busy }"
+      @click="onClick"
+      @mousemove="onHover"
+      @mouseleave="exit"
+    >
+      <img
+        v-for="row in renderedRows"
+        :key="row.j"
+        :src="row.url"
+        :style="rowStyle(row.j)"
+      />
+      <div :style="highlightStyle"></div>
+    </div>
+
   </div>
+
+  <!-- Hover readout: exact elevation of the cell under the cursor. -->
+  <div class="vera-axial-tooltip" :style="tooltipStyle">{{ tooltipText }}</div>
 </div>
+
+<style scoped>
+.vera-axial-label {
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vera-axial-tick {
+  background: currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.vera-axial-tooltip {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+}
+</style>

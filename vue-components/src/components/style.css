@@ -22,3 +22,17 @@ html {
   text-shadow: 0 0 2px white, 0 0 2px white;
   white-space: nowrap;
 }
+
+.assembly-label--sm {
+  font-size: 5px;
+}
+
+vue-resizable-handle {
+  z-index: 30;
+  opacity: 0.9;
+}
+
+.theme--dark .vue-resizable-handle,
+.v-application.theme--dark .vue-resizable-handle {
+  filter: invert(1);
+}

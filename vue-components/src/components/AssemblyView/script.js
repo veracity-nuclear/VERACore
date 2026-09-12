@@ -26,9 +26,7 @@ export default {
     },
     activeStyle: {
       type: Object,
-      default: () => ({
-        outline: 'solid 3px black',
-      }),
+      default: () => ({}),
     },
     busy: {
       type: Boolean,
@@ -37,6 +35,10 @@ export default {
     dark: {
       type: Boolean,
       default: false,
+    },
+    decimals: {
+      type: Number,
+      default: 2,
     },
   },
   watch: {
@@ -124,17 +126,22 @@ export default {
         return '0';
       }
       const abs = Math.abs(v);
+      const d = this.decimals;
       if (abs < 1e-2 || abs >= 1e5) {
-        return v.toExponential(2).replace(/\.?0+e/, 'e');
+        return v.toExponential(d).replace(/\.?0+e/, 'e');
       }
-      return v.toFixed(2);
+      return v.toFixed(d);
     },
     toStyle(i, j) {
-      const style = {};
-      if (i == this.activeI && j == this.activeJ) {
-        Object.assign(style, this.activeStyle);
+      if (i != this.activeI || j != this.activeJ) {
+        return {};
       }
-      return style;
+      return {
+        outline: this.dark ? 'solid 3px white' : 'solid 3px black',
+        outlineOffset: '-1px',
+        zIndex: 10,
+        ...this.activeStyle,
+      };
     },
     updateLookupTable() {
       const preset = vtkColorMaps.getPresetByName(this.colorPreset);

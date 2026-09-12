@@ -22,7 +22,7 @@ export default {
     colorRange: { type: Array, default: () => [0, 1] },
     activeStyle: {
       type: Object,
-      default: () => ({ outline: 'solid 3px black', zIndex: 10 }),
+      default: () => ({}),
     },
     busy: { type: Boolean, default: false },
     dark: { type: Boolean, default: false },
@@ -133,11 +133,15 @@ export default {
       this.activeJ = this.selectedJ + 1;
     },
     toStyle(i, j) {
-      const style = {};
-      if (i === this.activeI && j === this.activeJ) {
-        Object.assign(style, this.activeStyle);
+      if (i !== this.activeI || j !== this.activeJ) {
+        return {};
       }
-      return style;
+      return {
+        outline: this.dark ? 'solid 1px white' : 'solid 1px black',
+        outlineOffset: '-1px',
+        zIndex: 10,
+        ...this.activeStyle,
+      };
     },
     isSelectedTriangle(i, j, surface) {
       return (

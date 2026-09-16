@@ -66,4 +66,10 @@ linked, interactive views arranged in a configurable grid.
 
 - This version adds vera streams from roms
 
-[2.0.4]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.5
+[2.0.5]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.5
+
+## [2.0.6] - 2026-09-16
+
+- This version now identifies datasets with up to 51 energy groups, now determines if the core_map is unused and if the so, uses the computational_core_map as the core_map is present.
+
+[2.0.6]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.6

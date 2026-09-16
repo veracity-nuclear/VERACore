@@ -10,6 +10,7 @@ from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
+    VeraDtype.COMP_PIN,
     VeraDtype.CHANNEL,
     VeraDtype.RADIAL,
     VeraDtype.COMP_NODAL,
@@ -132,7 +133,7 @@ class AssemblySlice(GroupedSlice):
         if array_dtype not in ALLOWED_DTYPES_:
             return None
         match array_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
+            case VeraDtype.PIN | VeraDtype.CHANNEL | VeraDtype.COMP_PIN:
                 images_dataset = [array[:, :, z, assembly_id].copy()]
             case VeraDtype.RADIAL:
                 images_dataset = [array[:, :, assembly_id].copy()]
@@ -151,6 +152,7 @@ class AssemblySlice(GroupedSlice):
         if (
             array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL)
             and vera_source.core.non_fuel_locs is not None
+            and vera_source.core.pin_volumes.shape == array.shape
         ):
             rows, cols, layers, assys = vera_source.core.non_fuel_locs
             in_image = (assys == assembly_id) & (layers == z)
@@ -172,19 +174,3 @@ class AssemblySlice(GroupedSlice):
 
     def serialize_data_groups(self) -> list[list[float]]:
         return [np.ravel(group).tolist() for group in self.data_groups]
-
-
-def nan_out_non_fuel_pins(
-    lattice: np.ndarray, source: VeraDataSource, assembly: int, z: int, is_radial: bool
-) -> np.ndarray:
-    """Blank guide tubes and other non-fuel positions in one assembly."""
-    locs = source.core.non_fuel_locs
-    if locs is None:
-        return lattice
-    rows, cols, layers, assemblies = locs
-    keep = assemblies == assembly
-    if not is_radial:
-        keep = keep & (layers == z)
-    blanked = lattice.copy()
-    blanked[rows[keep], cols[keep]] = np.nan
-    return blanked

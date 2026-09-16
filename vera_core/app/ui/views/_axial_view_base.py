@@ -35,16 +35,7 @@ def option_for(view_id, axis):
         "label": cfg["label"],
         "multi_picker": False,
         "icon": cfg["icon"],
-        "allowed_categories": [
-            VeraDtype.PIN.title,
-            VeraDtype.CHANNEL.title,
-            VeraDtype.ASSEMBLY.title,
-            VeraDtype.COMP_NODAL.title,
-            VeraDtype.COMP_NODAL_ENERGY.title,
-            VeraDtype.COMP_ASSY.title,
-            VeraDtype.COMP_ASSY_ENERGY.title,
-            VeraDtype.NODAL.title,
-        ],
+        "allowed_categories": [dtype.title for dtype in AxialSlice.ALLOWED_DTYPES],
     }
 
 
@@ -108,6 +99,8 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     def update_axial_selected_layer(**kwargs):
         src_id = state[selected_src_key]
         array_dtype = registry.get_ds_dtype(src_id, state[selected_array_key])
+        if array_dtype == VeraDtype.UNKNOWN:
+            return
         state[selected_layer_key] = registry.global_axial_idx_to_src_idx(
             src_id, array_dtype, state.selected_layer
         )

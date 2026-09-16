@@ -20,6 +20,7 @@ type Indices = dict[VeraDim, int]
 
 ALLOWED_DTYPES_ = [
     VeraDtype.PIN,
+    VeraDtype.COMP_PIN,
     VeraDtype.CHANNEL,
     VeraDtype.AXIAL,
     VeraDtype.ASSEMBLY,

@@ -23,6 +23,7 @@ MAX_LABEL_WIDTH = 4
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
+    VeraDtype.COMP_PIN,
     VeraDtype.CHANNEL,
     VeraDtype.ASSEMBLY,
     VeraDtype.COMP_ASSY,
@@ -492,7 +493,7 @@ def _build_group_grid(
     is_assembly = array_dtype.is_assembly()
     arr = array_2d_or_nodal
     assembly_data_indices = assembly_indices[assembly_indices > -1]
-    if array_dtype in (VeraDtype.PIN, VeraDtype.CHANNEL):
+    if array_dtype.has_pin_level_dim():
         cell_width = arr.shape[0]
         if is_x:
             image_data = arr[selected_pin, :, :, assembly_data_indices]
@@ -508,11 +509,7 @@ def _build_group_grid(
         data_width = display_width = cell_width
         label_count = 1
 
-    elif array_dtype in (
-        VeraDtype.COMP_NODAL,
-        VeraDtype.COMP_NODAL_ENERGY,
-        VeraDtype.NODAL,
-    ):
+    elif array_dtype.is_nodal():
         nodal = arr[:, :, assembly_data_indices]  # (nodes, nax, ncols)
         n_nodes = nodal.shape[0]
         if n_nodes == 1:

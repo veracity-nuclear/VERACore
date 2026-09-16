@@ -1,4 +1,3 @@
-import string
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
@@ -238,6 +237,20 @@ class VeraOutCore(DatasetStore):
         if not self.has_axial_mesh():
             self.axial_mesh = FALLBACK_AXIAL_MESH
         self._determine_computational_core_shape()
+        for geometry_checkers in (
+            "STATE_0001/pin_powers",
+            "pin_factors",
+            "pin_heated_surface_area",
+            "pin_volumes",
+        ):
+            ref_shape = self.shape(geometry_checkers)
+            if ref_shape is None:
+                continue
+            _, _, _, ref_nass = ref_shape
+            if ref_nass == self.comp_nass:
+                self.nass = ref_nass
+                self.core_map = self.comp_core_map
+                break
         self._determine_detectors()
         self.shape_to_dtype = build_core_dtypes(
             npiny=self.npy,
@@ -269,6 +282,9 @@ class VeraOutCore(DatasetStore):
         self.npy = None
         self.npx = None
         self._npin_src = self._nax_src = "Could not find"
+        if self.has_axial_mesh():
+            self.nax = len(self.axial_mesh) - 1
+            self._nax_src = "/CORE/axial_mesh"
         self._pin_pitch = DEFAULT_PIN_PITCH
         self.apitch = DEFAULT_PIN_PITCH * 17
         for pin_ds_name in ("npin", "num_pins"):
@@ -286,12 +302,18 @@ class VeraOutCore(DatasetStore):
         ):
             core_geometry = self.shape(geometry_ds_name)
             if core_geometry and len(core_geometry) == 4:
-                self.npy, self.npx, self.nax, self.nass = core_geometry
+                self.npy, self.npx, _nax, _nass = core_geometry
                 is_state = geometry_ds_name.startswith("STATE_")
-                self._npin_src = self._nax_src = (
-                    f"/CORE/{geometry_ds_name}" if not is_state else geometry_ds_name
-                )
-                break
+                if self.nax is None:
+                    self.nax = _nax
+                    self._nax_src = (
+                        f"/CORE/{geometry_ds_name}" if not is_state else geometry_ds_name
+                    )
+                elif self.nax != _nax:
+                    raise RuntimeError(
+                        f"Mismatch between axial levels {_nax} from {geometry_ds_name} and axial levels {self.nax} from {self._nax_src}"
+                    )
+                self._npin_src = f"/CORE/{geometry_ds_name}" if not is_state else geometry_ds_name
 
         if "npin" in overrides:
             self.npy = self.npx = overrides["npin"]
@@ -301,9 +323,6 @@ class VeraOutCore(DatasetStore):
             self.nax = nax
             self.axial_mesh = np.linspace(0, (nax + 1) * DEFAULT_AXIAL_MESH_STEP, nax + 1)
             self._nax_src = "Overrides"
-        elif self.has_axial_mesh():
-            self.nax = len(self.axial_mesh) - 1
-            self._nax_src = "/CORE/axial_mesh"
 
         apitch = self.get("apitch")
         if apitch is not None and self.npx:
@@ -414,7 +433,6 @@ class VeraOutCore(DatasetStore):
             if hasattr(self, "reduced_core_map_start_index")
             else 0
         )
-        alphabet = [*string.ascii_uppercase]
 
         if (raw_xlabels := self.get("xlabel")) is not None:
             xlabels = [char.decode() for char in raw_xlabels[start_index:]]
@@ -427,11 +445,12 @@ class VeraOutCore(DatasetStore):
         else:
             ylabels = list(range(start_index + 1, start_index + num_rows + 1))
         self.reduced_core_map_row_labels = ylabels
-
         if not self.has_comp_core():
             return
         comp_num_rows, comp_num_cols = self.comp_core_map.shape
-        self.comp_core_map_column_labels = list(reversed(alphabet[:comp_num_cols]))
+        self.comp_core_map_column_labels = list(
+            reversed([col_label(i) for i in range(comp_num_cols)])
+        )
         self.comp_core_map_row_labels = list(
             range(start_index + 1, start_index + comp_num_rows + 1)
         )

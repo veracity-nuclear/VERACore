@@ -12,8 +12,8 @@ class CoreOverride(TypedDict, total=False):
 
 type FileOverrides = dict[str, CoreOverride]
 
-NUM_ENERGY_GROUPS = 2
-MAX_NUM_GROUPS = 8
+MIN_NUM_GROUPS = 2
+MAX_NUM_GROUPS = 51
 NUM_DF = 6
 NUM_NODES = 4
 LATERAL_SURFACES = slice(0, 4)
@@ -143,6 +143,7 @@ class VeraDtype(Enum):
     POINT_DETECTOR = 18
     RADIAL_POINT_DETECTOR = 19
     CONTINOUS_DETECTOR = 20
+    COMP_PIN = 21
 
     def __str__(self):
         return self.name
@@ -303,6 +304,13 @@ _INFO = {
     VeraDtype.CHANNEL_RADIAL: _Info(pin_idxs=(0, 1), assembly_id_idx=2, channel=True),
     VeraDtype.RADIAL_NODE: _Info(node_dim_idx=0, assembly_id_idx=1, nodal=True),
     VeraDtype.UNKNOWN: _Info(),
+    VeraDtype.COMP_PIN: _Info(
+        pin_idxs=(0, 1),
+        axial_idx=2,
+        assembly_id_idx=3,
+        fuel_pin=True,
+        computational=True,
+    ),
     VeraDtype.COMP_NODAL: _Info(
         node_dim_idx=0, axial_idx=1, assembly_id_idx=2, computational=True, nodal=True
     ),
@@ -736,32 +744,25 @@ def build_core_dtypes(
         }
     if comp_nax and comp_nass:
         shape_to_dtype |= {
+            (npiny, npinx, comp_nax, comp_nass): VeraDtype.COMP_PIN,
             (NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL,
-            (
-                NUM_DF,
-                NUM_ENERGY_GROUPS,
-                NUM_NODES,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_NODAL_SURFACE,
-            (NUM_DF, 8, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_SURFACE,
-            (
-                NUM_ENERGY_GROUPS,
-                NUM_NODES,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_NODAL_ENERGY,
-            (8, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_ENERGY,
             (1, comp_nax, comp_nass): VeraDtype.COMP_ASSY,
-            (
-                NUM_DF,
-                NUM_ENERGY_GROUPS,
-                1,
-                comp_nax,
-                comp_nass,
-            ): VeraDtype.COMP_ASSY_SURFACE,
-            (NUM_DF, 8, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_SURFACE,
-            (NUM_ENERGY_GROUPS, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_ENERGY,
-            (8, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_ENERGY,
         }
+        shape_to_dtype |= {
+            (n_groups, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_ENERGY
+            for n_groups in range(MIN_NUM_GROUPS, MAX_NUM_GROUPS + 1)
+        }
+        shape_to_dtype |= {
+            (NUM_DF, n_groups, 1, comp_nax, comp_nass): VeraDtype.COMP_ASSY_SURFACE
+            for n_groups in range(MIN_NUM_GROUPS, MAX_NUM_GROUPS + 1)
+        }
+        shape_to_dtype |= {
+            (n_groups, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_ENERGY
+            for n_groups in range(MIN_NUM_GROUPS, MAX_NUM_GROUPS + 1)
+        }
+        shape_to_dtype |= {
+            (NUM_DF, n_groups, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_SURFACE
+            for n_groups in range(MIN_NUM_GROUPS, MAX_NUM_GROUPS + 1)
+        }
+
     return shape_to_dtype

@@ -2,7 +2,6 @@ from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
 from vera_core.data.analysis.core_slice import CoreSlice
-from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.renders import CoreView, Selection
@@ -12,6 +11,7 @@ from ..helpers import format_label, get_safe_idxs, get_thresholds, is_non_active
 from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
+MAX_VIS_GROUPS = 4
 
 
 def option_for(view_id):
@@ -35,7 +35,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
-    group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    group_keys = [f"core_assemblies_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     x_label_key = f"core_view_x_labels_{view_id}"
     y_label_key = f"core_view_y_labels_{view_id}"
     core_cols_key = f"core_cols_{view_id}"
@@ -111,7 +111,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
         results = core_slice.serialize_data_groups()
         num_groups = len(results)
-        for idx in range(MAX_NUM_GROUPS):
+        for idx in range(MAX_VIS_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx][0]
         state[n_groups_key] = num_groups
         state[assembly_size_key] = core_slice.assembly_side
@@ -131,7 +131,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
-                for g in range(MAX_NUM_GROUPS):
+                for g in range(MAX_VIS_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(

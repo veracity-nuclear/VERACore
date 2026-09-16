@@ -10,6 +10,7 @@ from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
+    VeraDtype.COMP_PIN,
     VeraDtype.CHANNEL,
     VeraDtype.ASSEMBLY,
     VeraDtype.RADIAL,
@@ -131,8 +132,10 @@ class CoreSlice(GroupedSlice):
         )
         core = vera_source.core
         for idx, layer in enumerate(layer_list):
-            if ds_dtype.has_fuel_pins():
-                layer = nan_out_non_fuel_locs(layer, vera_source, z, ds_dtype == VeraDtype.RADIAL)
+            if ds_dtype.has_fuel_pins() and not ds_dtype.is_computational():
+                layer = nan_out_non_fuel_locs(
+                    layer, vera_source, dataset.shape, z, ds_dtype == VeraDtype.RADIAL
+                )
             if thresholds:
                 layer = apply_thresholds(layer, thresholds)
             layer_list[idx] = layer
@@ -177,10 +180,16 @@ class CoreSlice(GroupedSlice):
 
 
 def nan_out_non_fuel_locs(
-    array: np.ndarray, src: VeraDataSource, selected_layer: int, is_radial: bool
+    array: np.ndarray,
+    src: VeraDataSource,
+    raw_dataset_shape: tuple,
+    selected_layer: int,
+    is_radial: bool,
 ):
     non_fuel_locs = src.core.non_fuel_locs
     if non_fuel_locs is None:
+        return array
+    if src.core.pin_volumes.shape != raw_dataset_shape:
         return array
     rod_rows, rod_cols, layers, assy_id = non_fuel_locs
     keep = slice(None) if is_radial else (layers == selected_layer)

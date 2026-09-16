@@ -6,6 +6,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html, plotly, vuetify
 
 from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.model import VeraDataSource, VeraOutState
 from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
@@ -52,8 +53,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     series_cache: OrderedDict = OrderedDict()
 
-    def _value_at(st, array_name, indices):
+    def _value_at(st: VeraOutState, array_name, indices):
         """One point of a series."""
+        array_shape = st.shape(array_name)
+        if (
+            array_shape is None
+            or len(indices) != len(array_shape)
+            or any(i < 0 or i >= size for i, size in zip(indices, array_shape, strict=False))
+        ):
+            return np.nan
+
         sampler = getattr(getattr(st, "source", None), "sample", None)
         if sampler is not None:
             value = sampler(array_name, indices)
@@ -61,7 +70,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 return value
         return st.get(array_name)[indices]
 
-    def series(src, src_id, array_name, indices):
+    def series(src: VeraDataSource, src_id, array_name, indices):
         """Values per state index, None where the state lacks the dataset"""
         key = (src_id, array_name, indices)
         values = series_cache.pop(key, None)

@@ -121,7 +121,11 @@ def option_for(view_id):
         "name": f"volume_view_{view_id}",
         "label": "Volume View",
         "icon": "mdi-rotate-3d",
-        "allowed_categories": [VeraDtype.PIN.title, VeraDtype.CHANNEL.title],
+        "allowed_categories": [
+            VeraDtype.PIN.title,
+            VeraDtype.COMP_PIN.title,
+            VeraDtype.CHANNEL.title,
+        ],
     }
 
 

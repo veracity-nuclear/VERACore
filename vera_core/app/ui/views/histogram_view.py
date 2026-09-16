@@ -32,6 +32,7 @@ def option_for(view_id):
         "icon": "mdi-chart-histogram",
         "allowed_categories": [
             VeraDtype.PIN.title,
+            VeraDtype.COMP_PIN.title,
             VeraDtype.CHANNEL.title,
             VeraDtype.AXIAL.title,
             VeraDtype.ASSEMBLY.title,

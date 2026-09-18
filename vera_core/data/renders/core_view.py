@@ -1,6 +1,7 @@
 """The core map view: one axial layer on the assembly grid, a panel per group."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from matplotlib.cm import ScalarMappable
 
@@ -28,6 +29,7 @@ class CoreView(View):
         src_id: str | None = None,
         rows: slice | None = None,
         cols: slice | None = None,
+        aspect_ratio: float = 1.0,
         thresholds: Sequence[ThresholdCondition] = (),
     ) -> Selection:
         """Bind one array, layer and state, ready to render.
@@ -45,6 +47,7 @@ class CoreView(View):
             rows=rows,
             cols=cols,
             thresholds=tuple(thresholds),
+            aspect_ratio=aspect_ratio,
         )
 
     def build_slice(self, selection: Selection) -> CoreSlice:
@@ -55,6 +58,7 @@ class CoreView(View):
             state_idx=selection.state,
             thresholds=selection.thresholds,
         )
+        slice_ = replace(slice_, aspect_ratio=selection.aspect_ratio)
         if slice_ is None:
             raise ValueError(f"{selection.label()} has no core view")
         if selection.rows is not None or selection.cols is not None:

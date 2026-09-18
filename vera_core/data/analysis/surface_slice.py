@@ -19,6 +19,8 @@ place on a radial map."""
 ALLOWED_DTYPES: list[VeraDtype] = [
     VeraDtype.COMP_ASSY_SURFACE,
     VeraDtype.COMP_NODAL_SURFACE,
+    VeraDtype.NODAL_SURFACE,
+    VeraDtype.ASSY_SURFACE,
 ]
 
 

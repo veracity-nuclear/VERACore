@@ -33,6 +33,10 @@ ALLOWED_DTYPES_ = [
     VeraDtype.NODAL,
     VeraDtype.POINT_DETECTOR,
     VeraDtype.CONTINOUS_DETECTOR,
+    VeraDtype.NODAL_ENERGY,
+    VeraDtype.NODAL_SURFACE,
+    VeraDtype.ASSY_SURFACE,
+    VeraDtype.ASSY_ENERGY,
 ]
 
 

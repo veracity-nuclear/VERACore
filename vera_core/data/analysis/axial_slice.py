@@ -32,6 +32,8 @@ ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.COMP_NODAL,
     VeraDtype.COMP_NODAL_ENERGY,
     VeraDtype.NODAL,
+    VeraDtype.NODAL_ENERGY,
+    VeraDtype.ASSY_ENERGY,
 ]
 
 
@@ -128,9 +130,14 @@ class AxialSlice(GroupedSlice):
         else:
             assembly_indices = core.col_assembly_indices(assembly_id, is_comp, is_detector)
 
-        if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.COMP_ASSY_ENERGY):
+        if array_dtype in (
+            VeraDtype.COMP_NODAL_ENERGY,
+            VeraDtype.COMP_ASSY_ENERGY,
+            VeraDtype.ASSY_ENERGY,
+            VeraDtype.NODAL_ENERGY,
+        ):
             num_groups = array.shape[0]
-            if array_dtype == VeraDtype.COMP_ASSY_ENERGY:
+            if array_dtype in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.ASSY_ENERGY):
                 group_arrays = [array[g, 0] for g in range(num_groups)]
             else:
                 group_arrays = [array[g] for g in range(num_groups)]

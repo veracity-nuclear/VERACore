@@ -38,6 +38,8 @@ class H5DatasetSource(DatasetSource):
     ):
         self._f = file
         self._dir = dir
+        if dir not in self._f:
+            raise ValueError(f"'{dir}' is not a group in the file:", file.filename)
         group = self._f[dir]
         if not isinstance(group, h5py.Group):
             raise ValueError(f"The directory {dir} is not a group in h5 file {file.filename}")

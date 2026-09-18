@@ -16,6 +16,7 @@ ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.RADIAL,
     VeraDtype.COMP_NODAL,
     VeraDtype.COMP_NODAL_ENERGY,
+    VeraDtype.NODAL_ENERGY,
 ]
 
 RADIAL_DTYPES = (VeraDtype.RADIAL,)

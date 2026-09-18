@@ -23,6 +23,8 @@ ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.NODAL,
     VeraDtype.POINT_DETECTOR,
     VeraDtype.RADIAL_POINT_DETECTOR,
+    VeraDtype.NODAL_ENERGY,
+    VeraDtype.ASSY_ENERGY,
 ]
 
 

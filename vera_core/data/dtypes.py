@@ -144,6 +144,10 @@ class VeraDtype(Enum):
     RADIAL_POINT_DETECTOR = 19
     CONTINOUS_DETECTOR = 20
     COMP_PIN = 21
+    ASSY_ENERGY = 22
+    NODAL_ENERGY = 23
+    NODAL_SURFACE = 24
+    ASSY_SURFACE = 26
 
     def __str__(self):
         return self.name
@@ -352,6 +356,38 @@ _INFO = {
     VeraDtype.RADIAL_POINT_DETECTOR: _Info(assembly_id_idx=0, assembly=True, detector=True),
     VeraDtype.CONTINOUS_DETECTOR: _Info(
         axial_idx=0, assembly_id_idx=1, assembly=True, detector=True
+    ),
+    VeraDtype.NODAL_ENERGY: _Info(
+        group_idx=0,
+        node_dim_idx=1,
+        axial_idx=2,
+        assembly_id_idx=3,
+        nodal=True,
+    ),
+    VeraDtype.NODAL_SURFACE: _Info(
+        surface_idx=0,
+        group_idx=1,
+        node_dim_idx=2,
+        axial_idx=3,
+        assembly_id_idx=4,
+        nodal=True,
+        surface=True,
+    ),
+    VeraDtype.ASSY_ENERGY: _Info(
+        group_idx=0,
+        fixed_idxs={1: 0},
+        axial_idx=2,
+        assembly_id_idx=3,
+        assembly=True,
+    ),
+    VeraDtype.ASSY_SURFACE: _Info(
+        surface_idx=0,
+        group_idx=1,
+        fixed_idxs={2: 0},
+        axial_idx=3,
+        assembly_id_idx=4,
+        assembly=True,
+        surface=True,
     ),
 }
 
@@ -725,6 +761,13 @@ def build_core_dtypes(
             (1,): VeraDtype.SCALAR,
             (): VeraDtype.SCALAR,
         }
+        for n_groups in range(MIN_NUM_GROUPS, MAX_NUM_GROUPS + 1):
+            shape_to_dtype |= {
+                (n_groups, 1, nax, nass): VeraDtype.ASSY_ENERGY,
+                (NUM_DF, n_groups, 1, nax, nass): VeraDtype.ASSY_SURFACE,
+                (n_groups, NUM_NODES, nax, nass): VeraDtype.NODAL_ENERGY,
+                (NUM_DF, n_groups, NUM_NODES, nax, nass): VeraDtype.NODAL_SURFACE,
+            }
     if ndet and ndax and (ndet != nass or ndax != ndet):
         shape_to_dtype |= {
             (ndax, ndet): VeraDtype.CONTINOUS_DETECTOR

@@ -34,5 +34,13 @@ def threshold_mask(
 def apply_thresholds(
     array: VeraDataset | np.ndarray, conditions: Sequence[ThresholdCondition]
 ) -> VeraDataset:
-    dtype = array.dataset_type if isinstance(array, VeraDataset) else VeraDtype.UNKNOWN
-    return VeraDataset(np.where(threshold_mask(array, conditions), array, np.nan), dtype)
+    is_vera_dataset = isinstance(array, VeraDataset)
+    dtype = array.dataset_type if is_vera_dataset else VeraDtype.UNKNOWN
+    units = array.physical_units if is_vera_dataset else "Unitless"
+    name = array.name if is_vera_dataset else None
+    return VeraDataset(
+        np.where(threshold_mask(array, conditions), array, np.nan),
+        dataset_type=dtype,
+        name=name,
+        physical_units=units,
+    )

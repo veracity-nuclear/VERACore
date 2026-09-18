@@ -42,7 +42,7 @@ class VeraDataRegistry:
         core = src.core
         if self.default_src_id is None:
             self.default_src_id = src_id
-            self.global_axial_mesh = core.gross_axial_mesh
+            self.global_axial_mesh = core.gross_axial_mesh.copy()
         else:
             self.global_axial_mesh = np.union1d(self.global_axial_mesh, core.gross_axial_mesh)
         src.name = src_id
@@ -89,8 +89,7 @@ class VeraDataRegistry:
 
     def global_axial_idx_to_src_idx(self, src_id: str, ds_dtype: VeraDtype, idx: int):
         if src_id not in self._srcs:
-            # FIXME, should probably not return 0
-            return 0
+            raise ValueError("src_id :", src_id, "is not in registry")
         core = self._srcs[src_id].core
         physical_layer = self.global_axial_mesh[idx]
         src_axial_mesh = core.get_axial_mesh_means(dataset_type=ds_dtype)
@@ -132,7 +131,7 @@ class VeraDataRegistry:
 
     def shared_time_axes(self):
         if not self._srcs:
-            return
+            return []
         srcs = iter(self._srcs.values())
         shared_axes = set(next(srcs).time_axes())
         for src in srcs:
@@ -178,6 +177,7 @@ class VeraDataRegistry:
         self._srcs = {}
         self._recipes = []
         self._auto_derivation = []
+        self.global_axial_mesh = np.asarray([], dtype=np.float64)
         self.default_src_id = None
 
     def apply_recipe(self, recipe: dict):
@@ -211,9 +211,15 @@ class VeraDataRegistry:
                     axes=VeraAxes[recipe["axes"]],
                 )
         elif kind == "diff":
-            self.get(recipe["ref_src_id"]).add_new_diff_dataset(
+            ref_src = self.get(recipe.get("ref_src_id"))
+            comp_src = self.get(recipe.get("comp_src_id"))
+            if ref_src is None or comp_src is None:
+                raise ValueError(
+                    "Cannot apply diff, could not find reference source or comparison source in the registry."
+                )
+            ref_src.add_new_diff_dataset(
                 recipe["ref_array"],
-                self.get(recipe["comp_src_id"]),
+                comp_src,
                 recipe["comp_array"],
                 recipe["name"],
                 recipe["interp_degree"],

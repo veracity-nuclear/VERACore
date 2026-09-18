@@ -112,7 +112,7 @@ class AxialLinesView(View):
 
     # -- sweeps ------------------------------------------------------------
 
-    def shared_color(self, slices, scope=None):
+    def shared_color(self, slices, style):
         """Lines carry no scale, so a sweep has none to hold constant. The
         frames of a collage still share an axis range, which set_ylim gives
         them from each frame's own extents."""
@@ -198,17 +198,17 @@ class AxialLinesView(View):
         return handles
 
     def render(self, lines_: AxialLines, selection: Selection, options: RenderOptions) -> Canvas:
+        style = options.style
         canvas = Canvas(
             1,
             panel_aspect=PLOT_ASPECT,
-            style=options.style,
+            style=style,
             title=options.resolved_title(self, selection),
-            caption=self.caption(lines_, selection) if options.caption else None,
-            panel_width=options.panel_width,
+            caption=self.caption(lines_, selection) if style.show_caption else None,
         )
         panel = canvas.panels[0]
-        handles = self.draw_plot(panel, lines_, selection, options.style, options.value_limits)
-        draw.legend(panel.figure, handles, options.style, columns=LEGEND_COLUMNS)
+        handles = self.draw_plot(panel, lines_, selection, style, options.value_limits)
+        draw.legend(panel.figure, handles, style, columns=LEGEND_COLUMNS)
         return canvas
 
     def render_collage(
@@ -225,6 +225,7 @@ class AxialLinesView(View):
         The frames hold the same lines at different states or with the marker
         at a different level, so naming them once is enough.
         """
+        style = options.style
         n_frames = len(slices)
         grid, cells = block_layout(1, n_frames, columns)
         canvas = Canvas(
@@ -232,14 +233,13 @@ class AxialLinesView(View):
             grid=grid,
             cells=cells,
             panel_aspect=PLOT_ASPECT,
-            style=options.style,
+            style=style,
             title=options.resolved_title(self, selections[0]),
-            caption=self.collage_caption(slices, selections, over) if options.caption else None,
-            panel_width=options.panel_width,
+            caption=self.collage_caption(slices, selections, over) if style.show_caption else None,
         )
         handles = []
         for panel, lines_, selection in zip(canvas.panels, slices, selections, strict=True):
-            handles = self.draw_plot(panel, lines_, selection, options.style, options.value_limits)
+            handles = self.draw_plot(panel, lines_, selection, style, options.value_limits)
             panel.title(self.frame_title(selection, over))
-        draw.legend(canvas.panels[0].figure, handles, options.style, columns=LEGEND_COLUMNS)
+        draw.legend(canvas.panels[0].figure, handles, style, columns=LEGEND_COLUMNS)
         return canvas

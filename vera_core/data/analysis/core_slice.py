@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, Sequence
 
 import numpy as np
@@ -6,7 +6,8 @@ import numpy as np
 from ..dtypes import VeraDataset, VeraDim, VeraDtype
 from ..model import VeraDataSource
 from ..thresholds import ThresholdCondition, apply_thresholds
-from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core_labels
+from .info import create_info
+from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core_labels, get_dataset
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
@@ -64,6 +65,24 @@ class CoreSlice(GroupedSlice):
             return assembly_side(self.cell_shape[0])
         return 1
 
+    def cropped(self, rows: slice, cols: slice) -> "CoreSlice":
+        """The rows x cols window of the assembly grid as its own slice."""
+        core_map = self.core_map[rows, cols]
+        kept = np.zeros(len(self.data_groups[0]), dtype=bool)
+        kept[core_map[core_map > 0].astype(int) - 1] = True
+        data_groups = []
+        for values in self.data_groups:
+            values = values.astype(float)
+            values[~kept] = np.nan
+            data_groups.append(values)
+        return replace(
+            self,
+            data_groups=data_groups,
+            core_map=core_map,
+            x_labels=self.x_labels[cols],
+            y_labels=self.y_labels[rows],
+        )
+
     def to_grid(self, group: int = 0) -> np.ndarray:
         """One group laid out on the assembly grid"""
         side = self.assembly_side
@@ -119,7 +138,7 @@ class CoreSlice(GroupedSlice):
     ) -> "CoreSlice | None":
         if z < 0:
             raise RuntimeError(f"z must be < 0, z = {z}")
-        dataset = vera_source.get_dataset(dataset_name, state_idx=state_idx)
+        dataset = get_dataset(vera_source, dataset_name, state_idx=state_idx)
         ds_dtype = dataset.dataset_type
         if ds_dtype not in ALLOWED_DTYPES_:
             return None
@@ -150,6 +169,7 @@ class CoreSlice(GroupedSlice):
             units=dataset.physical_units,
             core_map=vera_source.core.get_map(dataset),
             dataset_ranges=build_dataset_ranges(dataset),
+            info=create_info(vera_source, dataset, z=z, state_idx=state_idx),
         )
 
     def serialize_data_groups(self) -> list[tuple[list, list]]:

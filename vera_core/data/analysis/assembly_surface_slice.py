@@ -5,8 +5,9 @@ import numpy as np
 
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource
+from .info import create_info
 from .surface_slice import ALLOWED_DTYPES, FACES, LATERAL_FACE_SLICE
-from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges
+from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, get_dataset
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -108,7 +109,7 @@ class AssemblySurfaceSlice(GroupedSlice):
         assembly_id: int,
         state: int | None = None,
     ) -> "AssemblySurfaceSlice | None":
-        array = vera_source.get_dataset(selected_array, state_idx=state)
+        array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype = array.dataset_type
         if array_dtype not in ALLOWED_DTYPES:
             return None
@@ -128,6 +129,7 @@ class AssemblySurfaceSlice(GroupedSlice):
             dtype=array.dataset_type,
             units=array.physical_units,
             dataset_ranges=build_dataset_ranges(array),
+            info=create_info(vera_source, array, z=z, assembly=assembly_id, state_idx=state),
         )
 
     def serialize_data_groups(self) -> list[list[list]]:

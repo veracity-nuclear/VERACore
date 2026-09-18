@@ -5,7 +5,8 @@ import numpy as np
 
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource
-from .vera_slices import GroupedSlice, assembly_side, axis_labels, build_dataset_ranges
+from .info import create_info
+from .vera_slices import GroupedSlice, assembly_side, axis_labels, build_dataset_ranges, get_dataset
 
 FACES: tuple[str, ...] = ("W", "N", "E", "S")
 """Order the reader delivers lateral faces in, and the order stored in the
@@ -193,7 +194,7 @@ class SurfaceSlice(GroupedSlice):
     def create_surface_slice(
         cls, vera_source: VeraDataSource, selected_array: str, z: int, state: int | None = None
     ) -> "SurfaceSlice | None":
-        array = vera_source.get_dataset(selected_array, state_idx=state)
+        array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype = array.dataset_type
         if array_dtype not in ALLOWED_DTYPES:
             return None
@@ -217,6 +218,7 @@ class SurfaceSlice(GroupedSlice):
             dataset_ranges=build_dataset_ranges(array),
             x_labels=x_labels,
             y_labels=y_labels,
+            info=create_info(vera_source, array, z=z, state_idx=state),
         )
 
     def serialize_dataset_groups(self) -> list[list[list[list[float]]]]:

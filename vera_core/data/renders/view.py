@@ -6,15 +6,9 @@ from pathlib import Path
 
 from matplotlib.figure import Figure
 
-from ..analysis.color import (
-    DEFAULT_CMAP,
-    ColorScope,
-    ColorSource,
-    ColorSpec,
-    shared_group_specs,
-)
+from ..analysis.color import ColorSource, ColorSpec, shared_group_specs
 from .animation import DEFAULT_FPS, write_animation
-from .canvas import DEFAULT_DPI, PANEL_WIDTH_IN, Canvas, write_figure
+from .canvas import DEFAULT_DPI, Canvas, write_figure
 from .styles import ViewStyle
 
 RESERVED = ("view", "params", "title", "options")
@@ -23,18 +17,15 @@ RESERVED = ("view", "params", "title", "options")
 
 @dataclass(frozen=True)
 class RenderOptions:
-    """Everything about how a slice is drawn, none of it about which slice.
-
-    A view holds one as its defaults; a render call overrides fields of it.
-    """
+    """How a slice is drawn"""
 
     style: ViewStyle = ViewStyle()
     color: ColorSource = None
-    color_scope: ColorScope = ColorScope.SLICE_ALL
+    """A fixed colorbar range, one spec for every group or one per group.
+    None scales each group to the data, as style.color_scope says."""
     title: str | bool = False
     """A heading, True for one the view derives, False for none."""
-    caption: bool = True
-    panel_width: float = PANEL_WIDTH_IN
+
     value_limits: tuple[float, float] | None = None
     """The span an axis of values is held to, for a view that reads values
     off an axis rather than a colorbar. None lets each render scale itself"""
@@ -92,62 +83,30 @@ class Selection:
         *,
         style: ViewStyle | None = None,
         color: ColorSource = None,
-        color_scope: ColorScope | None = None,
         title: str | bool | None = None,
-        caption: bool | None = None,
-        panel_width: float | None = None,
         dpi: int = DEFAULT_DPI,
     ) -> Path:
         """Render and write to path. Format follows the suffix.
 
         Every option left None comes from the view's RenderOptions:
 
-            style         a ViewStyle: theme, whether values are printed,
-                          decimals, grid and label sizes
-            color         one ColorSpec for every group, or {group: spec},
-                          [spec, ...], or a function of the group index
-            color_scope   how wide a span the colorbars cover: GROUP (this
-                          group), SLICE (all groups on one scale), DATASET
-            title         a heading string, True for one the view derives
-                          from the selection, False for none
-            caption       whether the view's caption line is drawn
-            panel_width   inches across one panel, before cropping
+            style   a ViewStyle: colormap, color scope, theme, layout, labels
+            color   a fixed range: one ColorSpec for every group, or
+                    {group: spec}, [spec, ...], or a function of the group
+            title   a heading string, True for one the view derives from
+                    the selection, False for none
         """
-        return write_figure(
-            self.figure(
-                style=style,
-                color=color,
-                color_scope=color_scope,
-                title=title,
-                caption=caption,
-                panel_width=panel_width,
-            ),
-            path,
-            dpi,
-        )
+        return write_figure(self.figure(style=style, color=color, title=title), path, dpi)
 
     def figure(
         self,
         *,
         style: ViewStyle | None = None,
         color: ColorSource = None,
-        color_scope: ColorScope | None = None,
         title: str | bool | None = None,
-        caption: bool | None = None,
-        panel_width: float | None = None,
     ) -> Figure:
-        """The finished figure, for callers that want to embed it or add to
-        it. The options are savefig's, and mean the same thing."""
-        return self.canvas(
-            self.options(
-                style=style,
-                color=color,
-                color_scope=color_scope,
-                title=title,
-                caption=caption,
-                panel_width=panel_width,
-            )
-        ).figure()
+        """The finished figure. Options are savefig's."""
+        return self.canvas(self.options(style=style, color=color, title=title)).figure()
 
     def savecollage(
         self,
@@ -158,10 +117,7 @@ class Selection:
         columns: int = None,
         style: ViewStyle | None = None,
         color: ColorSource = None,
-        color_scope: ColorScope | None = None,
         title: str | bool | None = None,
-        caption: bool | None = None,
-        panel_width: float | None = None,
         dpi: int = DEFAULT_DPI,
     ) -> Path:
         """Every frame of a sweep in one figure, written to path.
@@ -176,25 +132,13 @@ class Selection:
             values    the values it takes, or None for every one the view
                       knows about
             columns   frames per row before a group's block wraps
-            color     overrides the shared scale, one spec per group
 
         The rest are savefig's, and mean the same thing.
         """
-        return write_figure(
-            self.collage(
-                over=over,
-                values=values,
-                columns=columns,
-                style=style,
-                color=color,
-                title=title,
-                caption=caption,
-                panel_width=panel_width,
-                color_scope=color_scope,
-            ),
-            path,
-            dpi,
+        figure = self.collage(
+            over=over, values=values, columns=columns, style=style, color=color, title=title
         )
+        return write_figure(figure, path, dpi)
 
     def collage(
         self,
@@ -204,30 +148,13 @@ class Selection:
         columns: int = None,
         style: ViewStyle | None = None,
         color: ColorSource = None,
-        color_scope: ColorScope | None = None,
         title: str | bool | None = None,
-        caption: bool | None = None,
-        panel_width: float | None = None,
     ) -> Figure:
         """The finished collage figure. Options are savecollage's."""
-        frames, slices, options = self._sweep(
-            over, values, color, color_scope, style, title, caption, panel_width
-        )
+        frames, slices, options = self._sweep(over, values, style, color, title)
         return self.view.render_collage(
             slices, frames, options, over=over, columns=columns
         ).figure()
-
-    def canvas(self, options: RenderOptions | None = None, slice_=None) -> Canvas:
-        """The drawn canvas, before it is finished, for callers that want to
-        reach the panels and annotate one. Takes whole options rather than
-        fields of them; build a set with self.options() or replace().
-
-        Pass slice_ to draw data already in hand, which is how a movie avoids
-        reading every state twice.
-        """
-        if slice_ is None:
-            slice_ = self.view.build_slice(self)
-        return self.view.render(slice_, self, options or self.options())
 
     def savemovie(
         self,
@@ -239,18 +166,12 @@ class Selection:
         loop: int = 0,
         style: ViewStyle | None = None,
         color: ColorSource = None,
-        color_scope: ColorScope | None = None,
         title: str | bool | None = None,
-        caption: bool | None = None,
-        panel_width: float | None = None,
         dpi: int = DEFAULT_DPI,
     ) -> Path:
         """One still per frame of a sweep, combined into an animation.
 
-        The same frames a collage lays out side by side, played in sequence
-        instead. They share one scale per group for the same reason: a
-        colorbar that moved between frames would show change that is not in
-        the data.
+        The frames share one scale per group, as a collage's do.
 
             path      .gif, or .mp4 .avi .mov .webm .mkv with imageio and
                       ffmpeg installed, or no suffix for a directory of
@@ -263,16 +184,14 @@ class Selection:
 
         The rest are savefig's, and mean the same thing.
         """
-        frames, slices, options = self._sweep(
-            over, values, color, color_scope, style, title, caption, panel_width
-        )
+        frames, slices, options = self._sweep(over, values, style, color, title)
         figures = (
             frame.canvas(options, slice_).figure()
             for frame, slice_ in zip(frames, slices, strict=True)
         )
         return write_animation(figures, path, fps=fps, dpi=dpi, loop=loop)
 
-    def _sweep(self, over, values, color, color_scope, style, title, caption, panel_width):
+    def _sweep(self, over, values, style, color, title):
         """The frames of a sweep, their slices, and the options that hold
         every frame to one scale per group. Shared by collage and movie."""
         if over not in self.params:
@@ -285,14 +204,25 @@ class Selection:
         slices = [frame.slice() for frame in frames]
         options = self.options(
             style=style,
-            color=color if color is not None else self.view.shared_color(slices, color_scope),
+            color=color,
             title=title,
-            caption=caption,
-            panel_width=panel_width,
-            color_scope=color_scope,
             value_limits=self.view.shared_limits(slices),
         )
+        if options.color is None:
+            options = replace(options, color=self.view.shared_color(slices, options.style))
         return frames, slices, options
+
+    def canvas(self, options: RenderOptions | None = None, slice_=None) -> Canvas:
+        """The drawn canvas, before it is finished, for callers that want to
+        reach the panels and annotate one. Takes whole options rather than
+        fields of them; build a set with self.options() or replace().
+
+        Pass slice_ to draw data already in hand, which is how a movie avoids
+        reading every state twice.
+        """
+        if slice_ is None:
+            slice_ = self.view.build_slice(self)
+        return self.view.render(slice_, self, options or self.options())
 
     def options(self, **named) -> RenderOptions:
         """The view's options, overridden by this selection's title, then by
@@ -346,16 +276,14 @@ class View:
         """Every frame in one canvas. Views that cannot do this say so."""
         raise NotImplementedError(f"{type(self).__name__} has no collage")
 
-    def shared_color(self, slices, scope: ColorScope | None = None) -> list[ColorSpec] | None:
+    def shared_color(self, slices, style: ViewStyle) -> list[ColorSpec] | None:
         """One scale per group, spanning every frame of a sweep.
 
         A sweep holds its frames to one scale so that a change between them
         is a change in the data and not in the colorbar. A view that does not
         color by value has no such scale, and says so with None.
         """
-        cmap = self.options.color
-        cmap = cmap.cmap if isinstance(cmap, ColorSpec) else DEFAULT_CMAP
-        return shared_group_specs(slices, cmap=cmap, scope=scope)
+        return shared_group_specs(slices, cmap=style.cmap, scope=style.color_scope)
 
     def shared_limits(self, slices) -> tuple[float, float] | None:
         """The span of values every frame of a sweep is held to."""
@@ -391,6 +319,6 @@ class View:
     def default_title(self, selection: Selection) -> str:
         return selection.label()
 
-    def caption(self, slice_, selection: Selection) -> str:
+    def caption(self, slice_) -> str:
         """The line under the figure. Empty means none."""
         return ""

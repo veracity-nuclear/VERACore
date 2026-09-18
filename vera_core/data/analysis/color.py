@@ -45,7 +45,7 @@ class ColorSpec:
 
     vmin: float = 0.0
     vmax: float = 1.0
-    cmap: str = DEFAULT_CMAP
+    cmap: str | None = None
 
     @property
     def range(self) -> tuple[float, float]:
@@ -73,8 +73,8 @@ class ColorSpec:
             problems.append(f"range {self.range} is not finite")
         elif self.vmax <= self.vmin:
             problems.append(f"vmax {self.vmax} must exceed vmin {self.vmin}")
-        if not self.cmap:
-            problems.append("cmap must be a non-empty preset name")
+        if self.cmap == "":
+            problems.append("cmap must be a preset name or None")
         return problems
 
     def __repr__(self) -> str:
@@ -208,6 +208,8 @@ def resolve_color_specs(
     for group in range(slice_.n_groups):
         fallback = default_color_spec(slice_.value_range(group, scope), cmap=cmap)
         spec = _override(color, group) or fallback
+        if spec.cmap is None:
+            spec = replace(spec, cmap=cmap)
         problems = spec.validate()
         if problems:
             raise ValueError(f"color for group {group}: {'; '.join(problems)}")

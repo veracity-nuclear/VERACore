@@ -6,6 +6,7 @@ import numpy as np
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource, VeraOutCore
 from ..thresholds import ThresholdCondition, apply_thresholds
+from .info import create_info
 from .vera_slices import GroupedSlice, build_dataset_ranges, convert_ji_to_node
 
 X_AXIS = "x"
@@ -196,6 +197,7 @@ class AxialSlice(GroupedSlice):
             x_size=x_size,
             y_scale=y_scale,
             axis="x" if is_x else "y",
+            info=create_info(vera_source, array, assembly=assembly_id, state_idx=state),
         )
 
     def column_edges(self) -> np.ndarray:

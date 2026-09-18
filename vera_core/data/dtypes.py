@@ -429,7 +429,7 @@ class VeraDataset(np.ndarray):
         data,
         dataset_type: VeraDtype = VeraDtype.UNKNOWN,
         name: str | None = None,
-        physical_units: str = "unitless",
+        physical_units: str = "Unitless",
     ):
         obj = np.asarray(data).view(cls)
         obj.dataset_type = dataset_type
@@ -441,7 +441,7 @@ class VeraDataset(np.ndarray):
         if obj is None:
             return
         self.dataset_type: VeraDtype = getattr(obj, "dataset_type", VeraDtype.UNKNOWN)
-        self.physical_units: str = getattr(obj, "physical_units", "unitless")
+        self.physical_units: str = getattr(obj, "physical_units", "Unitless")
         self.name: str | None = getattr(obj, "name", None)
 
     def is_computational(self) -> bool:

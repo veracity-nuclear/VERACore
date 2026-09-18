@@ -44,7 +44,7 @@ class DictDatasetSource(DatasetSource):
         raw = self._a[name]
         arr = raw if raw.ndim else np.array([raw])
         dtype = self._dataset_dtypes.get(tuple(np.shape(raw)), VeraDtype.UNKNOWN)
-        return VeraDataset(arr, dtype, name, self._units.get(name, "unitless"))
+        return VeraDataset(arr, dtype, name, self._units.get(name, "Unitless"))
 
 
 def core_map(nass_side: int = 5, core_sym: int = 4) -> np.ndarray:

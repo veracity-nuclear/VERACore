@@ -321,7 +321,7 @@ class VeraOutCore(DatasetStore):
         if "nax" in overrides:
             nax = overrides["nax"]
             self.nax = nax
-            self.axial_mesh = np.linspace(0, (nax + 1) * DEFAULT_AXIAL_MESH_STEP, nax + 1)
+            self.axial_mesh = np.linspace(0, nax * DEFAULT_AXIAL_MESH_STEP, nax + 1)
             self._nax_src = "Overrides"
 
         apitch = self.get("apitch")
@@ -330,7 +330,7 @@ class VeraOutCore(DatasetStore):
             self._pin_pitch = float(apitch[0] / self.npx)
 
         if not self.has_axial_mesh() and self.nax:
-            self.axial_mesh = np.linspace(0, (self.nax + 1) * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
+            self.axial_mesh = np.linspace(0, self.nax * DEFAULT_AXIAL_MESH_STEP, self.nax + 1)
 
     def _check_missing(self):
         missing = {}
@@ -443,7 +443,7 @@ class VeraOutCore(DatasetStore):
         if (raw_ylabels := self.get("ylabel")) is not None:
             ylabels = [char.decode() for char in raw_ylabels[start_index:]]
         else:
-            ylabels = list(range(start_index + 1, start_index + num_rows + 1))
+            ylabels = [str(num) for num in range(start_index + 1, start_index + num_rows + 1)]
         self.reduced_core_map_row_labels = ylabels
         if not self.has_comp_core():
             return
@@ -451,9 +451,9 @@ class VeraOutCore(DatasetStore):
         self.comp_core_map_column_labels = list(
             reversed([col_label(i) for i in range(comp_num_cols)])
         )
-        self.comp_core_map_row_labels = list(
-            range(start_index + 1, start_index + comp_num_rows + 1)
-        )
+        self.comp_core_map_row_labels = [
+            str(idx) for idx in range(start_index + 1, start_index + comp_num_rows + 1)
+        ]
 
     def _compute_axial_mesh_pixels(self) -> None:
         """Compute the number of pixels that we will be displaying in
@@ -919,11 +919,13 @@ class VeraDataSource:
         Switching states uncaches the previous active state and caches the new
         one
         """
+        if len(self._states) == 0:
+            return
         index = max(0, min(index, len(self._states) - 1))
         if hasattr(self, "_active_state_index"):
             if self._active_state_index == index:
                 return
-            elif self._state_caching:
+            elif self._state_caching and self.active_state_index < len(self.states):
                 # Clear the cache from the active state
                 self.active_state.uncache_all()
 
@@ -964,6 +966,8 @@ class VeraDataSource:
         the final state. (Again assuming all states had uniform time dataset headers)
         """
         removed = self._states.pop(idx)
+        if self.active_state_index >= len(self._states):
+            self.active_state_index = max(0, len(self._states) - 1)
         if not self._states:
             self._time_axes = {
                 "state_count": [],
@@ -1081,6 +1085,7 @@ class VeraDataSource:
         """Create a derived dataset from a source array using a reduction over axes."""
         if not self.vera_calculator:
             raise RuntimeError("Could not find necessary factor datasets to perform derivation.")
+        pending = []
         for state in self._states:
             if new_dataset_name in state:
                 raise ValueError(
@@ -1099,6 +1104,8 @@ class VeraDataSource:
                 case DerivationMethod.RMS:
                     der = np.sqrt(self._run_avg_over_axes(data**2, axes))
             der.name = new_dataset_name
+            pending.append((state, new_dataset_name, der))
+        for state, new_dataset_name, der in pending:
             state.add_derived_dataset(new_dataset_name, der)
 
     def _get_dataset(self, ds_name: str, state_idx: int | None = None) -> VeraDataset | None:

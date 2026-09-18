@@ -63,8 +63,8 @@ class SurfaceView(View):
         heading = selection.array.replace("_", " ").upper()
         return heading if selection.src_id is None else f"{heading} | {selection.src_id}"
 
-    def caption(self, slice_: SurfaceSlice, selection: Selection) -> str:
-        return f"State {slice_.state} · Axial - {selection.z}"
+    def caption(self, slice_: SurfaceSlice) -> str:
+        return slice_.info.caption()
 
     def collage_caption(self, slices, selections: list[Selection], over: str) -> str:
         """What every frame has in common. The swept choice is left out: the
@@ -105,21 +105,21 @@ class SurfaceView(View):
         return mappable
 
     def render(self, slice_: SurfaceSlice, selection: Selection, options: RenderOptions) -> Canvas:
+        style = options.style
         n_rows, n_cols = slice_.grid_shape
         canvas = Canvas(
             slice_.n_groups,
             panel_aspect=map_aspect(n_rows, n_cols, slice_.aspect_ratio),
-            style=options.style,
+            style=style,
             title=options.resolved_title(self, selection),
-            caption=self.caption(slice_, selection) if options.caption else None,
-            panel_width=options.panel_width,
+            caption=self.caption(slice_) if style.show_caption else None,
         )
-        specs = resolve_color_specs(slice_, options.color, scope=options.color_scope)
+        specs = resolve_color_specs(slice_, options.color, scope=style.color_scope, cmap=style.cmap)
         for group, (panel, spec) in enumerate(zip(canvas.panels, specs, strict=True)):
-            mappable = self.draw_map(panel, slice_, group, spec, options.style, selection.highlight)
+            mappable = self.draw_map(panel, slice_, group, spec, style, selection.highlight)
             if slice_.n_groups > 1:
                 panel.title(f"Group {group + 1}")
-            canvas.colorbar(mappable, [panel], units=slice_.units)
+            canvas.colorbar(mappable, [panel], units=style.unit_label or slice_.units)
         return canvas
 
     def render_collage(
@@ -136,6 +136,7 @@ class SurfaceView(View):
         Panels are laid out block-major, so canvas.panels[group] holds that
         group's frames in order, and one colorbar serves each block.
         """
+        style = options.style
         first = slices[0]
         n_rows, n_cols = first.grid_shape
         n_groups, n_frames = first.n_groups, len(slices)
@@ -145,24 +146,23 @@ class SurfaceView(View):
             grid=grid,
             cells=cells,
             panel_aspect=map_aspect(n_rows, n_cols, first.aspect_ratio),
-            style=options.style,
+            style=style,
             title=options.resolved_title(self, selections[0]),
-            caption=self.collage_caption(slices, selections, over) if options.caption else None,
-            panel_width=options.panel_width,
+            caption=self.collage_caption(slices, selections, over) if style.show_caption else None,
         )
-        specs = resolve_color_specs(first, options.color, scope=options.color_scope)
+        specs = resolve_color_specs(first, options.color, scope=style.color_scope, cmap=style.cmap)
         for group in range(n_groups):
             block = canvas.panels[group * n_frames : (group + 1) * n_frames]
             mappable = None
             for panel, slice_, selection in zip(block, slices, selections, strict=True):
                 mappable = self.draw_map(
-                    panel, slice_, group, specs[group], options.style, selection.highlight
+                    panel, slice_, group, specs[group], style, selection.highlight
                 )
                 panel.title(self.frame_title(selection, over))
             canvas.colorbar(
                 mappable,
                 block,
-                units=first.units,
+                units=style.unit_label or first.units,
                 title=f"Group {group + 1}" if n_groups > 1 else "",
             )
         return canvas

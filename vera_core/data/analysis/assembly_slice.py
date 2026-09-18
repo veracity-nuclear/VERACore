@@ -6,7 +6,8 @@ import numpy as np
 from ..dtypes import VeraDtype
 from ..model import VeraDataSource
 from ..thresholds import ThresholdCondition, apply_thresholds
-from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges
+from .info import create_info
+from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, get_dataset
 
 ALLOWED_DTYPES_: list[VeraDtype] = [
     VeraDtype.PIN,
@@ -128,7 +129,7 @@ class AssemblySlice(GroupedSlice):
         state: int | None = None,
         thresholds_to_apply: Sequence[ThresholdCondition] | None = None,
     ) -> "AssemblySlice | None":
-        array = vera_source.get_dataset(selected_array, state_idx=state)
+        array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype: VeraDtype = array.dataset_type
         if array_dtype not in ALLOWED_DTYPES_:
             return None
@@ -170,6 +171,7 @@ class AssemblySlice(GroupedSlice):
             dtype=array_dtype,
             units=array.physical_units,
             dataset_ranges=build_dataset_ranges(array),
+            info=create_info(vera_source, array, z=z, assembly=assembly_id, state_idx=state),
         )
 
     def serialize_data_groups(self) -> list[list[float]]:

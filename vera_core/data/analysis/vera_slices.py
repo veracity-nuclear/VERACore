@@ -5,8 +5,9 @@ from typing import Self
 import numpy as np
 
 from ..dtypes import NUM_NODES, VeraDataset, VeraDtype
-from ..model import VeraOutCore
+from ..model import VeraDataSource, VeraOutCore
 from .color import ColorScope, array_range, union_range
+from .info import Info
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -14,6 +15,7 @@ class GroupedSlice:
     data_groups: list[np.ndarray]
     state: int
     core_map: np.ndarray
+    info: Info
     dtype: VeraDtype = VeraDtype.UNKNOWN
     units: str = "unitless"
 
@@ -176,3 +178,14 @@ def build_dataset_ranges(dataset: VeraDataset) -> list[tuple[float, float]]:
         ]
         return dataset_ranges
     return [array_range(dataset)]
+
+
+def get_dataset(src: VeraDataSource, array: str | VeraDataset, *, state_idx: int | None = None):
+    if isinstance(array, VeraDataset):
+        return array
+    elif isinstance(array, str):
+        return src.get_dataset(array, state_idx=state_idx)
+    else:
+        raise ValueError(
+            "array must either be the name (str) of an vera dataset or a vera dataset itself"
+        )

@@ -18,7 +18,6 @@ from . import draw
 from .styles import ViewStyle
 
 DEFAULT_DPI = 200
-PANEL_WIDTH_IN = 5.0
 CAPTION_ALLOWANCE_IN = 0.5
 TITLE_ALLOWANCE_IN = 0.4
 TITLE_SIZE = 14.0
@@ -40,9 +39,10 @@ def map_aspect(n_rows: int, n_cols: int, aspect_ratio: float = 1.0) -> float:
     return n_rows / (n_cols * (aspect_ratio or 1.0))
 
 
-def panel_grid(n_panels: int) -> tuple[int, int]:
-    """(n_rows, n_cols) of panels: one row up to two, then two wide."""
-    n_cols = 1 if n_panels == 1 else 2
+def panel_grid(n_panels: int, columns: int | None = None) -> tuple[int, int]:
+    """(n_rows, n_cols) of panels: `columns` wide, or by default one row up
+    to two, then two wide."""
+    n_cols = min(columns, n_panels) if columns else (1 if n_panels == 1 else 2)
     return math.ceil(n_panels / n_cols), n_cols
 
 
@@ -138,15 +138,14 @@ class Canvas:
         style: ViewStyle | None = None,
         title: str | None = None,
         caption: str | None = None,
-        panel_width: float = PANEL_WIDTH_IN,
         grid: tuple[int, int] | None = None,
         cells: list[tuple[int, int]] | None = None,
     ):
         if n_panels < 1:
             raise ValueError("a canvas needs at least one panel")
         self.style = style or ViewStyle()
-        self.panel_width = panel_width
-        n_rows, n_cols = grid or panel_grid(n_panels)
+        width = self.style.panel_width
+        n_rows, n_cols = grid or panel_grid(n_panels, self.style.panel_columns)
         if cells is None:
             cells = [divmod(index, n_cols) for index in range(n_panels)]
         if len(cells) != n_panels:
@@ -154,8 +153,8 @@ class Canvas:
         self._colorbars: list[tuple[Axes, list[Panel]]] = []
         self._figure = Figure(
             figsize=(
-                n_cols * panel_width,
-                n_rows * panel_width * panel_aspect
+                n_cols * width,
+                n_rows * width * panel_aspect
                 + CAPTION_ALLOWANCE_IN
                 + (TITLE_ALLOWANCE_IN if title else 0.0),
             ),

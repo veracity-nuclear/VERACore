@@ -98,11 +98,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         selected_assembly,
                     )
                 )
-            case VeraDtype.COMP_NODAL_ENERGY | VeraDtype.COMP_ASSY_ENERGY:
+            case (
+                VeraDtype.COMP_NODAL_ENERGY
+                | VeraDtype.COMP_ASSY_ENERGY
+                | VeraDtype.ASSY_ENERGY
+                | VeraDtype.NODAL_ENERGY
+            ):
                 num_energy_groups = array.shape[0]
                 idx = (
                     convert_ji_to_node(selected_j, selected_i)
-                    if array_dtype == VeraDtype.COMP_NODAL_ENERGY
+                    if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.NODAL_ENERGY)
                     else 0
                 )
                 for group_n in range(num_energy_groups):

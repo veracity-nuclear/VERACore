@@ -103,6 +103,20 @@ SESSION_VIEW_FIELDS = (
     "crop_z",
 )
 
+COLOR_PRESETS = [
+    "Viridis (matplotlib)",
+    "Plasma (matplotlib)",
+    "Inferno (matplotlib)",
+    "Magma (matplotlib)",
+    "Cool to Warm",
+    "Cold and Hot",
+    "Blue to Yellow",
+    "Grayscale",
+    "Inverted-Grayscale",
+    "jet",
+    "rainbow",
+]
+
 
 def _center_assembly(reduced_core_map):
     """0-based index of the loaded assembly nearest the core center."""
@@ -132,9 +146,19 @@ def _dedupe(pairs):
 
 def _group_arrays(array):
     dataset_type = array.dataset_type
-    if dataset_type in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.COMP_NODAL_ENERGY):
+    if dataset_type in (
+        VeraDtype.COMP_ASSY_ENERGY,
+        VeraDtype.COMP_NODAL_ENERGY,
+        VeraDtype.ASSY_ENERGY,
+        VeraDtype.NODAL_ENERGY,
+    ):
         groups = [array[g] for g in range(array.shape[0])]
-    elif dataset_type in (VeraDtype.COMP_ASSY_SURFACE, VeraDtype.COMP_NODAL_SURFACE):
+    elif dataset_type in (
+        VeraDtype.COMP_ASSY_SURFACE,
+        VeraDtype.COMP_NODAL_SURFACE,
+        VeraDtype.ASSY_SURFACE,
+        VeraDtype.NODAL_SURFACE,
+    ):
         groups = [array[LATERAL_SURFACES, g] for g in range(array.shape[1])]
     else:
         groups = [array]

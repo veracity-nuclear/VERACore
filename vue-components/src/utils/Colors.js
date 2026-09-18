@@ -8,6 +8,9 @@ export class LookupTable {
     this.update(presetName, colorRange);
     this.rgba = [0, 0, 0, 0];
   }
+  static getPresetNames() {
+    return vtkColorMaps.rgbPresetNames;
+  }
 
   update(presetName, colorRange) {
     const preset = vtkColorMaps.getPresetByName(presetName);

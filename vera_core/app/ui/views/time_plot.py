@@ -5,11 +5,12 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import html, plotly, vuetify
 
-from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.dtypes import VeraDtype, point_indices
 from vera_core.data.model import VeraDataSource, VeraOutState
 from vera_core.data.registry import VeraDataRegistry
 
-from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
+from ..helpers import get_safe_idxs, is_non_active_view
+from .selection import point_label, ui_selection
 
 SEP = "\x1f"
 
@@ -88,7 +89,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         axis = state[time_axis_key]
         is_date = axis in DATE_AXES
         for token in state[selected_set_key]:
-            identifier = ""
             src_id, array_name = token.split(SEP, 1)
             src = registry.get(src_id)
             time_axis = to_x(src.time_axes()[axis], axis)
@@ -96,68 +96,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             if not indices:
                 continue
             ny, nx, nax, nass, _, _, time, selected_surface = indices
-            array_shape = np.shape(
-                src.get_dataset(array_name, mask_reflected=False, state_idx=time)
-            )
             array_dtype = src.get_dataset_dtype(array_name)
-            is_comp = array_dtype.is_computational()
-            assembly_label = src.core.reduced_core_map_label(nass, is_comp=is_comp)
-            axial_label = src.core.get_axial_mesh_means(dataset_type=array_dtype)[nax]
+            array_shape = src.get_dataset_shape(array_name, state_idx=time)
+            if array_shape is None:
+                continue
+            selection = ui_selection(ny, nx, nax, nass, selected_surface)
+            try:
+                indices_list = point_indices(array_dtype, array_shape, selection)
+            except ValueError:
+                continue
+            identifier = point_label(src.core, array_dtype, selection)
             units = src.get_dataset_units(array_name, state_idx=time)
             units_label = f" ({units}) " if units != "unitless" else ""
-            indices_list = []
-            match array_dtype:
-                case VeraDtype.PIN | VeraDtype.CHANNEL:
-                    indices_list.append((ny, nx, nax, nass))
-                    identifier = f" | {assembly_label} @({nx + 1},{ny + 1}) z = {axial_label}"
-                case VeraDtype.POINT_DETECTOR:
-                    indices_list.append((nax, nass))
-                    identifier = f" | {assembly_label} z = {axial_label}"
-                case VeraDtype.AXIAL:
-                    indices_list.append((nax))
-                    identifier = f" | z = {axial_label}"
-                case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
-                    indices_list.append((ny, nx, nass))
-                    identifier = f" | {assembly_label} @({nx + 1},{ny + 1})"
-                case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
-                    indices_list.append((nass))
-                    identifier = f" | {assembly_label}"
-                case VeraDtype.SCALAR:
-                    indices_list.append((0))
-                case VeraDtype.RADIAL_NODE:
-                    node_idx = convert_ji_to_node(ny, nx)
-                    indices_list.append((node_idx, nass))
-                    identifier = f" | {assembly_label} @(NODE {node_idx + 1})"
-                case VeraDtype.COMP_NODAL | VeraDtype.NODAL:
-                    node_idx = convert_ji_to_node(ny, nx)
-                    indices_list.append((node_idx, nax, nass))
-                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
-                case VeraDtype.ASSEMBLY | VeraDtype.COMP_ASSY:
-                    indices_list.append((0, nax, nass))
-                    identifier = f" | {assembly_label} | z = {axial_label}"
-                case VeraDtype.COMP_ASSY_ENERGY | VeraDtype.COMP_NODAL_ENERGY:
-                    node_idx = (
-                        convert_ji_to_node(ny, nx)
-                        if array_dtype == VeraDtype.COMP_NODAL_ENERGY
-                        else 0
-                    )
-                    num_energy_groups = array_shape[0]
-                    for n_group in range(num_energy_groups):
-                        indices_list.append((n_group, node_idx, nax, nass))
-                    identifier = f" | {assembly_label} @(NODE {node_idx + 1}) | z = {axial_label}"
-                case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
-                    num_energy_groups = array_shape[1]
-                    nodal_idx = (
-                        0
-                        if array_dtype == VeraDtype.COMP_ASSY_SURFACE
-                        else convert_ji_to_node(ny, nx)
-                    )
-                    for group_n in range(num_energy_groups):
-                        indices_list.append((selected_surface, group_n, nodal_idx, nax, nass))
-                    surface_label = f" {Surface(selected_surface).str}"
-                    identifier = f" | {assembly_label} @(NODE {nodal_idx + 1}{surface_label})"
-                case _:
-                    continue
             for idx_n, indices in enumerate(indices_list):
                 group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
                 values = series(src, src_id, array_name, indices)
@@ -207,6 +157,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "selected_j",
         f"grid_view_{view_id}",
         f"locked_{view_id}",
+        "selected_surface",
         time_axis_key,
         log_scale_key,
         "dark_mode",

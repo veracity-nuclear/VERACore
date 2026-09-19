@@ -3,11 +3,18 @@ from typing import ClassVar, Literal, Sequence
 
 import numpy as np
 
-from ..dtypes import VeraDtype
-from ..model import VeraDataSource, VeraOutCore
+from ..dtypes import VeraDim, VeraDtype
+from ..model import VeraDataSource, nan_out_non_fuel
 from ..thresholds import ThresholdCondition, apply_thresholds
 from .info import create_info
-from .vera_slices import GroupedSlice, build_dataset_ranges, convert_ji_to_node
+from .vera_slices import (
+    CELL_DIMS,
+    DimSpec,
+    GroupedSlice,
+    assembly_side,
+    build_dataset_ranges,
+    get_dataset,
+)
 
 X_AXIS = "x"
 Y_AXIS = "y"
@@ -22,19 +29,12 @@ FALLBACK_DISPLAY_SIZE = 17
 MAX_LABEL_WIDTH = 4
 """Cells wider than this hold too many values to label legibly."""
 
-ALLOWED_DTYPES_: list[VeraDtype] = [
-    VeraDtype.PIN,
-    VeraDtype.COMP_PIN,
-    VeraDtype.CHANNEL,
-    VeraDtype.ASSEMBLY,
-    VeraDtype.COMP_ASSY,
-    VeraDtype.COMP_ASSY_ENERGY,
-    VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY,
-    VeraDtype.NODAL,
-    VeraDtype.NODAL_ENERGY,
-    VeraDtype.ASSY_ENERGY,
-]
+SPEC = DimSpec(
+    requires=frozenset({VeraDim.AXIAL, VeraDim.ASSEMBLY}),
+    forbids=frozenset({VeraDim.SURFACE}),
+    detectors=False,
+)
+ALLOWED_DTYPES_: list[VeraDtype] = SPEC.allowed()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,9 +93,10 @@ class AxialSlice(GroupedSlice):
             float(self.y_edges[-1]),
         )
 
-    def column(self, index: int) -> np.ndarray:
-        """One assembly's values, as (n_layers, cell_width)."""
-        return self.data[:, index]
+    def column(self, index: int, group: int = 0) -> np.ndarray:
+        """One assembly cell of the cut"""
+        width = self.cell_width
+        return self.to_grid(group)[:, index * width : (index + 1) * width]
 
     @classmethod
     def create_axial_slice(
@@ -108,45 +109,24 @@ class AxialSlice(GroupedSlice):
         state: int | None = None,
         thresholds_to_apply: Sequence[ThresholdCondition] | None = None,
     ) -> "AxialSlice | None":
-        array = vera_source.get_dataset(selected_array, state_idx=state)
+        array = get_dataset(vera_source, selected_array, state_idx=state)
         core = vera_source.core
         array_dtype: VeraDtype = array.dataset_type
+        if not SPEC.supports(array_dtype):
+            return None
 
-        if array_dtype == VeraDtype.PIN and core.non_fuel_locs is not None:
-            array[core.non_fuel_locs] = np.nan
-
+        array = nan_out_non_fuel(array, core.pin_volumes)
         if thresholds_to_apply:
             array = apply_thresholds(array, thresholds_to_apply)
 
         is_comp = array_dtype.is_computational()
         is_detector = array_dtype.is_detector()
 
-        if array_dtype not in ALLOWED_DTYPES_:
-            return None
-
         is_x = dim == "x"
         if is_x:
             assembly_indices = core.row_assembly_indices(assembly_id, is_comp, is_detector)
         else:
             assembly_indices = core.col_assembly_indices(assembly_id, is_comp, is_detector)
-
-        if array_dtype in (
-            VeraDtype.COMP_NODAL_ENERGY,
-            VeraDtype.COMP_ASSY_ENERGY,
-            VeraDtype.ASSY_ENERGY,
-            VeraDtype.NODAL_ENERGY,
-        ):
-            num_groups = array.shape[0]
-            if array_dtype in (VeraDtype.COMP_ASSY_ENERGY, VeraDtype.ASSY_ENERGY):
-                group_arrays = [array[g, 0] for g in range(num_groups)]
-            else:
-                group_arrays = [array[g] for g in range(num_groups)]
-        else:
-            num_groups = 1
-            if array_dtype.is_assembly():
-                group_arrays = [array[0]]
-            else:
-                group_arrays = [array]
 
         mesh_pixels = core.get_axial_mesh_pixels(dataset_type=array_dtype)
         mesh_means = core.get_axial_mesh_means(dataset_type=array_dtype)
@@ -159,20 +139,17 @@ class AxialSlice(GroupedSlice):
         cm_per_pixel = total_h / mesh_pixels.sum()
         y_scale = float(X_SCALE * cm_per_pixel / core.pin_pitch)
 
-        nb_cols = 0
-        display_width = FALLBACK_DISPLAY_SIZE
-        cell_width = 1
-        data_groups = []
-        for g in range(num_groups):
-            grid, display_width, nb_cols, cell_width = _build_group_grid(
-                group_arrays[g],
-                array_dtype,
-                is_x,
-                core,
-                pin,
-                assembly_indices,
-            )
-            data_groups.append(grid)
+        groups = array.arrange(
+            order=(VeraDim.AXIAL, VeraDim.ASSEMBLY, *CELL_DIMS),
+            split=(VeraDim.GROUP,),
+            require=(VeraDim.AXIAL, VeraDim.ASSEMBLY),
+        )
+        real = assembly_indices[assembly_indices > -1]
+        data_groups = [_cut(to_cells(group, array_dtype)[:, real], pin, is_x) for group in groups]
+        cell_width = data_groups[0].shape[1] // len(real)
+        has_pins = VeraDim.PIN_Y in array_dtype.dim_axes
+        display_width = cell_width if has_pins else core.core_shape[0] or FALLBACK_DISPLAY_SIZE
+        nb_cols = len(assembly_indices)
 
         x_size = np.full(shape=(nb_cols,), fill_value=display_width)
         x_edges = np.arange(0.0, (nb_cols + 1) * vera_source.core.apitch, vera_source.core.apitch)
@@ -480,64 +457,21 @@ class AxialSlice(GroupedSlice):
         return problems
 
 
-def _nodal_node_pair(selected_pin, is_x: bool):
-    """Pick the two nodes along the cut direction for this view's axis."""
-    if is_x:
-        node = int(convert_ji_to_node(selected_pin, 0))  # j picks the row
-        return (0, 1) if node in (0, 1) else (2, 3)
-    node = int(convert_ji_to_node(0, selected_pin))  # i picks the col
-    return (0, 2) if node in (0, 2) else (1, 3)
+def to_cells(data: np.ndarray, dtype: VeraDtype) -> np.ndarray:
+    """Trailing cell axes"""
+    dims = dtype.dim_axes
+    if VeraDim.PIN_Y in dims and VeraDim.NODE in dims:
+        raise ValueError(f"{dtype} has both pins and nodes; its cell lattice is ambiguous")
+    if VeraDim.PIN_Y in dims:
+        return data
+    if VeraDim.NODE in dims:
+        side = assembly_side(data.shape[-1])
+        return data.reshape(*data.shape[:-1], side, side)
+    return data[..., None, None]
 
 
-def _build_group_grid(
-    array_2d_or_nodal,
-    array_dtype: VeraDtype,
-    is_x: bool,
-    core: VeraOutCore,
-    selected_pin,
-    assembly_indices,
-):
-    """label_count is the number of distinct values a
-    cell holds, or 0 when a cell holds too many to label."""
-    is_assembly = array_dtype.is_assembly()
-    arr = array_2d_or_nodal
-    assembly_data_indices = assembly_indices[assembly_indices > -1]
-    if array_dtype.has_pin_level_dim():
-        cell_width = arr.shape[0]
-        if is_x:
-            image_data = arr[selected_pin, :, :, assembly_data_indices]
-        else:
-            image_data = arr[:, selected_pin, :, assembly_data_indices]
-        image_data = np.vstack(image_data).T
-        data_width = display_width = cell_width
-        label_count = cell_width
-
-    elif is_assembly:
-        cell_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-        image_data = np.vstack(arr[:, assembly_data_indices])
-        data_width = display_width = cell_width
-        label_count = 1
-
-    elif array_dtype.is_nodal():
-        nodal = arr[:, :, assembly_data_indices]  # (nodes, nax, ncols)
-        n_nodes = nodal.shape[0]
-        if n_nodes == 1:
-            data_width = display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-            image_data = np.vstack(nodal[0])
-            label_count = 1
-        else:
-            node_pair = _nodal_node_pair(selected_pin, is_x)
-            data_width = len(node_pair)
-            display_width = core.core_shape[0] or FALLBACK_DISPLAY_SIZE
-            sel = nodal[list(node_pair)]
-            sel = np.transpose(sel, (1, 2, 0))
-            image_data = sel.reshape(sel.shape[0], -1)
-            label_count = data_width
-    else:
-        raise RuntimeError(f"Axial view cannot visualize datasets of type {str(array_dtype)}")
-
-    image_data = image_data[::-1, :]  # axial level 0 at the bottom
-    nb_cols = image_data.shape[1] if is_assembly else image_data.shape[1] // data_width
-    nb_cols = len(assembly_indices)
-
-    return image_data, display_width, nb_cols, label_count
+def _cut(cells: np.ndarray, index: int, is_x: bool) -> np.ndarray:
+    """(n_layers, n_assemblies, rows, cols)"""
+    axis = 2 if is_x else 3
+    line = np.take(cells, int(np.clip(index, 0, cells.shape[axis] - 1)), axis=axis)
+    return np.asarray(line).reshape(line.shape[0], -1)[::-1]

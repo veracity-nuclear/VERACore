@@ -3,10 +3,10 @@ from typing import ClassVar
 
 import numpy as np
 
-from ..dtypes import VeraDtype
+from ..dtypes import VeraDim, VeraDtype
 from ..model import VeraDataSource
 from .info import create_info
-from .surface_slice import ALLOWED_DTYPES, FACES, LATERAL_FACE_SLICE
+from .surface_slice import ALLOWED_DTYPES, FACES, LATERAL_FACE_SLICE, SPEC
 from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, get_dataset
 
 
@@ -101,7 +101,7 @@ class AssemblySurfaceSlice(GroupedSlice):
         return problems
 
     @classmethod
-    def create_assemlby_surface_slice(
+    def create_assembly_surface_slice(
         cls,
         vera_source: VeraDataSource,
         selected_array: str,
@@ -111,16 +111,16 @@ class AssemblySurfaceSlice(GroupedSlice):
     ) -> "AssemblySurfaceSlice | None":
         array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype = array.dataset_type
-        if array_dtype not in ALLOWED_DTYPES:
+        if not SPEC.supports(array_dtype):
             return None
-
-        # Energy shape: (6_faces, n_energy, n_nodes, nax, nass)
-        n_energy = array.shape[1]
-        grouped_datasets = []
-        for g in range(n_energy):
-            # (4_faces, n_nodes) for this assembly, group, layer
-            radial = np.asarray(array[LATERAL_FACE_SLICE, g, :, z, assembly_id])
-            grouped_datasets.append(radial)
+        groups = array.arrange(
+            order=(VeraDim.SURFACE, VeraDim.NODE),
+            split=(VeraDim.GROUP,),
+            pad=(VeraDim.NODE,),
+            axial=z,
+            assembly=assembly_id,
+        )
+        grouped_datasets = [np.asarray(group[LATERAL_FACE_SLICE]) for group in groups]
 
         return AssemblySurfaceSlice(
             data_groups=grouped_datasets,

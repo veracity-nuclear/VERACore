@@ -70,6 +70,13 @@ linked, interactive views arranged in a configurable grid.
 
 ## [2.0.6] - 2026-09-16
 
-- This version now identifies datasets with up to 51 energy groups, now determines if the core_map is unused and if the so, uses the computational_core_map as the core_map is present.
+- This version now identifies datasets with up to 51 energy groups, now determines if the core_map is unused and if the so, uses the computational_core_map as the core_map if present.
 
 [2.0.6]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.6
+
+## [2.0.7] - 2026-09-19
+
+- This version now identifies surface and energy datasets belonging to the normal core_map and axial_mesh
+instead of just for computational_core_map and comp_axial_mesh.
+
+[2.0.7]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.7

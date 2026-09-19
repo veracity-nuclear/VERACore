@@ -295,7 +295,7 @@ class VeraDtype(Enum):
         return axes
 
 
-# the single place per-dtype facts are declared
+# per-dtype facts
 _INFO = {
     VeraDtype.PIN: _Info(pin_idxs=(0, 1), axial_idx=2, assembly_id_idx=3, fuel_pin=True),
     VeraDtype.ASSEMBLY: _Info(fixed_idxs={0: 0}, axial_idx=1, assembly_id_idx=2, assembly=True),
@@ -539,8 +539,12 @@ class VeraDataset(np.ndarray):
             axial_idx=selected.get(VeraDim.AXIAL),
             assembly_id=selected.get(VeraDim.ASSEMBLY),
         )
-
-        return self[slice_]
+        selection = self[slice_]
+        if not isinstance(selection, VeraDataset):
+            return VeraDataset(
+                np.asarray(selection), self.dataset_type, self.name, self.physical_units
+            )
+        return selection
 
     def arrange(
         self,
@@ -687,7 +691,8 @@ class VeraDataset(np.ndarray):
 
         permutation = tuple(surviving.index(dim) for dim in desired)
 
-        if permutation != tuple(range(data.ndim)):
+        zero_axis_scalar = not dtype.dim_axes and data.shape == (1,)
+        if permutation != tuple(range(data.ndim)) and not zero_axis_scalar:
             data = data.transpose(permutation)
 
         if not active_split:
@@ -695,7 +700,12 @@ class VeraDataset(np.ndarray):
 
         split_shape = data.shape[: len(active_split)]
 
-        return [data[idx] for idx in np.ndindex(split_shape)]
+        return [
+            data[idx]
+            if len(idx) != data.ndim
+            else VeraDataset(data[idx], data.dataset_type, data.name, data.physical_units)
+            for idx in np.ndindex(split_shape)
+        ]
 
 
 def derive_recipe(

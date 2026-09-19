@@ -3,24 +3,25 @@ from typing import ClassVar, Sequence
 
 import numpy as np
 
-from ..dtypes import VeraDtype
-from ..model import VeraDataSource
+from ..dtypes import VeraDim, VeraDtype
+from ..model import VeraDataSource, nan_out_non_fuel
 from ..thresholds import ThresholdCondition, apply_thresholds
 from .info import create_info
-from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, get_dataset
+from .vera_slices import (
+    CELL_DIMS,
+    DimSpec,
+    GroupedSlice,
+    assembly_side,
+    build_dataset_ranges,
+    get_dataset,
+)
 
-ALLOWED_DTYPES_: list[VeraDtype] = [
-    VeraDtype.PIN,
-    VeraDtype.COMP_PIN,
-    VeraDtype.CHANNEL,
-    VeraDtype.RADIAL,
-    VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY,
-    VeraDtype.NODAL_ENERGY,
-]
-
-RADIAL_DTYPES = (VeraDtype.RADIAL,)
-"""Radial datasets are already collapsed over z, so the request's z is unused."""
+SPEC = DimSpec(
+    requires=frozenset({VeraDim.ASSEMBLY}),
+    forbids=frozenset({VeraDim.SURFACE}),
+    needs_cells=True,
+)
+ALLOWED_DTYPES_: list[VeraDtype] = SPEC.allowed()
 
 
 @dataclass(frozen=True)
@@ -95,28 +96,12 @@ class AssemblySlice(GroupedSlice):
             except ValueError as exc:
                 problems.append(str(exc))
 
-        if isinstance(self.dtype, VeraDtype):
-            match self.dtype:
-                case VeraDtype.PIN | VeraDtype.CHANNEL | VeraDtype.RADIAL:
-                    if len(first_shape) != 2:
-                        problems.append(
-                            f"{self.dtype} assembly data must be 2-D, got shape {first_shape}"
-                        )
-                    elif first_shape[0] != first_shape[1]:
-                        problems.append(
-                            f"{self.dtype} assembly data must be square, got shape {first_shape}"
-                        )
-
-                case VeraDtype.COMP_NODAL | VeraDtype.COMP_NODAL_ENERGY:
-                    if len(first_shape) != 1:
-                        problems.append(
-                            f"{self.dtype} assembly data must be 1-D, got shape {first_shape}"
-                        )
-                    else:
-                        try:
-                            assembly_side(first_shape[0])
-                        except ValueError as exc:
-                            problems.append(str(exc))
+        if isinstance(self.dtype, VeraDtype) and self.dtype.dim_axes:
+            expected_ndim = 2 if VeraDim.PIN_Y in self.dtype.dim_axes else 1
+            if len(first_shape) != expected_ndim:
+                problems.append(
+                    f"{self.dtype} assembly data must be {expected_ndim}-D, got shape {first_shape}"
+                )
 
         return problems
 
@@ -132,38 +117,19 @@ class AssemblySlice(GroupedSlice):
     ) -> "AssemblySlice | None":
         array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype: VeraDtype = array.dataset_type
-        if array_dtype not in ALLOWED_DTYPES_:
+        if not SPEC.supports(array_dtype):
             return None
-        match array_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL | VeraDtype.COMP_PIN:
-                images_dataset = [array[:, :, z, assembly_id].copy()]
-            case VeraDtype.RADIAL:
-                images_dataset = [array[:, :, assembly_id].copy()]
-            case VeraDtype.COMP_NODAL:
-                images_dataset = [array[:, z, assembly_id]]
-            case VeraDtype.COMP_NODAL_ENERGY:
-                num_energy_groups = np.shape(array)[0]
-                images_dataset = [
-                    array[energy_group, :, z, assembly_id]
-                    for energy_group in range(num_energy_groups)
-                ]
-            case _:
-                raise RuntimeError(
-                    f"Assembly View cannot visualize datasets of type {str(array_dtype)}"
-                )
-        if (
-            array_dtype in (VeraDtype.PIN, VeraDtype.RADIAL)
-            and vera_source.core.non_fuel_locs is not None
-            and vera_source.core.pin_volumes.shape == array.shape
-        ):
-            rows, cols, layers, assys = vera_source.core.non_fuel_locs
-            in_image = (assys == assembly_id) & (layers == z)
-            rod_ij = (rows[in_image], cols[in_image])
-            for image in images_dataset:
-                image[rod_ij] = np.nan
+        images_dataset = nan_out_non_fuel(array, vera_source.core.pin_volumes).arrange(
+            order=CELL_DIMS,
+            split=(VeraDim.GROUP,),
+            require=(VeraDim.ASSEMBLY,),
+            axial=z,
+            assembly=assembly_id,
+        )
         if thresholds_to_apply is not None:
-            for idx, image in enumerate(images_dataset):
-                images_dataset[idx] = apply_thresholds(image, thresholds_to_apply)
+            images_dataset = [
+                apply_thresholds(image, thresholds_to_apply) for image in images_dataset
+            ]
 
         return AssemblySlice(
             data_groups=images_dataset,

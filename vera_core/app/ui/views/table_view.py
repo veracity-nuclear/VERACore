@@ -2,11 +2,12 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import vuetify
 
-from vera_core.data.dtypes import Surface, VeraDtype
+from vera_core.data.dtypes import Surface, VeraDim, VeraDtype, point_indices
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 
-from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
+from ..helpers import get_safe_idxs, is_non_active_view
+from .selection import ui_selection
 
 
 def option_for(view_id):
@@ -15,7 +16,11 @@ def option_for(view_id):
         "label": "Table View",
         "multi_picker": False,
         "icon": "mdi-table",
-        "allowed_categories": [dtype.title for dtype in VeraDtype if dtype != VeraDtype.UNKNOWN],
+        "allowed_categories": [
+            dtype.title
+            for dtype in VeraDtype
+            if dtype != VeraDtype.UNKNOWN and dtype != VeraDtype.CONTINOUS_DETECTOR
+        ],
     }
 
 
@@ -64,82 +69,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src: VeraDataSource = registry.get(selected_src_id)
         array = src.get_dataset(selected_array, state_idx=time)
         array_dtype = array.dataset_type
-        indices_list = []
-        match array_dtype:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
-                indices_list.append((selected_j, selected_i, selected_layer, selected_assembly))
-            case VeraDtype.POINT_DETECTOR:
-                indices_list.append((selected_layer, selected_assembly))
-            case VeraDtype.NODAL:
-                indices_list.append(
-                    (
-                        convert_ji_to_node(selected_j, selected_i),
-                        selected_layer,
-                        selected_assembly,
-                    )
-                )
-            case VeraDtype.RADIAL_NODE:
-                indices_list.append((convert_ji_to_node(selected_j, selected_i), selected_assembly))
-            case VeraDtype.COMP_ASSY | VeraDtype.ASSEMBLY:
-                indices_list.append((0, selected_layer, selected_assembly))
-            case VeraDtype.AXIAL:
-                indices_list.append((selected_layer))
-            case VeraDtype.RADIAL | VeraDtype.CHANNEL_RADIAL:
-                indices_list.append((selected_j, selected_i, selected_assembly))
-            case VeraDtype.RADIAL_ASSEMBLY | VeraDtype.RADIAL_POINT_DETECTOR:
-                indices_list.append((selected_assembly))
-            case VeraDtype.SCALAR:
-                indices_list.append((0))
-            case VeraDtype.COMP_NODAL:
-                indices_list.append(
-                    (
-                        convert_ji_to_node(selected_j, selected_i),
-                        selected_layer,
-                        selected_assembly,
-                    )
-                )
-            case (
-                VeraDtype.COMP_NODAL_ENERGY
-                | VeraDtype.COMP_ASSY_ENERGY
-                | VeraDtype.ASSY_ENERGY
-                | VeraDtype.NODAL_ENERGY
-            ):
-                num_energy_groups = array.shape[0]
-                idx = (
-                    convert_ji_to_node(selected_j, selected_i)
-                    if array_dtype in (VeraDtype.COMP_NODAL_ENERGY, VeraDtype.NODAL_ENERGY)
-                    else 0
-                )
-                for group_n in range(num_energy_groups):
-                    indices_list.append((group_n, idx, selected_layer, selected_assembly))
-            case VeraDtype.COMP_ASSY_SURFACE | VeraDtype.COMP_NODAL_SURFACE:
-                selected_surface = state.selected_surface
-                num_energy_groups = array.shape[1]
-                nodal_idx = (
-                    0
-                    if array_dtype == VeraDtype.COMP_ASSY_SURFACE
-                    else convert_ji_to_node(selected_j, selected_i)
-                )
-                for group_n in range(num_energy_groups):
-                    indices_list.append(
-                        (
-                            selected_surface,
-                            group_n,
-                            nodal_idx,
-                            selected_layer,
-                            selected_assembly,
-                        )
-                    )
-            case _:
-                raise RuntimeError(
-                    f"Table view cannot visualize datasets of type {str(array_dtype)}"
-                )
+        selection = ui_selection(selected_j, selected_i, selected_layer, selected_assembly, surface)
+        indices_list = point_indices(array_dtype, array.shape, selection)
         data_dict = {}
         base_label = selected_array.replace("_", " ").title()
         for group_n, indices in enumerate(indices_list):
             group_label = "" if len(indices_list) <= 1 else f" GROUP {group_n + 1}"
-            value = array[indices]
-            data_dict[f"{base_label}{group_label}"] = value
+            data_dict[f"{base_label}{group_label}"] = array[indices].item()
         for scalar_dataset in src.active_state.scalar_datasets:
             data_dict[scalar_dataset.replace("_", " ").title()] = np.asarray(
                 src.get_dataset(scalar_dataset, state_idx=time)
@@ -156,8 +92,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         axial_value = src.core.get_axial_mesh_means(dataset_type=array_dtype)[selected_layer]
         assembly_label = src.core.reduced_core_map_label(selected_assembly, is_comp)
         pin_label = f"Pin ({selected_i + 1}, {selected_j + 1})"
-        surface_label = f" {Surface(state.selected_surface).str}"
-        node_label = f"Node {convert_ji_to_node(selected_j, selected_i) + 1}"
+        surface_label = f" {Surface(surface).str}"
+        node_label = f"Node {selection[VeraDim.NODE] + 1}"
         is_node = array_dtype.is_nodal()
         is_surface = array_dtype.has_surface_dim()
         label = pin_label if not is_node else (node_label + (surface_label if is_surface else ""))

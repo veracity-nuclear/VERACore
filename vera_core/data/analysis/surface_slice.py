@@ -3,25 +3,28 @@ from typing import ClassVar
 
 import numpy as np
 
-from ..dtypes import VeraDtype
+from ..dtypes import LATERAL_SURFACES, VeraDim, VeraDtype
 from ..model import VeraDataSource
 from .info import create_info
-from .vera_slices import GroupedSlice, assembly_side, axis_labels, build_dataset_ranges, get_dataset
+from .vera_slices import (
+    DimSpec,
+    GroupedSlice,
+    assembly_side,
+    axis_labels,
+    build_dataset_ranges,
+    get_dataset,
+)
 
 FACES: tuple[str, ...] = ("W", "N", "E", "S")
 """Order the reader delivers lateral faces in, and the order stored in the
 last axis of SurfaceSlice.data."""
 
-LATERAL_FACE_SLICE = slice(0, 4)
+LATERAL_FACE_SLICE = LATERAL_SURFACES
 """The dataset holds [W, N, E, S, T, B]; only the four lateral faces have a
 place on a radial map."""
 
-ALLOWED_DTYPES: list[VeraDtype] = [
-    VeraDtype.COMP_ASSY_SURFACE,
-    VeraDtype.COMP_NODAL_SURFACE,
-    VeraDtype.NODAL_SURFACE,
-    VeraDtype.ASSY_SURFACE,
-]
+SPEC = DimSpec(requires=frozenset({VeraDim.SURFACE, VeraDim.AXIAL, VeraDim.ASSEMBLY}))
+ALLOWED_DTYPES: list[VeraDtype] = SPEC.allowed()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,14 +201,17 @@ class SurfaceSlice(GroupedSlice):
     ) -> "SurfaceSlice | None":
         array = get_dataset(vera_source, selected_array, state_idx=state)
         array_dtype = array.dataset_type
-        if array_dtype not in ALLOWED_DTYPES:
+        if not SPEC.supports(array_dtype):
             return None
         core = vera_source.core
         is_comp = array_dtype.is_computational()
-        n_energy = array.shape[1]
-        grouped_datasets = [
-            np.asarray(array[LATERAL_FACE_SLICE, g, :, z, :]) for g in range(n_energy)
-        ]
+        groups = array.arrange(
+            order=(VeraDim.SURFACE, VeraDim.NODE, VeraDim.ASSEMBLY),
+            split=(VeraDim.GROUP,),
+            pad=(VeraDim.NODE,),
+            axial=z,
+        )
+        grouped_datasets = [np.asarray(group[LATERAL_FACE_SLICE]) for group in groups]
         x_labels, y_labels = axis_labels(
             core,
             array_dtype,

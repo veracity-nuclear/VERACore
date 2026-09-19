@@ -1,13 +1,42 @@
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Self
 
 import numpy as np
 
-from ..dtypes import NUM_NODES, VeraDataset, VeraDtype
+from ..dtypes import NUM_NODES, VeraDataset, VeraDim, VeraDtype
 from ..model import VeraDataSource, VeraOutCore
 from .color import ColorScope, array_range, union_range
 from .info import Info
+
+CELL_DIMS: tuple[VeraDim, ...] = (VeraDim.NODE, VeraDim.PIN_Y, VeraDim.PIN_X)
+"""Dims that lay values out inside one assembly, in arrange order."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class DimSpec:
+    """Which dtypes a view can draw"""
+
+    requires: frozenset[VeraDim] = frozenset()
+    forbids: frozenset[VeraDim] = frozenset()
+    needs_cells: bool = False
+    """Require a pin or node lattice inside each assembly."""
+    detectors: bool = True
+    exclude: frozenset[VeraDtype] = field(default_factory=frozenset)
+    """Dtypes the dims admit but the view should not draw."""
+
+    def supports(self, dtype: VeraDtype) -> bool:
+        dims = dtype.dim_axes.keys()
+        return (
+            self.requires <= dims
+            and not self.forbids & dims
+            and (not self.needs_cells or bool(set(CELL_DIMS) & dims))
+            and (self.detectors or not dtype.is_detector())
+            and dtype not in self.exclude
+        )
+
+    def allowed(self) -> list[VeraDtype]:
+        return [dtype for dtype in VeraDtype if self.supports(dtype)]
 
 
 @dataclass(frozen=True, kw_only=True)

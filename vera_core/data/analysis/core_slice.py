@@ -4,28 +4,25 @@ from typing import ClassVar, Sequence
 import numpy as np
 
 from ..dtypes import VeraDataset, VeraDim, VeraDtype
-from ..model import VeraDataSource
+from ..model import VeraDataSource, nan_out_non_fuel
 from ..thresholds import ThresholdCondition, apply_thresholds
 from .info import create_info
-from .vera_slices import GroupedSlice, assembly_side, build_dataset_ranges, core_labels, get_dataset
+from .vera_slices import (
+    CELL_DIMS,
+    DimSpec,
+    GroupedSlice,
+    assembly_side,
+    build_dataset_ranges,
+    core_labels,
+    get_dataset,
+)
 
-ALLOWED_DTYPES_: list[VeraDtype] = [
-    VeraDtype.PIN,
-    VeraDtype.COMP_PIN,
-    VeraDtype.CHANNEL,
-    VeraDtype.ASSEMBLY,
-    VeraDtype.RADIAL,
-    VeraDtype.RADIAL_ASSEMBLY,
-    VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY,
-    VeraDtype.COMP_ASSY,
-    VeraDtype.COMP_ASSY_ENERGY,
-    VeraDtype.NODAL,
-    VeraDtype.POINT_DETECTOR,
-    VeraDtype.RADIAL_POINT_DETECTOR,
-    VeraDtype.NODAL_ENERGY,
-    VeraDtype.ASSY_ENERGY,
-]
+SPEC = DimSpec(
+    requires=frozenset({VeraDim.ASSEMBLY}),
+    forbids=frozenset({VeraDim.SURFACE}),
+    exclude=frozenset({VeraDtype.CONTINOUS_DETECTOR}),
+)
+ALLOWED_DTYPES_: list[VeraDtype] = SPEC.allowed()
 
 
 @dataclass(frozen=True)
@@ -139,27 +136,21 @@ class CoreSlice(GroupedSlice):
         thresholds: Sequence[ThresholdCondition] = [],
     ) -> "CoreSlice | None":
         if z < 0:
-            raise RuntimeError(f"z must be < 0, z = {z}")
+            raise RuntimeError(f"z must be >= 0, z = {z}")
         dataset = get_dataset(vera_source, dataset_name, state_idx=state_idx)
         ds_dtype = dataset.dataset_type
-        if ds_dtype not in ALLOWED_DTYPES_:
+        if not SPEC.supports(ds_dtype):
             return None
         is_comp = ds_dtype.is_computational()
-        layer_list: list[VeraDataset] = dataset.arrange(
-            order=(VeraDim.ASSEMBLY, VeraDim.NODE, VeraDim.PIN_Y, VeraDim.PIN_X),
+        core = vera_source.core
+        layer_list: list[VeraDataset] = nan_out_non_fuel(dataset, core.pin_volumes).arrange(
+            order=(VeraDim.ASSEMBLY, *CELL_DIMS),
             require=(VeraDim.ASSEMBLY,),
             split=(VeraDim.GROUP,),
             axial=z,
         )
-        core = vera_source.core
-        for idx, layer in enumerate(layer_list):
-            if ds_dtype.has_fuel_pins() and not ds_dtype.is_computational():
-                layer = nan_out_non_fuel_locs(
-                    layer, vera_source, dataset.shape, z, ds_dtype == VeraDtype.RADIAL
-                )
-            if thresholds:
-                layer = apply_thresholds(layer, thresholds)
-            layer_list[idx] = layer
+        if thresholds:
+            layer_list = [apply_thresholds(layer, thresholds) for layer in layer_list]
 
         x_labels, y_labels, _ = core_labels(core, is_comp)
         return cls(
@@ -199,23 +190,3 @@ class CoreSlice(GroupedSlice):
                         line[j] = np.ravel(dataset[index]).tolist()
             results.append((result, labels))
         return results
-
-
-def nan_out_non_fuel_locs(
-    array: np.ndarray,
-    src: VeraDataSource,
-    raw_dataset_shape: tuple,
-    selected_layer: int,
-    is_radial: bool,
-):
-    non_fuel_locs = src.core.non_fuel_locs
-    if non_fuel_locs is None:
-        return array
-    if src.core.pin_volumes.shape != raw_dataset_shape:
-        return array
-    rod_rows, rod_cols, layers, assy_id = non_fuel_locs
-    keep = slice(None) if is_radial else (layers == selected_layer)
-    idx = (assy_id[keep], rod_rows[keep], rod_cols[keep])
-    new_array = array.copy()
-    new_array[idx] = np.nan
-    return new_array

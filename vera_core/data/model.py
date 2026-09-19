@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
@@ -5,45 +6,77 @@ import numpy as np
 from scipy.interpolate import make_interp_spline
 
 from .dtypes import (
-    NUM_NODES,
     CoreOverride,
     DerivationMethod,
     VeraAxes,
     VeraDataset,
+    VeraDim,
     VeraDtype,
     build_core_dtypes,
 )
 from .vera_tools.VERAout import VERAout
 
 
+def _along(values: np.ndarray, axis: int, ndim: int) -> np.ndarray:
+    """values laid along one axis of an ndim array, length 1 on the others."""
+    shape = [1] * ndim
+    shape[axis] = len(values)
+    return np.reshape(values, shape)
+
+
+def _half_masks(array: VeraDataset) -> tuple[np.ndarray, np.ndarray] | None:
+    axes = array.dataset_type.dim_axes
+    ndim = array.ndim
+    if VeraDim.PIN_Y in axes:
+        rows = np.arange(array.shape[axes[VeraDim.PIN_Y]])
+        cols = np.arange(array.shape[axes[VeraDim.PIN_X]])
+        top = _along(rows < len(rows) // 2, axes[VeraDim.PIN_Y], ndim)
+        left = _along(cols < len(cols) // 2, axes[VeraDim.PIN_X], ndim)
+        return top, left
+    if VeraDim.NODE in axes:
+        side = math.isqrt(array.shape[axes[VeraDim.NODE]])
+        nodes = np.arange(side * side)
+        top = _along(nodes // side < side // 2, axes[VeraDim.NODE], ndim)
+        left = _along(nodes % side < side // 2, axes[VeraDim.NODE], ndim)
+        return top, left
+    return None
+
+
 def nan_out_reflected(cm: np.ndarray, core_sym: int, array: VeraDataset):
-    """Nans out reflected region if dataset has quarter core symmetry"""
-    ax, ay = cm.shape
-    dtype = array.dataset_type
-    has_reflected_pins = dtype in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.RADIAL)
-    if has_reflected_pins and core_sym == 4:
-        hpy = array.shape[0] // 2
-        hpx = array.shape[1] // 2
-        match array.dataset_type:
-            case VeraDtype.PIN | VeraDtype.CHANNEL:
-                array[:hpy, :, :, :ax] = np.nan
-                array[:, :hpx, :, cm[:, 0] - 1] = np.nan
-            case VeraDtype.RADIAL:
-                array[:hpy, :, :ax] = np.nan
-                array[:, :hpx, cm[:, 0] - 1] = np.nan
-    elif (dtype == VeraDtype.COMP_NODAL or dtype == VeraDtype.NODAL) and core_sym == 4:
-        array[: int(NUM_NODES / 2), :, :ax] = np.nan
-        array[0, :, cm[:, 0] - 1] = np.nan
-        array[2, :, cm[:, 0] - 1] = np.nan
-    elif dtype == VeraDtype.COMP_NODAL_ENERGY and core_sym == 4:
-        array[:, : int(NUM_NODES / 2), :, :ax] = np.nan
-        array[:, 0, :, cm[:, 0] - 1] = np.nan
-        array[:, 2, :, cm[:, 0] - 1] = np.nan
-    elif dtype == VeraDtype.COMP_NODAL_SURFACE and core_sym == 4:
-        array[:, :, : int(NUM_NODES / 2), :, :ax] = np.nan
-        array[:, :, 0, :, cm[:, 0] - 1] = np.nan
-        array[:, :, 2, :, cm[:, 0] - 1] = np.nan
+    """NaN the mirrored half of each centre-line assembly on a quarter core."""
+    axes = array.dataset_type.dim_axes
+    halves = _half_masks(array)
+    if core_sym != 4 or VeraDim.ASSEMBLY not in axes or halves is None:
+        return array
+    top, left = halves
+    assemblies = np.arange(array.shape[axes[VeraDim.ASSEMBLY]])
+    first_row = _along(np.isin(assemblies, cm[0] - 1), axes[VeraDim.ASSEMBLY], array.ndim)
+    first_col = _along(np.isin(assemblies, cm[:, 0] - 1), axes[VeraDim.ASSEMBLY], array.ndim)
+    mask = (top & first_row) | (left & first_col)
+    array[np.broadcast_to(mask, array.shape)] = np.nan
     return array
+
+
+def nan_out_non_fuel(dataset: VeraDataset, pin_volumes: np.ndarray | None) -> VeraDataset:
+    """A copy of dataset with every zero-volume (non-fuel) pin set to NaN."""
+    dtype = dataset.dataset_type
+    if pin_volumes is None or not dtype.has_fuel_pins() or dtype.is_computational():
+        return dataset
+    data_axes = dtype.dim_axes
+    vol_dims = VeraDtype.PIN.dim_axes
+    shared = tuple(sorted((d for d in vol_dims if d in data_axes), key=data_axes.get))
+    extra = tuple(d for d in vol_dims if d not in data_axes)
+    [non_fuel] = VeraDataset(np.asarray(pin_volumes) == 0, VeraDtype.PIN).arrange(
+        order=shared + extra
+    )
+    non_fuel = np.asarray(non_fuel).all(axis=tuple(range(len(shared), non_fuel.ndim)))
+    if non_fuel.shape != tuple(dataset.shape[data_axes[d]] for d in shared):
+        return dataset
+    covered = {data_axes[d] for d in shared}
+    non_fuel = np.expand_dims(non_fuel, [a for a in range(dataset.ndim) if a not in covered])
+    out = dataset.astype(float)
+    out[np.broadcast_to(non_fuel, out.shape)] = np.nan
+    return out
 
 
 class DatasetSource(ABC):
@@ -247,7 +280,7 @@ class VeraOutCore(DatasetStore):
             if ref_shape is None:
                 continue
             _, _, _, ref_nass = ref_shape
-            if ref_nass == self.comp_nass:
+            if ref_nass == self.comp_nass and ref_nass != self.nass:
                 self.nass = ref_nass
                 self.core_map = self.comp_core_map
                 break

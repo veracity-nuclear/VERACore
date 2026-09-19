@@ -7,6 +7,7 @@ from beartype import beartype
 
 from ..dtypes import Surface, VeraDim, VeraDtype
 from ..model import VeraDataSource
+from .vera_slices import DimSpec
 
 type Line = tuple[
     tuple[np.ndarray, np.ndarray],
@@ -18,26 +19,8 @@ type Line = tuple[
 type Indices = dict[VeraDim, int]
 """Each key is a dimension to index with its value"""
 
-ALLOWED_DTYPES_ = [
-    VeraDtype.PIN,
-    VeraDtype.COMP_PIN,
-    VeraDtype.CHANNEL,
-    VeraDtype.AXIAL,
-    VeraDtype.ASSEMBLY,
-    VeraDtype.COMP_NODAL,
-    VeraDtype.COMP_NODAL_ENERGY,
-    VeraDtype.COMP_NODAL_SURFACE,
-    VeraDtype.COMP_ASSY_SURFACE,
-    VeraDtype.COMP_ASSY,
-    VeraDtype.COMP_ASSY_ENERGY,
-    VeraDtype.NODAL,
-    VeraDtype.POINT_DETECTOR,
-    VeraDtype.CONTINOUS_DETECTOR,
-    VeraDtype.NODAL_ENERGY,
-    VeraDtype.NODAL_SURFACE,
-    VeraDtype.ASSY_SURFACE,
-    VeraDtype.ASSY_ENERGY,
-]
+SPEC = DimSpec(requires=frozenset({VeraDim.AXIAL}))
+ALLOWED_DTYPES_ = SPEC.allowed()
 
 
 def region_segments(values, intervals):
@@ -120,7 +103,7 @@ class AxialLines:
             units = dataset.physical_units
             units_label = f" ({units}) " if units != "unitless" else ""
             vdtype: VeraDtype = dataset.dataset_type
-            if not indices or vdtype not in ALLOWED_DTYPES_:
+            if not indices or not SPEC.supports(vdtype):
                 continue
             j = indices.get(VeraDim.PIN_Y, 0)
             i = indices.get(VeraDim.PIN_X, 0)
@@ -159,7 +142,9 @@ class AxialLines:
                 assembly=assembly_id,
             )
             max_state = len(src.states) - 1
-            recorded_state = src.active_state_index if not state else max(0, min(state, max_state))
+            recorded_state = (
+                src.active_state_index if state is None else max(0, min(state, max_state))
+            )
             axial_mesh_means = src.core.get_axial_mesh_means(dataset_type=vdtype)
             for idx, axial_array in enumerate(grouped_axial_datasets):
                 group_label = "" if len(grouped_axial_datasets) <= 1 else f" GROUP {idx + 1}"

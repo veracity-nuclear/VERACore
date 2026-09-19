@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import Mapping, Sequence, TypedDict
@@ -426,6 +427,43 @@ def make_slice(
     return tuple(result)
 
 
+def point_indices(
+    vdtype: "VeraDtype",
+    shape: Sequence[int],
+    selection: Mapping[VeraDim, int],
+    split: Sequence[VeraDim] = (VeraDim.GROUP,),
+) -> list[tuple[int, ...]]:
+    """Physical index tuples for one point, one per combination of split dims."""
+    axes = vdtype.dim_axes
+    if not axes:
+        if math.prod(shape) != 1:
+            raise ValueError(f"{vdtype} has no semantic dims to index shape {tuple(shape)}")
+        return [(0,) * len(shape)]
+
+    split = [dim for dim in split if dim in axes]
+    open_dims = set(axes) - set(selection) - set(split)
+    if open_dims:
+        raise ValueError(
+            f"selection leaves {vdtype} dims unindexed: "
+            + ", ".join(sorted(dim.value for dim in open_dims))
+        )
+
+    points = []
+    for combo in np.ndindex(*(shape[axes[dim]] for dim in split)):
+        chosen = {**selection, **dict(zip(split, combo, strict=True))}
+        pin = (chosen[VeraDim.PIN_Y], chosen[VeraDim.PIN_X]) if VeraDim.PIN_Y in axes else None
+        index = vdtype.make_slice(
+            surface_idx=chosen.get(VeraDim.SURFACE),
+            group_idx=chosen.get(VeraDim.GROUP),
+            node_idx=chosen.get(VeraDim.NODE),
+            pin_idxs=pin,
+            axial_idx=chosen.get(VeraDim.AXIAL),
+            assembly_id=chosen.get(VeraDim.ASSEMBLY),
+        )
+        points.append(tuple(int(i) for i in index))
+    return points
+
+
 class VeraAxes(Enum):
     """Derivation Axes"""
 
@@ -552,6 +590,7 @@ class VeraDataset(np.ndarray):
         order: Sequence[VeraDim],
         split: Sequence[VeraDim] = (),
         require: Sequence[VeraDim] = (),
+        pad: Sequence[VeraDim] = (),
         surface: int | None = None,
         group: int | None = None,
         node: int | None = None,
@@ -584,6 +623,11 @@ class VeraDataset(np.ndarray):
         require
             Semantic dimensions that must exist on this dtype.
 
+        pad
+            Dimensions from ``order`` to keep in the output as length-1 axes
+            when the dtype lacks them or a selector removed them, so callers
+            get one shape across dtypes (e.g. a node axis for assembly data).
+
         surface
             Surface index to select, if the dtype has a surface dimension.
 
@@ -612,6 +656,7 @@ class VeraDataset(np.ndarray):
         order = tuple(order)
         split = tuple(split)
         require = tuple(require)
+        pad = tuple(pad)
 
         dtype = self.dataset_type
         axis_map = dtype.dim_axes
@@ -626,6 +671,15 @@ class VeraDataset(np.ndarray):
 
         if len(set(require)) != len(require):
             raise ValueError(f"Duplicate dimensions in require: {require}")
+
+        if len(set(pad)) != len(pad):
+            raise ValueError(f"Duplicate dimensions in pad: {pad}")
+
+        if not set(pad) <= set(order):
+            raise ValueError(
+                "pad dimensions must also appear in order: "
+                + ", ".join(sorted(dim.value for dim in set(pad) - set(order)))
+            )
 
         overlap = set(order) & set(split)
 
@@ -694,6 +748,11 @@ class VeraDataset(np.ndarray):
         zero_axis_scalar = not dtype.dim_axes and data.shape == (1,)
         if permutation != tuple(range(data.ndim)) and not zero_axis_scalar:
             data = data.transpose(permutation)
+
+        padded = tuple(dim for dim in order if dim in active_order or dim in pad)
+        missing = [len(active_split) + i for i, dim in enumerate(padded) if dim not in active_order]
+        if missing:
+            data = np.expand_dims(data, missing)
 
         if not active_split:
             return [data]
@@ -795,7 +854,7 @@ def build_core_dtypes(
             (npiny, npinx, nass): VeraDtype.RADIAL,
             (npiny + 1, npinx + 1, nass): VeraDtype.CHANNEL_RADIAL,
         }
-    if comp_nax and comp_nass:
+    if comp_nax and comp_nass and (comp_nax != nax or comp_nass != nass):
         shape_to_dtype |= {
             (npiny, npinx, comp_nax, comp_nass): VeraDtype.COMP_PIN,
             (NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL,

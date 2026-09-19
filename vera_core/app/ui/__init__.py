@@ -8,7 +8,7 @@ from trame.app.dev import remove_change_listeners
 from trame_server.core import Server
 
 from vera_core.data.analysis.color import array_range
-from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDataset, VeraDtype
 from vera_core.data.readers.h5 import open_vera_file_data_source
 from vera_core.data.readers.rom_reciever import generate_stream_identifier
 from vera_core.data.registry import VeraDataRegistry
@@ -144,25 +144,20 @@ def _dedupe(pairs):
     return list(dict.fromkeys(pairs))
 
 
-def _group_arrays(array):
-    dataset_type = array.dataset_type
-    if dataset_type in (
-        VeraDtype.COMP_ASSY_ENERGY,
-        VeraDtype.COMP_NODAL_ENERGY,
-        VeraDtype.ASSY_ENERGY,
-        VeraDtype.NODAL_ENERGY,
-    ):
-        groups = [array[g] for g in range(array.shape[0])]
-    elif dataset_type in (
-        VeraDtype.COMP_ASSY_SURFACE,
-        VeraDtype.COMP_NODAL_SURFACE,
-        VeraDtype.ASSY_SURFACE,
-        VeraDtype.NODAL_SURFACE,
-    ):
-        groups = [array[LATERAL_SURFACES, g] for g in range(array.shape[1])]
-    else:
-        groups = [array]
-    return groups[:MAX_NUM_GROUPS]
+def _group_arrays(array: VeraDataset):
+    dtype = array.dataset_type
+    if not dtype.has_energy_group_dim():
+        return [array]
+    group_axis = dtype.energy_group_dim_idx
+    surface_axis = dtype.surface_dim_idx if dtype.has_surface_dim() else None
+    groups = []
+    for group_idx in range(min(array.shape[group_axis], MAX_NUM_GROUPS)):
+        index = [slice(None)] * array.ndim
+        index[group_axis] = group_idx
+        if surface_axis is not None:
+            index[surface_axis] = LATERAL_SURFACES
+        groups.append(array[tuple(index)])
+    return groups
 
 
 def _copy_value(value):

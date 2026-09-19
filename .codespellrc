@@ -11,6 +11,7 @@ skip =
     vue-components/node_modules,
     VeraCore.spec,
     vera_core/data/vera_tools*,
+    tests*,
 ignore-words-list =
     vera,
     veracore,

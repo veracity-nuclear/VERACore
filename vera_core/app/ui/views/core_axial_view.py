@@ -200,7 +200,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     selected_i=("selected_assembly_ij.i",),
                     selected_j=("selected_assembly_ij.j",),
                     aspect_ratio=(aspect_ratio_key, 1),
-                    color_preset="jet",
+                    color_preset=("color_preset",),
                     color_range=(f"color_range_{view_id}_0", [0.0, 1.0]),
                     dark=("$vuetify.theme.dark",),
                     x_labels=(xlabels_key,),
@@ -217,6 +217,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         ):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}_0",
-                color_preset="jet",
+                color_preset=("color_preset",),
                 units=(f"color_units_{view_id}",),
             )

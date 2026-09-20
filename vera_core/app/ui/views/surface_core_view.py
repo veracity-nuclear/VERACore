@@ -138,7 +138,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     x_labels=(x_label_key, []),
                                     y_labels=(y_label_key, []),
                                     aspect_ratio=(aspect_ratio_key, 1),
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
@@ -154,7 +154,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     units=(f"color_units_{view_id}",),
                                 )
             # Footer: caption, values toggle and decimals selector on one line.

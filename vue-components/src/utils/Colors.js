@@ -1,20 +1,66 @@
 import vtkColorMaps from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction/ColorMaps';
 import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction';
 
+if (!vtkColorMaps.getPresetByName('Turbo')) {
+  vtkColorMaps.addPreset({
+    Name: 'Turbo',
+    ColorSpace: 'RGB',
+    RGBPoints: [
+      0.0,
+      0.188,
+      0.071,
+      0.231,
+      0.125,
+      0.275,
+      0.42,
+      0.89,
+      0.25,
+      0.224,
+      0.635,
+      0.988,
+      0.375,
+      0.11,
+      0.898,
+      0.78,
+      0.5,
+      0.478,
+      0.984,
+      0.427,
+      0.625,
+      0.835,
+      0.922,
+      0.227,
+      0.75,
+      0.996,
+      0.678,
+      0.161,
+      0.875,
+      0.91,
+      0.329,
+      0.051,
+      1.0,
+      0.478,
+      0.016,
+      0.012,
+    ],
+  });
+}
 export class LookupTable {
   constructor(presetName = 'jet', colorRange = [0, 1], nanColor = [1, 1, 1, 1]) {
     this.lookupTable = vtkColorTransferFunction.newInstance();
-    this.lookupTable.setNanColor(...nanColor);
+    this.nanColor = nanColor;
     this.update(presetName, colorRange);
     this.rgba = [0, 0, 0, 0];
   }
+
   static getPresetNames() {
     return vtkColorMaps.rgbPresetNames;
   }
 
   update(presetName, colorRange) {
-    const preset = vtkColorMaps.getPresetByName(presetName);
+    const preset = vtkColorMaps.getPresetByName(presetName) || vtkColorMaps.getPresetByName('jet');
     this.lookupTable.applyColorMap(preset);
+    this.lookupTable.setNanColor(...this.nanColor);
     const [lo, hi] = this.safeRange(colorRange);
     this.lookupTable.setMappingRange(lo, hi);
     this.lookupTable.updateRange();
@@ -48,6 +94,7 @@ export class LookupTable {
     return [this.rgba[0], this.rgba[1], this.rgba[2]];
   }
   setNanColor(r, g, b, a) {
+    this.nanColor = [r, g, b, a];
     this.lookupTable.setNanColor(r, g, b, a);
   }
 }

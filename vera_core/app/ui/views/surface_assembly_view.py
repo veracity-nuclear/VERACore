@@ -141,7 +141,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     selected_i=("selected_i", 7),
                                     selected_j=("selected_j", 7),
                                     selected_surface=("selected_surface", -1),
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click=(
                                         on_surface_click,
@@ -159,7 +159,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     units=(f"color_units_{view_id}",),
                                 )
             # Footer: caption with the decimals selector alongside.

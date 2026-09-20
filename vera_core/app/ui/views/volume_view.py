@@ -22,6 +22,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.thresholds import apply_thresholds
 from vera_core.widgets import vera
 
+from ..color_presets import rgb_points
 from ..helpers import get_thresholds, get_time, is_view_locked
 
 _OPACITY_POINTS = [
@@ -33,15 +34,6 @@ _OPACITY_POINTS = [
     (10.0, 1.0),
 ]
 
-_COLOR_POINTS = [
-    (0.000000, 0.0, 0.0, 0.5625),
-    (0.216992, 0.0, 0.0, 1.0000),
-    (0.712975, 0.0, 1.0, 1.0000),
-    (0.960965, 0.5, 1.0, 0.5000),
-    (1.208960, 1.0, 1.0, 0.0000),
-    (1.704940, 1.0, 0.0, 0.0000),
-    (1.952930, 0.5, 0.0, 0.0000),
-]
 
 _views = {}
 
@@ -136,7 +128,7 @@ def _is_active(state, view_id):
     return bool(option) and option.get("name") == f"volume_view_{view_id}"
 
 
-def _build_view(server, view_id):
+def _build_view(server, view_id, state):
     """Construct one slot's VTK pipeline and template at startup."""
     ren = vtkRenderer()
     ren.SetBackground(0.1176, 0.1176, 0.1176)
@@ -153,8 +145,8 @@ def _build_view(server, view_id):
         opacity_fn.AddPoint(*point)
 
     color_fn = vtkColorTransferFunction()
-    for point in _COLOR_POINTS:
-        color_fn.AddRGBPoint(*point)
+    for t, r, g, b in rgb_points(state["color_preset"]):
+        color_fn.AddRGBPoint(t, r, g, b)
 
     volume_property = vtkVolumeProperty()
     volume_property.SetColor(color_fn)
@@ -266,7 +258,7 @@ def _build_view(server, view_id):
         ):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}_0",
-                color_preset="jet",
+                color_preset=("color_preset",),
                 units=(f"color_units_{view_id}",),
             )
 
@@ -392,15 +384,11 @@ def _update_color(server, view_id):
     ctx = _views.get(view_id)
     if ctx is None or not _is_active(state, view_id):
         return
-
-    color_range = state[f"color_range_{view_id}_0"]
-    original_range = (_COLOR_POINTS[0][0], _COLOR_POINTS[-1][0])
+    lo, hi = state[f"color_range_{view_id}_0"]
     color_fn = ctx["color_fn"]
     color_fn.RemoveAllPoints()
-    for row in _COLOR_POINTS:
-        new_value = np.interp(row[0], original_range, color_range)
-        color_fn.AddRGBPoint(new_value, *row[1:])
-
+    for t, r, g, b in rgb_points(state.color_preset):
+        color_fn.AddRGBPoint(lo + t * (hi - lo), r, g, b)
     ctx["ren_win"].Render()
     ctx["view_update"]()
 
@@ -436,7 +424,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     state[f"crop_z_{view_id}"] = [0.0, 1.0]
     state[f"camera_{view_id}"] = None
 
-    _build_view(server, view_id)
+    _build_view(server, view_id, state)
 
     @ctrl.add(f"reset_volume_{view_id}_camera")
     def _reset(*args, **kwargs):
@@ -509,3 +497,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     def _on_state_index_changed(**kwargs):
         if _is_active(state, view_id):
             _update_volume(server, registry, view_id)
+
+    @state.change("color_preset")
+    def _on_preset_changed(**kwargs):
+        _update_color(server, view_id)

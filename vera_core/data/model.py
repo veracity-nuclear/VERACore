@@ -1,6 +1,8 @@
 import math
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from contextlib import redirect_stdout
 
 import numpy as np
 from scipy.interpolate import make_interp_spline
@@ -384,9 +386,6 @@ class VeraOutCore(DatasetStore):
         self.comp_nax = None
 
         if self.shape("computational_core_map") is None:
-            print(
-                "Could not find computational_core_map, unable to determine computational core shape"
-            )
             return
         if self.shape("computational_axial_mesh"):
             comp_axial_mesh = self.get("computational_axial_mesh")
@@ -844,9 +843,10 @@ class VeraDataSource:
         self.vera_calculator = None
         if filename:
             try:
-                self.vera_calculator = VERAout(
-                    filename=filename
-                )  # from pyvera, use this for calculating avgs
+                with open(os.devnull, "w") as f, redirect_stdout(f):
+                    self.vera_calculator = VERAout(
+                        filename=filename
+                    )  # from pyvera, use this for calculating avgs
             except Exception as e:
                 print(
                     "[Warning] could not load file for VERAout to read from for derivation:", str(e)

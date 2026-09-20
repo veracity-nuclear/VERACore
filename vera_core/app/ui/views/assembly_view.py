@@ -162,7 +162,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     value=(assembly_keys[g], []),
                                     selected_i=("selected_i", 7),
                                     selected_j=("selected_j", 7),
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click="setAll({ selected_i: $event.i, selected_j: $event.j})",
                                     dark=("dark_mode",),
@@ -177,7 +177,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     units=(f"color_units_{view_id}",),
                                 )
             with html.Div(

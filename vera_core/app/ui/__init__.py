@@ -103,20 +103,6 @@ SESSION_VIEW_FIELDS = (
     "crop_z",
 )
 
-COLOR_PRESETS = [
-    "Viridis (matplotlib)",
-    "Plasma (matplotlib)",
-    "Inferno (matplotlib)",
-    "Magma (matplotlib)",
-    "Cool to Warm",
-    "Cold and Hot",
-    "Blue to Yellow",
-    "Grayscale",
-    "Inverted-Grayscale",
-    "jet",
-    "rainbow",
-]
-
 
 def _center_assembly(reduced_core_map):
     """0-based index of the loaded assembly nearest the core center."""
@@ -302,6 +288,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         state.setdefault("selected_surface", 0)
         state.setdefault("dark_mode", True)
         state.setdefault("recipes", [])
+        state.setdefault("color_preset", "jet")
 
     def _init_view_state(view_id):
         """Namespaced state for one card.

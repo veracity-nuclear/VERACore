@@ -234,7 +234,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         color_ranges=("[" + ", ".join(range_keys) + "]",),
                         color_mode=(mode_key,),
                         primary_index=(focus_key,),
-                        color_preset="jet",
+                        color_preset=("color_preset",),
                         selected_i=("selected_assembly_ij.i",),
                         selected_j=("selected_assembly_ij.j",),
                         x_labels=(x_label_key,),
@@ -296,7 +296,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                         ):
                             vera.VerticalColorMapEditor(
                                 v_model=range_keys[g],
-                                color_preset="jet",
+                                color_preset=("color_preset",),
                                 units=(units_keys[g],),
                             )
             # Footer: caption takes the slack, controls keep their intrinsic width.

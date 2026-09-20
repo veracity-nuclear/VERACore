@@ -205,7 +205,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                             ):
                                 axial_kwargs = dict(
                                     value=(core_keys[g], []),
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     x_sizes=(size_x_keys[g], []),
                                     y_sizes=(size_y_key, []),
@@ -236,7 +236,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                             ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     units=(f"color_units_{view_id}",),
                                 )
             # Footer: caption, values toggle and decimals selector on one line.

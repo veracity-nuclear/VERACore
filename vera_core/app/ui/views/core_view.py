@@ -121,7 +121,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         set_info(view_id, state, registry)
 
     can_label = f"{assembly_size_key} > 0 && {assembly_size_key} <= {MAX_LABEL_SIDE}"
-
     with DivLayout(server, template_name=option["name"]) as layout:
         layout.root.style = "height: 100%; display: flex; flex-direction: row;"
         with html.Div(style=("flex: 1; min-width: 0;display: flex; flex-direction: column;")):
@@ -161,7 +160,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     y_labels=(f"{y_label_key}",),
                                     assembly_size=(assembly_size_key,),
                                     core_cols=(core_cols_key,),
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     color_range=(f"color_range_{view_id}_{g}", [0, 3]),
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
@@ -177,7 +176,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                             ):
                                 vera.VerticalColorMapEditor(
                                     v_model=f"color_range_{view_id}_{g}",
-                                    color_preset="jet",
+                                    color_preset=("color_preset",),
                                     units=(f"color_units_{view_id}",),
                                 )
             # Footer: caption, values toggle and decimals selector on one line.

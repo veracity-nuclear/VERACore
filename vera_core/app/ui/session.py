@@ -17,6 +17,7 @@ SESSION_GLOBAL_KEYS = [
     "dark_mode",
     "max_layer",
     "thresholds",
+    "color_preset",
 ]
 
 SESSION_VERSION = 1

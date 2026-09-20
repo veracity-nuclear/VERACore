@@ -5,6 +5,7 @@ from trame_server.core import Controller, Server, State
 from vera_core.data.registry import VeraDataRegistry
 
 from . import assets
+from .color_presets import PRESETS, css_gradient
 from .features import (
     DatasetPicker,
     DeriveMenu,
@@ -19,12 +20,51 @@ from .features import (
 
 MAX_TICKS = 60
 
+COLOR_PRESETS = [
+    ("Viridis (matplotlib)", "#440154,#414487,#2a788e,#22a884,#7ad151,#fde725"),
+    ("Plasma (matplotlib)", "#0d0887,#6a00a8,#b12a90,#e16462,#fca636,#f0f921"),
+    ("Inferno (matplotlib)", "#000004,#420a68,#932667,#dd513a,#fca50a,#fcffa4"),
+    ("Magma (matplotlib)", "#000004,#3b0f70,#8c2981,#de4968,#fe9f6d,#fcfdbf"),
+    ("Cool to Warm", "#3b4cc0,#7b9ff9,#c0d4f5,#f2cbb7,#ee8468,#b40426"),
+    ("Cold and Hot", "#00ffff,#0000ff,#000080,#ff0000,#ffff00"),
+    ("Blue to Yellow", "#19197f,#3c6ca8,#7fb2a0,#d9d96a,#ffff00"),
+    ("Grayscale", "#000000,#ffffff"),
+    ("Inverted-Grayscale", "#ffffff,#000000"),
+    ("jet", "#00008f,#0000ff,#00ffff,#ffff00,#ff0000,#800000"),
+    ("rainbow", "#0000ff,#00ffff,#00ff00,#ffff00,#ff0000"),
+]
+
+
+def build_color_map_menu():
+    with vuetify.VMenu(offset_y=True):
+        with vuetify.Template(v_slot_activator="{ on, attrs }"):
+            with vuetify.VBtn(icon=True, v_bind="attrs", v_on="on", disabled=("!has_data",)):
+                vuetify.VIcon("mdi-palette")
+        with vuetify.VList(dense=True):
+            for name, _points in PRESETS:
+                with vuetify.VListItem(click=f"color_preset = {name!r}"):
+                    with vuetify.VListItemTitle(classes="d-flex align-center"):
+                        html.Div(
+                            style=(
+                                "width: 44px; height: 14px; border-radius: 2px;"
+                                f" background: {css_gradient(name)};"
+                            )
+                        )
+                        html.Span(name, classes="ml-3")
+                        vuetify.VIcon(
+                            "mdi-check",
+                            small=True,
+                            v_if=(f"color_preset === {name!r}",),
+                            classes="ml-auto",
+                        )
+
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
     tb.height = 36
     html.Img(src=assets.LOGO, height=25, click=ctrl.open_version_dialog, style="cursor: pointer;")
     VersionChecker.build_version_notice(ctrl)
+    build_color_map_menu()
 
     vuetify.VSpacer()
     with html.Div(style="width: 25px", classes="mr-2"):

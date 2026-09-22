@@ -20,7 +20,6 @@ from .model import (
     nan_out_reflected,
 )
 from .readers.h5 import open_vera_file_data_source
-from .readers.stream import VeraDataStream, generate_stream_identifier
 from .registry import VeraDataRegistry
 
 __all__ = [

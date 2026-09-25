@@ -2,7 +2,7 @@ from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
 from vera_core.data.analysis.assembly_surface_slice import AssemblySurfaceSlice
-from vera_core.data.dtypes import MAX_NUM_GROUPS, VeraDtype
+from vera_core.data.dtypes import VeraDtype
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 
@@ -10,6 +10,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import get_safe_idxs, is_non_active_view, pick_group, set_info
+from . import MAX_VIS_GROUPS
 from .save_image import register_photo_state
 
 
@@ -37,7 +38,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_group_key = f"selected_group_{view_id}"
 
     n_groups_key = f"n_groups_{view_id}"
-    group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     decimals_key = f"assembly_decimals_{view_id}"
     lock_flag = f"locked_{view_id}"
     info = f"label_info_{view_id}"
@@ -83,12 +84,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         serialized_data = assembly_surface_slice.serialize_data_groups()
         serialized_data = pick_group(serialized_data, state[selected_group_key])
         for g, image in enumerate(serialized_data):
-            if g >= MAX_NUM_GROUPS:
+            if g >= MAX_VIS_GROUPS:
                 break
             # (4_faces, n_nodes) for this assembly, group, layer
             state[group_keys[g]] = image
 
-        for g in range(len(serialized_data), MAX_NUM_GROUPS):
+        for g in range(len(serialized_data), MAX_VIS_GROUPS):
             state[group_keys[g]] = []
 
         # sel = AssemblySurfaceView(vera_source).select(
@@ -117,7 +118,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
-                for g in range(MAX_NUM_GROUPS):
+                for g in range(MAX_VIS_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(
@@ -144,7 +145,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     selected_j=("selected_j", 7),
                                     selected_surface=("selected_surface", -1),
                                     color_preset=("color_preset",),
-                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 1]),
                                     click=(
                                         on_surface_click,
                                         "[$event.i, $event.j, $event.surface]",

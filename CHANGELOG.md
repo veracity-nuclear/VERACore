@@ -80,3 +80,12 @@ linked, interactive views arranged in a configurable grid.
 instead of just for computational_core_map and comp_axial_mesh.
 
 [2.0.7]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.7
+
+## [2.0.8] - 2026-09-25
+
+This version adds the following:
+ - A UI dropdown to allow users change color map theme from UI.
+ - Individual groups from an energy dataset can now be selected from the dataset picker, and viewed on their own in their respective views.
+ - A button to toggle between the color bar range being derived over all states or just the current selected state.
+
+[2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.8

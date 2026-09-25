@@ -39,6 +39,8 @@ def is_non_active_view(state: State, view_id: int, option: dict[str, str]) -> bo
 
 def get_time(state: State, view_id) -> int | None:
     frozen_sels = state[f"locked_{view_id}"]
+    if not frozen_sels:
+        return state["selected_time"]
     return frozen_sels.get("selected_time", None) if isinstance(frozen_sels, dict) else None
 
 
@@ -51,7 +53,7 @@ def _layer_elevation(axial_mesh, layer):
     return float(np.round(mesh[layer], 2))
 
 
-def set_info(view_id: int, state: State, registry: VeraDataRegistry):
+def set_info(view_id, state: State, registry: VeraDataRegistry):
     if is_view_locked(state=state, view_id=view_id):
         return
     indices = get_safe_idxs(view_id, state, registry)

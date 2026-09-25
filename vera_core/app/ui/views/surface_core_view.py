@@ -2,7 +2,6 @@ from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
 from vera_core.data.analysis.surface_slice import SurfaceSlice
-from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 
@@ -10,6 +9,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import get_safe_idxs, is_non_active_view, pick_group, set_info
+from . import MAX_VIS_GROUPS
 from .save_image import register_photo_state
 
 
@@ -34,7 +34,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     selected_group_key = f"selected_group_{view_id}"
 
     n_groups_key = f"n_groups_{view_id}"
-    group_keys = [f"core_surface_cells_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    group_keys = [f"core_surface_cells_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     x_label_key = f"core_surface_x_labels_{view_id}"
     y_label_key = f"core_surface_y_labels_{view_id}"
     aspect_ratio_key = f"aspect_ratio_{view_id}"
@@ -92,12 +92,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         sel_group = state[selected_group_key]
         images = pick_group(images, sel_group)
         for g, image in enumerate(images):
-            if g >= MAX_NUM_GROUPS:
+            if g >= MAX_VIS_GROUPS:
                 break
             # (4_faces, n_nodes, nass) for this energy group + layer
             state[group_keys[g]] = image
 
-        for g in range(len(images), MAX_NUM_GROUPS):
+        for g in range(len(images), MAX_VIS_GROUPS):
             state[group_keys[g]] = []
 
         state[x_label_key] = core_surface_slice.x_labels
@@ -113,7 +113,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
-                for g in range(MAX_NUM_GROUPS):
+                for g in range(MAX_VIS_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(
@@ -142,7 +142,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     y_labels=(y_label_key, []),
                                     aspect_ratio=(aspect_ratio_key, 1),
                                     color_preset=("color_preset",),
-                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 1]),
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),

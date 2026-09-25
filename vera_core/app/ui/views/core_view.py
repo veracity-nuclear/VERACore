@@ -15,10 +15,10 @@ from ..helpers import (
     pick_group,
     set_info,
 )
+from . import MAX_VIS_GROUPS
 from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
-MAX_VIS_GROUPS = 4
 
 
 def option_for(view_id):
@@ -172,7 +172,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     assembly_size=(assembly_size_key,),
                                     core_cols=(core_cols_key,),
                                     color_preset=("color_preset",),
-                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 1]),
                                     click="selected_assembly_ij = $event",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),

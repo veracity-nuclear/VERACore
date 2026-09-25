@@ -9,9 +9,9 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, pick_group, set_info
+from . import MAX_VIS_GROUPS
 from .save_image import register_photo_state
 
-MAX_VIS_GROUPS = 4
 FALLBACK_DISPLAY_SIZE = 17
 X_SCALE = 3.0
 
@@ -213,7 +213,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
                                 axial_kwargs = dict(
                                     value=(core_keys[g], []),
                                     color_preset=("color_preset",),
-                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 1]),
                                     x_sizes=(size_x_keys[g], []),
                                     y_sizes=(size_y_key, []),
                                     x_labels=(label_x_key, []),

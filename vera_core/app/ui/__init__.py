@@ -7,12 +7,14 @@ from trame.app.asynchronous import StateQueue
 from trame.app.dev import remove_change_listeners
 from trame_server.core import Server
 
-from vera_core.data.analysis.color import array_range
-from vera_core.data.dtypes import LATERAL_SURFACES, MAX_NUM_GROUPS, VeraDataset, VeraDtype
+from vera_core.data.analysis.color import finite_range, union_range
+from vera_core.data.dtypes import LATERAL_SURFACES, VeraDataset, VeraDtype
+from vera_core.data.model import VeraDataSource, nan_out_non_fuel
 from vera_core.data.readers.h5 import open_vera_file_data_source
 from vera_core.data.readers.rom_reciever import generate_stream_identifier
 from vera_core.data.registry import VeraDataRegistry
 
+from .color_ranges_cache import StateRangeCache
 from .features import (
     DatasetPicker,
     DeriveMenu,
@@ -38,6 +40,7 @@ from .helpers import (
 from .layout import build_layout
 from .session import Session, ViewSession, recipe_sources
 from .views import (
+    MAX_VIS_GROUPS,
     assembly_view,
     axial_plot,
     cips_view,
@@ -55,6 +58,8 @@ from .views import (
 )
 
 DEFAULT_NB_ROWS = 8
+# Color bars span every state (True) or only the displayed state (False).
+COLOR_ALL_STATES_DEFAULT = False
 NUM_VIEW_SLOTS = 10
 
 NO_DATASET_LABEL = "No dataset"
@@ -133,8 +138,11 @@ def _group_arrays(array: VeraDataset, group: int | None = None):
         return [array]
     group_axis = dtype.energy_group_dim_idx
     surface_axis = dtype.surface_dim_idx if dtype.has_surface_dim() else None
-    n = min(array.shape[group_axis], MAX_NUM_GROUPS)
-    idxs = [min(max(group - 1, 0), n - 1)] if group is not None else range(n)
+    n = array.shape[group_axis]
+    if group is None:
+        idxs = range(min(n, MAX_VIS_GROUPS))
+    else:
+        idxs = [min(max(group - 1, 0), n - 1)]
     return [array[_build_group_slice(array.ndim, group_axis, i, surface_axis)] for i in idxs]
 
 
@@ -234,9 +242,23 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             state[f"selected_label_{view_id}"] = NO_DATASET_LABEL
         _set_multi_selection(view_id, [])
 
+    range_cache = StateRangeCache()
+
+    def _state_group_ranges(src: VeraDataSource, state_idx, array_name, group, thresholds):
+        try:
+            dataset = src.get_dataset(array_name, state_idx=state_idx)
+        except RuntimeError:
+            return None
+        dataset = nan_out_non_fuel(dataset, src.core.pin_volumes)
+        return [finite_range(array, thresholds) for array in _group_arrays(dataset, group)]
+
     @requires_src
-    def _recompute_card_range(view_id: int):
-        """Rescale a card's shared color bar to its current data."""
+    def _recompute_card_range(view_id):
+        """
+        Rescale a card's shared color bar to its current data.
+        Spans every state when color_all_states is set, else the card's
+        displayed state. Per-state results are cached.
+        """
         if state[f"grid_view_{view_id}"].get("owns_color_bar", False):
             return
         src_id = state[f"selected_src_id_{view_id}"]
@@ -246,10 +268,27 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         if src is None or not array_name:
             return
         thresholds = get_thresholds(state, view_id)
-        for g, group_array in enumerate(
-            _group_arrays(src.get_dataset(array_name, state_idx=get_time(state, view_id)), group)
-        ):
-            state[f"color_range_{view_id}_{g}"] = array_range(group_array, thresholds)
+        key = (array_name, group, json.dumps(thresholds, sort_keys=True, default=repr))
+        if not src.states:
+            return
+        if state.color_all_states:
+            state_idxs = range(len(src.states))
+        else:
+            time = get_time(state, view_id)
+            time = src.active_state_index if time is None else time
+            state_idxs = [max(0, min(time, len(src.states) - 1))]
+        per_state = [
+            range_cache.get(
+                src.states[i],
+                key,
+                functools.partial(_state_group_ranges, src, i, array_name, group, thresholds),
+            )
+            for i in state_idxs
+        ]
+        per_state = [ranges for ranges in per_state if ranges is not None]
+        for g, group_ranges in enumerate(zip(*per_state, strict=True)):
+            found = [r for r in group_ranges if r is not None]
+            state[f"color_range_{view_id}_{g}"] = union_range(found)
 
     def _init_global_state():
         # selected_time: STATE_n being visualized (2 -> STATE_0002).
@@ -273,6 +312,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         state.setdefault("dark_mode", True)
         state.setdefault("recipes", [])
         state.setdefault("color_preset", "jet")
+        state.setdefault("color_all_states", COLOR_ALL_STATES_DEFAULT)
 
     def _init_view_state(view_id):
         """Namespaced state for one card.
@@ -304,7 +344,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             "Pin_x": "-",
             "Pin_y": "-",
         }
-        for g in range(MAX_NUM_GROUPS):
+        for g in range(MAX_VIS_GROUPS):
             state[f"color_range_{view_id}_{g}"] = (0.0, 1.0)
         for module in VIEW_MODULES:
             module.initialize(server, registry, view_id)
@@ -388,14 +428,25 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         selected_time = int(selected_time)
         registry.change_all_active_state(selected_time)
         ctrl.on_vera_out_active_state_index_changed(selected_time=selected_time, **kwargs)
+        if state.color_all_states:
+            return  # the range already spans every state
         for view_id in all_view_ids:
             if not is_view_locked(state, view_id):
                 _recompute_card_range(view_id)
+
+    @state.change("color_all_states")
+    def color_all_states_changed(**kwargs):
+        for view_id in all_view_ids:
+            _recompute_card_range(view_id)
 
     @state.change("src_tree_meta")
     def refresh_max_state(**kwargs):
         state.max_time = max(state.max_time, registry.max_state)
         state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
+        if state.color_all_states:
+            # States may have been added or dropped; only new ones are read.
+            for view_id in all_view_ids:
+                _recompute_card_range(view_id)
 
     def _reset_view_pool(used_ids=()):
         nonlocal available_view_ids
@@ -493,15 +544,22 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                 _clear_view_source(view_id)
             else:
                 select_dataset(view_id, fallback_id, array_name)
-
-        if not registry.has_src():
-            state.has_data = False
-            state.grid_layout = []
-            _reset_view_pool()
-            activation_done = False
-
-        DatasetPicker.refresh_src_tree(state, registry)
-        state.grid_rebuild_key += 1
+        with state:
+            if stream_id is not None:
+                state.dirty("ports_opened")
+            if not registry.has_src():
+                state.has_data = False
+                state.grid_layout = []
+                _reset_view_pool()
+                activation_done = False
+            max_time = registry.max_state
+            clamped_time = max(0, min(state.selected_time, max_time))
+            state.max_time = max_time
+            state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
+            state.selected_time = clamped_time
+            registry.change_all_active_state(clamped_time)
+            DatasetPicker.refresh_src_tree(state, registry)
+            state.grid_rebuild_key += 1
 
     def _replay_recipes(recipes, present_src_ids):
         """Rebuild derived datasets in creation order. Returns error strings."""
@@ -585,7 +643,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             state.max_time = registry.max_state
             for key, value in session.globals.items():
                 state[key] = value
-            registry.change_all_active_state(session.globals["selected_time"])
+            registry.change_all_active_state(session.globals.get("selected_time", 0))
 
             # Slots used by the session must not be handed out again, and the
             # default arrangement must not overwrite the restored one.

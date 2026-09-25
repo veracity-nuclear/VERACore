@@ -11,15 +11,26 @@ from ..thresholds import ThresholdCondition, threshold_mask
 DEFAULT_CMAP = "jet"
 
 
-def array_range(array, thres: Sequence[ThresholdCondition] | None = None) -> tuple[float, float]:
-    """Finite (lo, hi) of an array, widened when flat and (0, 1) when empty."""
+def finite_range(
+    array, thres: Sequence[ThresholdCondition] | None = None
+) -> tuple[float, float] | None:
+    """Finite (lo, hi) of the kept values, or None when no finite value is kept."""
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         keep = True if thres is None else threshold_mask(array, thres)
         lo = float(np.nanmin(array, where=keep, initial=np.inf))
         hi = float(np.nanmax(array, where=keep, initial=-np.inf))
     if not np.isfinite(lo) or not np.isfinite(hi):
+        return None
+    return (lo, hi)
+
+
+def array_range(array, thres: Sequence[ThresholdCondition] | None = None) -> tuple[float, float]:
+    """Finite (lo, hi) of an array, widened when flat and (0, 1) when empty."""
+    found = finite_range(array, thres)
+    if found is None:
         return (0.0, 1.0)
+    lo, hi = found
     if lo == hi:
         eps = max(abs(hi) * 1e-9, 1e-12)
         return (lo, hi + eps)

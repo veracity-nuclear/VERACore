@@ -2,7 +2,6 @@ from trame.ui.html import DivLayout
 from trame.widgets import html, vuetify
 
 from vera_core.data.analysis.assembly_slice import AssemblySlice
-from vera_core.data.dtypes import MAX_NUM_GROUPS
 from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 
@@ -10,6 +9,7 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
 from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, pick_group, set_info
+from . import MAX_VIS_GROUPS
 from .save_image import register_photo_state
 
 
@@ -26,13 +26,8 @@ def option_for(view_id):
 def initialize(server, registry: VeraDataRegistry, view_id):
     state, ctrl = server.state, server.controller
 
-    # if OPTION not in state.grid_options:
-    #     state.grid_options.append(OPTION)
-
-    # A cache of assembly images.
     option = option_for(view_id)
     state[f"grid_options_{view_id}"] = state[f"grid_options_{view_id}"] + [option]
-    cached_assembly_images = {}
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
@@ -40,7 +35,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
-    assembly_keys = [f"assembly_array_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
+    assembly_keys = [f"assembly_array_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
     for ak in assembly_keys:
         state.setdefault(ak, [])
     info = f"label_info_{view_id}"
@@ -70,68 +65,33 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         if not indices:
             return
         _, _, selected_layer, selected_assembly, selected_src_id, selected_array, time, _ = indices
-        selected_time = state["selected_time"]
         vera_source: VeraDataSource = registry.get(selected_src_id)
-        thres_hash = 0
-        thresholds_to_apply = get_thresholds(state, view_id)
-        for condition in thresholds_to_apply:
-            thres_hash += hash(condition["op"]) + hash(condition["value"])
 
-        images_dataset = None
-
-        # Extract from cache if possible
-        cache_key = (
-            selected_time,
-            selected_array,
-            selected_assembly,
-            selected_layer,
-            thres_hash,
-            selected_src_id,
+        assembly_slice = AssemblySlice.create_assembly_slice(
+            vera_source=vera_source,
+            selected_array=selected_array,
+            z=selected_layer,
+            assembly_id=selected_assembly,
+            state=time,
+            thresholds_to_apply=get_thresholds(state, view_id),
         )
-        if cache_key in cached_assembly_images:
-            # Shortcut if we have a cache. We might still need to redraw
-            # if the figure size was updated.
-            images_dataset = cached_assembly_images[cache_key]
+        if not assembly_slice:
+            return
+        # sel = AssemblyView(vera_source).select(
+        #     array,
+        #     state=vera_source.active_state_index,
+        #     assembly=selected_assembly,
+        #     z=selected_layer,
+        #     thresholds=thresholds_to_apply,
+        # )
+        # sel.title = format_label(selected_src_id, selected_array)
+        # nonlocal saved_sel
+        # saved_sel = sel
 
-        # Extract data from H5 + add to cache
-        if images_dataset is None:
-            assembly_slice = AssemblySlice.create_assembly_slice(
-                vera_source=vera_source,
-                selected_array=selected_array,
-                z=selected_layer,
-                assembly_id=selected_assembly,
-                state=time,
-                thresholds_to_apply=thresholds_to_apply,
-            )
-            if not assembly_slice:
-                return
-            # sel = AssemblyView(vera_source).select(
-            #     array,
-            #     state=vera_source.active_state_index,
-            #     assembly=selected_assembly,
-            #     z=selected_layer,
-            #     thresholds=thresholds_to_apply,
-            # )
-            # sel.title = format_label(selected_src_id, selected_array)
-            # nonlocal saved_sel
-            # saved_sel = sel
-
-            # Only allow one image in the cache
-            MAX_ITEMS_IN_CACHE = 1
-            while len(cached_assembly_images) >= MAX_ITEMS_IN_CACHE:
-                cached_assembly_images.pop(next(iter(cached_assembly_images)))
-            images_dataset = assembly_slice.serialize_data_groups()
-            cached_assembly_images[cache_key] = images_dataset
-
-        # Update the client
-        images_dataset = pick_group(images_dataset, state[selected_group_key])
-        for idx, image in enumerate(images_dataset):
-            if idx >= MAX_NUM_GROUPS:
-                break
-            state[f"assembly_array_{view_id}_{idx}"] = image
-        num_groups = len(images_dataset)
-        for idx in range(num_groups, MAX_NUM_GROUPS):
-            state[f"assembly_array_{view_id}_{idx}"] = []
+        images = pick_group(assembly_slice.serialize_data_groups(), state[selected_group_key])
+        num_groups = min(len(images), MAX_VIS_GROUPS)
+        for idx in range(MAX_VIS_GROUPS):
+            state[assembly_keys[idx]] = images[idx] if idx < num_groups else []
         state[n_groups_key] = num_groups
         set_info(view_id, state, registry)
 
@@ -143,7 +103,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     "flex: 1; min-height: 0;display: flex; flex-direction: row; flex-wrap: wrap;"
                 )
             ):
-                for g in range(MAX_NUM_GROUPS):
+                for g in range(MAX_VIS_GROUPS):
                     with html.Div(
                         v_if=(f"{n_groups_key} > {g}",),
                         style=(
@@ -169,7 +129,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                                     selected_i=("selected_i", 7),
                                     selected_j=("selected_j", 7),
                                     color_preset=("color_preset",),
-                                    color_range=(f"color_range_{view_id}_{g}", [0, 3]),
+                                    color_range=(f"color_range_{view_id}_{g}", [0, 1]),
                                     click="setAll({ selected_i: $event.i, selected_j: $event.j})",
                                     dark=("dark_mode",),
                                     busy=("trame__busy",),

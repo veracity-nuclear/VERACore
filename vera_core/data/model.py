@@ -156,6 +156,8 @@ class DatasetStore:
 
     def shape(self, name: str) -> tuple[int, ...] | None:
         """Shape without reading. None if absent."""
+        if name in self._pinned:
+            return np.shape(self._pinned[name])
         return self._source.shape(name)
 
     def pin(self, key: str, dataset: VeraDataset) -> None:

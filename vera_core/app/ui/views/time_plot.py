@@ -5,11 +5,11 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import html, plotly, vuetify
 
-from vera_core.data.dtypes import VeraDtype, point_indices
+from vera_core.data.dtypes import VeraDim, VeraDtype, point_indices
 from vera_core.data.model import VeraDataSource, VeraOutState
 from vera_core.data.registry import VeraDataRegistry
 
-from ..helpers import get_safe_idxs, is_non_active_view
+from ..helpers import decode_tokens, get_safe_idxs, is_non_active_view
 from .selection import point_label, ui_selection
 
 SEP = "\x1f"
@@ -88,8 +88,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         figure = go.Figure()
         axis = state[time_axis_key]
         is_date = axis in DATE_AXES
-        for token in state[selected_set_key]:
-            src_id, array_name = token.split(SEP, 1)
+        for src_id, array_name, group in decode_tokens(state[selected_set_key]):
             src = registry.get(src_id)
             time_axis = to_x(src.time_axes()[axis], axis)
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
@@ -100,9 +99,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             array_shape = src.get_dataset_shape(array_name, state_idx=time)
             if array_shape is None:
                 continue
-            selection = ui_selection(ny, nx, nax, nass, selected_surface)
+            selection = ui_selection(ny, nx, nax, nass, selected_surface, group)
             try:
-                indices_list = point_indices(array_dtype, array_shape, selection)
+                split = (VeraDim.GROUP,) if VeraDim.GROUP not in selection else tuple()
+                indices_list = point_indices(array_dtype, array_shape, selection, split=split)
             except ValueError:
                 continue
             identifier = point_label(src.core, array_dtype, selection)

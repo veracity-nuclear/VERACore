@@ -75,7 +75,7 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         if ref_dtype != comp_dtype:
             state.diff_compatible = False
             state.diff_shape_error = (
-                f"Type mismatch: {ref.dataset_type} vs {comp.dataset_type}. "
+                f"Type mismatch: {ref_dtype} vs {comp_dtype}. "
                 "Datasets must be the same type to diff."
             )
             return
@@ -96,7 +96,7 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         state.diff_shape_error = ""
 
     @ctrl.set("set_ref_dataset")
-    def set_ref_datset(src_id, dataset_name):
+    def set_ref_datset(src_id, dataset_name, group: int | None = None):
         state.ref_src_id = src_id
         state.ref_dataset_name = dataset_name
         state.ref_label = format_label(src_id, dataset_name)
@@ -105,12 +105,12 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         _recompute_compat()
 
     @ctrl.set("set_comp_dataset")
-    def set_comp_datset(src_id, dataset_name):
+    def set_comp_datset(src_id, dataset_name, group: int | None = None):
         state.comp_src_id = src_id
         state.comp_dataset_name = dataset_name
         state.comp_label = format_label(src_id, dataset_name)
         state.comp_units = _units_of(src_id, dataset_name)
-        state.ref_shape = str((_ds_info(src_id, dataset_name) or (tuple(),))[0])
+        state.comp_shape = str((_ds_info(src_id, dataset_name) or (tuple(),))[0])
         _recompute_compat()
 
     @ctrl.set("create_diff_dataset")

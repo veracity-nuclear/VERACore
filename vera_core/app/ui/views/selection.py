@@ -4,13 +4,15 @@ from vera_core.data.model import VeraOutCore
 from ..helpers import convert_ji_to_node
 
 
-def ui_selection(j: int, i: int, layer: int, assembly: int, surface: int) -> dict[VeraDim, int]:
+def ui_selection(
+    j: int, i: int, layer: int, assembly: int, surface: int, group: int | None = None
+) -> dict[VeraDim, int]:
     """Selected pin (j, i), layer, assembly and surface as semantic indices.
 
     The node is derived from (j, i), so the same selection serves pin and
     nodal data.
     """
-    return {
+    sel = {
         VeraDim.PIN_Y: j,
         VeraDim.PIN_X: i,
         VeraDim.NODE: int(convert_ji_to_node(j, i)),
@@ -18,6 +20,9 @@ def ui_selection(j: int, i: int, layer: int, assembly: int, surface: int) -> dic
         VeraDim.ASSEMBLY: assembly,
         VeraDim.SURFACE: surface,
     }
+    if group is not None and group >= 1:
+        sel |= {VeraDim.GROUP: group - 1}
+    return sel
 
 
 def point_label(core: VeraOutCore, dtype: VeraDtype, selection: dict[VeraDim, int]) -> str:
@@ -27,6 +32,8 @@ def point_label(core: VeraOutCore, dtype: VeraDtype, selection: dict[VeraDim, in
     """
     dims = dtype.dim_axes
     where = []
+    if VeraDim.GROUP in dims and VeraDim.GROUP in selection:
+        where.append(f"Group {selection[VeraDim.GROUP] + 1}")
     if VeraDim.ASSEMBLY in dims:
         assembly = selection[VeraDim.ASSEMBLY]
         where.append(core.reduced_core_map_label(assembly, dtype.is_computational()))

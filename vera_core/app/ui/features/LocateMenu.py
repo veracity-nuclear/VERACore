@@ -95,7 +95,7 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
             state.locate_source_label = format_label(registry.default_src_id, "pin_powers")
 
     @ctrl.set("set_locate_source")
-    def set_locate_source(file, array):
+    def set_locate_source(file, array, group: int | None = None):
         state.locate_source_file = file
         state.locate_source_array = array
         state.locate_source_label = format_label(file, array)

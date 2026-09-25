@@ -34,7 +34,7 @@ def register_threshold_state_ctrl(state: State, ctrl: Controller, registry: Vera
     state.thres_auto_apply = True
 
     @ctrl.set("set_threshold")
-    def set_threshold(file: str, array: str):
+    def set_threshold(file: str, array: str, group: int | None = None):
         state.threshold_dataset = array
         state.threshold_src_id = file
         state.threshold_label = format_label(file, array)

@@ -26,7 +26,9 @@ from .features import (
 )
 from .features.appdata import validate_file_overrides
 from .helpers import (
+    decode_tokens,
     default_dataset_name,
+    encode_tokens,
     format_label,
     get_next_y_from_layout,
     get_thresholds,
@@ -54,7 +56,6 @@ from .views import (
 
 DEFAULT_NB_ROWS = 8
 NUM_VIEW_SLOTS = 10
-MULTI_SEP = "\x1f"
 
 NO_DATASET_LABEL = "No dataset"
 NO_SELECTION_LABEL = "Select datasets"
@@ -92,6 +93,7 @@ SESSION_VIEW_FIELDS = (
     "selected_src_id",
     "selected_array",
     "selected_label",
+    "selected_group",
     "multi_selected",
     "multi_label",
     "locked",
@@ -112,38 +114,28 @@ def _center_assembly(reduced_core_map):
     return int(reduced_core_map[i, j]) - 1
 
 
-def _decode_tokens(tokens):
-    """[(src_id, array_name)] from serialized multi-picker tokens.
-
-    Multi selections are stored as separator-joined strings rather than tuples
-    so trame can serialize them. Malformed entries are dropped.
-    """
-    return [tuple(token.split(MULTI_SEP, 1)) for token in tokens if MULTI_SEP in token]
-
-
-def _encode_tokens(pairs):
-    return [f"{src_id}{MULTI_SEP}{array_name}" for src_id, array_name in pairs]
-
-
 def _dedupe(pairs):
     """Order-preserving deduplicate"""
     return list(dict.fromkeys(pairs))
 
 
-def _group_arrays(array: VeraDataset):
+def _build_group_slice(ndim, group_axis, group, surface_axis: int | None = None):
+    index = [slice(None)] * ndim
+    index[group_axis] = group
+    if surface_axis is not None:
+        index[surface_axis] = LATERAL_SURFACES
+    return tuple(index)
+
+
+def _group_arrays(array: VeraDataset, group: int | None = None):
     dtype = array.dataset_type
     if not dtype.has_energy_group_dim():
         return [array]
     group_axis = dtype.energy_group_dim_idx
     surface_axis = dtype.surface_dim_idx if dtype.has_surface_dim() else None
-    groups = []
-    for group_idx in range(min(array.shape[group_axis], MAX_NUM_GROUPS)):
-        index = [slice(None)] * array.ndim
-        index[group_axis] = group_idx
-        if surface_axis is not None:
-            index[surface_axis] = LATERAL_SURFACES
-        groups.append(array[tuple(index)])
-    return groups
+    n = min(array.shape[group_axis], MAX_NUM_GROUPS)
+    idxs = [min(max(group - 1, 0), n - 1)] if group is not None else range(n)
+    return [array[_build_group_slice(array.ndim, group_axis, i, surface_axis)] for i in idxs]
 
 
 def _copy_value(value):
@@ -192,63 +184,54 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             return "pin_powers" if "pin_powers" in names.values() else names[pin]
         return names[sorted(candidates)[0]]
 
-    def _resolve_pair(option, src_id, array_name, view_id):
-        """(src_id, array_name) satisfying `option`, or None if nothing can.
-
-        Keeps the current selection when it is still valid, then falls back to a
-        default dataset on the same source, then on any other loaded source.
-        """
+    def _resolve_pair(option, src_id, array_name, group, view_id):
         allowed = option.get("allowed_categories")
         src = _src(src_id)
-        # array_dtype returns None for a name that no longer exists, e.g. one
-        # left behind by a removed source or recipe.
         dtype = (
             src.get_dataset_dtype(array_name, state_idx=get_time(state, view_id))
             if src is not None and array_name
-            else None
+            else VeraDtype.UNKNOWN
         )
-        if dtype is not None and (allowed is None or dtype.title in allowed):
-            return (src_id, array_name)
+        if dtype is not VeraDtype.UNKNOWN and (allowed is None or dtype.title in allowed):
+            return (src_id, array_name, group)
         others = [s for s in registry.src_ids() if s and s != src_id]
         for candidate in [src_id, *others]:
             fallback = _default_array_for_option(candidate, option)
             if fallback is not None:
-                return (candidate, fallback)
+                return (candidate, fallback, None)
         return None
 
-    def _set_multi_selection(view_id, pairs):
-        state[f"multi_selected_{view_id}"] = _encode_tokens(pairs)
-        state[f"multi_label_{view_id}"] = f"{len(pairs)} selected" if pairs else NO_SELECTION_LABEL
+    def _set_multi_selection(view_id, triples):
+        state[f"multi_selected_{view_id}"] = encode_tokens(triples)
+        state[f"multi_label_{view_id}"] = (
+            f"{len(triples)} selected" if triples else NO_SELECTION_LABEL
+        )
 
     @ctrl.set("select_dataset")
-    def select_dataset(view_id, src_id, array_name):
-        """Point a card at a dataset.
-
-        Args:
-            view_id: card whose per-view state is updated.
-            src_id: registry id of the owning source; names are not unique
-                across sources.
-            array_name: dataset to visualize.
-        """
+    def select_dataset(view_id, src_id, array_name, group=None):
+        """Point a card at a dataset. `group` is 1-based; None means all groups."""
         state[f"selected_src_id_{view_id}"] = src_id
         state[f"selected_array_{view_id}"] = array_name
+        state[f"selected_group_{view_id}"] = group
         state[f"selected_label_{view_id}"] = format_label(src_id, array_name)
 
     @ctrl.set("toggle_multi_array")
-    def toggle_multi_array(view_id, src_id, array_name):
-        """Add or remove a (source, dataset) pair in a multi-picker card."""
-        pairs = _decode_tokens(state[f"multi_selected_{view_id}"])
-        pair = (src_id, array_name)
-        if pair in pairs:
-            pairs.remove(pair)
+    def toggle_multi_array(view_id, src_id, array_name, group=None):
+        """Add or remove a (source, dataset, group) selection on a multi-picker card."""
+        triples = decode_tokens(state[f"multi_selected_{view_id}"])
+        entry = (src_id, array_name, group)
+        if entry in triples:
+            triples.remove(entry)
         else:
-            pairs.append(pair)
-        _set_multi_selection(view_id, pairs)
+            triples.append(entry)
+        _set_multi_selection(view_id, triples)
 
     def _clear_view_source(view_id):
-        state[f"selected_src_id_{view_id}"] = None
-        state[f"selected_array_{view_id}"] = ""
-        state[f"selected_label_{view_id}"] = NO_DATASET_LABEL
+        with state:
+            state[f"selected_src_id_{view_id}"] = None
+            state[f"selected_array_{view_id}"] = ""
+            state[f"selected_group_{view_id}"] = None
+            state[f"selected_label_{view_id}"] = NO_DATASET_LABEL
         _set_multi_selection(view_id, [])
 
     @requires_src
@@ -258,12 +241,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             return
         src_id = state[f"selected_src_id_{view_id}"]
         array_name = state[f"selected_array_{view_id}"]
+        group = state[f"selected_group_{view_id}"]
         src = _src(src_id)
         if src is None or not array_name:
             return
         thresholds = get_thresholds(state, view_id)
         for g, group_array in enumerate(
-            _group_arrays(src.get_dataset(array_name, state_idx=get_time(state, view_id)))
+            _group_arrays(src.get_dataset(array_name, state_idx=get_time(state, view_id)), group)
         ):
             state[f"color_range_{view_id}_{g}"] = array_range(group_array, thresholds)
 
@@ -306,6 +290,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         state[f"grid_view_{view_id}"] = empty.option_for(view_id)
         state[f"selected_src_id_{view_id}"] = registry.default_src_id
         state[f"selected_array_{view_id}"] = ""
+        state[f"selected_group_{view_id}"] = None
         state[f"selected_label_{view_id}"] = NO_DATASET_LABEL
         state[f"multi_selected_{view_id}"] = []
         state[f"multi_label_{view_id}"] = NO_SELECTION_LABEL
@@ -328,6 +313,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
         @state.change(
             f"selected_src_id_{view_id}",
             f"selected_array_{view_id}",
+            f"selected_group_{view_id}",
             f"multi_selected_{view_id}",
             f"locked_{view_id}",
         )
@@ -353,14 +339,13 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             """Re-point the card at datasets the newly selected view accepts."""
             option = state[f"grid_view_{view_id}"]
             multi = option.get("multi_picker", False)
-            pairs = _decode_tokens(state[f"multi_selected_{view_id}"]) if multi else []
+            pairs = decode_tokens(state[f"multi_selected_{view_id}"]) if multi else []
             if not pairs:
-                # Single-picker view, or a multi view switched in from a single
-                # one with nothing carried over.
                 pairs = [
                     (
                         state[f"selected_src_id_{view_id}"],
                         state[f"selected_array_{view_id}"],
+                        state[f"selected_group_{view_id}"],
                     )
                 ]
             resolved = _dedupe(
@@ -474,7 +459,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
             available_view_ids.insert(0, view_id)
             return
         select_dataset(view_id, src_id, array_name)
-        _set_multi_selection(view_id, [(src_id, array_name)])
+        _set_multi_selection(view_id, [(src_id, array_name, None)])
         state.grid_layout.append(dict(x=x, y=y, w=w, h=h, i=view_id))
         state[f"grid_view_{view_id}"] = option
         _recompute_card_range(view_id)
@@ -496,7 +481,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
 
         fallback_id = registry.default_src_id
         for view_id in all_view_ids:
-            pairs = _decode_tokens(state[f"multi_selected_{view_id}"])
+            pairs = decode_tokens(state[f"multi_selected_{view_id}"])
             kept = [pair for pair in pairs if pair[0] != src_id]
             if len(kept) != len(pairs):
                 _set_multi_selection(view_id, kept)
@@ -644,7 +629,7 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
 
             for view_id in all_view_ids:
                 select_dataset(view_id, default_id, default_name)
-                _set_multi_selection(view_id, [(default_id, default_name)])
+                _set_multi_selection(view_id, [(default_id, default_name, None)])
                 _recompute_card_range(view_id)
             for module, x, y, w, h in DEFAULT_ARRANGEMENT:
                 _place(module, default_id, x, y, w, h)

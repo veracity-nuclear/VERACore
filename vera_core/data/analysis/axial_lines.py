@@ -110,10 +110,12 @@ class AxialLines:
             node_idx = indices.get(VeraDim.NODE, 0)
             assembly_id = indices.get(VeraDim.ASSEMBLY, 0)
             surface_idx = indices.get(VeraDim.SURFACE, 0)
+            group_idx = indices.get(VeraDim.GROUP, None)
 
             mode = "lines" if vdtype != VeraDtype.POINT_DETECTOR else "lines+markers"
             identifier = ""
-
+            if vdtype.has_energy_group_dim() and group_idx is not None:
+                identifier += f" Group {group_idx + 1}"
             if vdtype.has_assembly_id_dim():
                 assembly_label = src.core.reduced_core_map_label(
                     assembly_id, vdtype.is_computational()
@@ -131,15 +133,16 @@ class AxialLines:
             if vdtype.has_surface_dim():
                 surface_str = Surface(surface_idx).str
                 identifier += f" {surface_str}"
-
+            split = (VeraDim.GROUP,) if group_idx is None else tuple()
             grouped_axial_datasets = dataset.arrange(
                 order=(VeraDim.AXIAL,),
-                split=(VeraDim.GROUP,),
+                split=split,
                 require=(VeraDim.AXIAL,),
                 pin=(j, i),
                 surface=surface_idx,
                 node=node_idx,
                 assembly=assembly_id,
+                group=group_idx,
             )
             max_state = len(src.states) - 1
             recorded_state = (

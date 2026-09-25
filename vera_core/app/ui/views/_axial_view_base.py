@@ -8,7 +8,7 @@ from vera_core.data.model import VeraDataSource
 from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
-from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, set_info
+from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, pick_group, set_info
 from .save_image import register_photo_state
 
 MAX_VIS_GROUPS = 4
@@ -48,6 +48,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
+    selected_group_key = f"selected_group_{view_id}"
 
     prefix = f"{axis}_axial_core"
     core_keys = [f"{prefix}_{view_id}_{g}" for g in range(MAX_VIS_GROUPS)]
@@ -108,6 +109,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
     @state.change(
         selected_array_key,
         selected_src_key,
+        selected_group_key,
         "selected_assembly_ij",
         pin_key,
         f"grid_view_{view_id}",
@@ -157,11 +159,16 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         images = axial_slice.serialize_data_groups()
         x_sizes = axial_slice.x_size.tolist()
+        sel_group = state[selected_group_key]
+        images = pick_group(images, sel_group)
+        n_groups = len(images)
         for g, image in enumerate(images):
+            if g >= MAX_VIS_GROUPS:
+                break
             state[core_keys[g]] = image
             state[size_x_keys[g]] = x_sizes
 
-        for g in range(axial_slice.n_groups, MAX_VIS_GROUPS):
+        for g in range(n_groups, MAX_VIS_GROUPS):
             state[core_keys[g]] = []
             state[size_x_keys[g]] = []
 
@@ -172,7 +179,7 @@ def build_axial_view(server, registry: VeraDataRegistry, view_id, axis):
 
         state[label_x_key] = axial_slice.x_labels
 
-        state[n_groups_key] = axial_slice.n_groups
+        state[n_groups_key] = n_groups
         set_info(view_id, state, registry)
 
     with DivLayout(server, template_name=option["name"]) as layout:

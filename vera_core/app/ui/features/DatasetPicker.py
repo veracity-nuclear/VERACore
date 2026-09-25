@@ -1,41 +1,50 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
+from vera_core.data.dtypes import VeraDtype
+from vera_core.data.model import VeraOutState
 from vera_core.data.registry import VeraDataRegistry
+
+from ..helpers import MULTI_SEP
 
 MENU_MAX_HEIGHT = "60vh"
 
 
+def _group_count(vera_state: VeraOutState, name: str, dtype: VeraDtype) -> int:
+    """Number of energy groups in `name`; 0 when the dtype has no group dim."""
+    if not dtype.has_energy_group_dim():
+        return 0
+    shape = vera_state.shape(name)
+    return int(shape[dtype.energy_group_dim_idx])
+
+
 def refresh_src_tree(state: State, registry: VeraDataRegistry):
-    """
-    Defines and refreshes state for tracking what datasets are available in each opened source
-
-    state.src_tree : state that tracks each sources' (in the src registry) available datasets by category
-        each src has a list of dicts, each dict corresponds to a VeraDtype category
-        each category dict contains a list of the names of datasets in this category,
-        the names are stores as key:value pairs to map user selection from dataset picker to raw h5 dataset name
-
-    state.src_tree_meta : state that tracks the number of states and core shape of each source in the registry
-
-    """
-    state.src_tree = {
-        fid: [
+    src_tree = {}
+    src_tree_meta = {}
+    for fid in registry.src_ids():
+        src = registry.get(fid)
+        vera_state = src.active_state
+        src_tree[fid] = [
             {
                 "key": cat,
                 "category": cat.replace("_", " ").title(),
-                "entries": [{"text": k.replace("_", " ").title(), "value": k} for k in names],
+                "entries": [
+                    {
+                        "text": name.replace("_", " ").title(),
+                        "value": name,
+                        "groups": _group_count(vera_state, name, VeraDtype[cat]),
+                    }
+                    for name in names
+                ],
             }
-            for cat, names in registry.get(fid).active_state.grouped_full_core_keys
+            for cat, names in vera_state.grouped_full_core_keys
         ]
-        for fid in registry.src_ids()
-    }
-    state.src_tree_meta = {
-        fid: {
-            "shape": str(registry.get(fid).core.core_shape),
-            "states": len(registry.get(fid).states),
+        src_tree_meta[fid] = {
+            "shape": str(src.core.core_shape),
+            "states": len(src.states),
         }
-        for fid in registry.src_ids()
-    }
+    state.src_tree = src_tree
+    state.src_tree_meta = src_tree_meta
 
 
 def register_dataset_picker_state(state: State, registry: VeraDataRegistry):
@@ -47,8 +56,96 @@ def _make_label(selected_label_arg: str):
     """helper method for creating a JS span that shows selected_label_arg, truncating with an ellipsis when it's too long for the picker button"""
     return html.Span(
         f"{{{{ get(`{selected_label_arg}`) }}}}",
-        style=("max-width: 26ch;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;"),
+        style=("max-width: 100%;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;"),
     )
+
+
+def _with_group(args: str, group_expr: str) -> str:
+    """Append the chosen group to the caller's JS arg list."""
+    inner = args.strip()[1:-1].strip()
+    return f"[{inner}, {group_expr}]" if inner else f"[{group_expr}]"
+
+
+def _key_expr(group_expr: str | None) -> str:
+    base = f"src + '{MULTI_SEP}' + entry.value"
+    return base if group_expr is None else f"{base} + '{MULTI_SEP}' + {group_expr}"
+
+
+def _check_icon(selected_arg: str | None, group_expr: str | None) -> None:
+    if not selected_arg:
+        return
+    with vuetify.VListItemIcon():
+        vuetify.VIcon(
+            "mdi-check",
+            small=True,
+            v_show=(f"get(`{selected_arg}`).includes({_key_expr(group_expr)})",),
+        )
+
+
+def _build_entries(
+    ctrl: Controller,
+    ctrl_func: str,
+    ctrl_func_args: str,
+    close_on_content_click: bool,
+    selected_arg: str | None = None,
+    allow_groups: bool = False,
+):
+    """One item per dataset. With allow_groups, entries that have energy
+    groups open a submenu; otherwise every entry selects the whole dataset."""
+    all_args = _with_group(ctrl_func_args, "null")
+    if not allow_groups:
+        with vuetify.VListItem(
+            v_for="entry in group.entries",
+            key="entry.value",
+            click=(ctrl[ctrl_func], all_args),
+        ):
+            _check_icon(selected_arg, None)
+            vuetify.VListItemTitle("{{ entry.text }}")
+        return
+
+    with vuetify.Template(v_for="entry in group.entries"):
+        with vuetify.VListItem(
+            v_if="!entry.groups",
+            key="entry.value",
+            click=(ctrl[ctrl_func], all_args),
+        ):
+            _check_icon(selected_arg, None)
+            vuetify.VListItemTitle("{{ entry.text }}")
+        with vuetify.VMenu(
+            v_else=True,
+            key="entry.value",
+            offset_x=True,
+            open_on_hover=False,
+            close_on_content_click=close_on_content_click,
+            max_height=MENU_MAX_HEIGHT,
+        ):
+            with vuetify.Template(v_slot_activator="{ on, attrs }"):
+                with vuetify.VListItem(v_bind="attrs", v_on="on"):
+                    if selected_arg:
+                        with vuetify.VListItemIcon():
+                            vuetify.VIcon(
+                                "mdi-check",
+                                small=True,
+                                v_show=(
+                                    f"get(`{selected_arg}`).some(k => {{"
+                                    f"const b = src + '{MULTI_SEP}' + entry.value;"
+                                    f"return k === b || k.startsWith(b + '{MULTI_SEP}');}})",
+                                ),
+                            )
+                    vuetify.VListItemTitle("{{ entry.text }}")
+                    with vuetify.VListItemIcon():
+                        vuetify.VIcon("mdi-menu-right", small=True)
+            with vuetify.VList(dense=True):
+                with vuetify.VListItem(click=(ctrl[ctrl_func], all_args)):
+                    _check_icon(selected_arg, None)
+                    vuetify.VListItemTitle("All")
+                with vuetify.VListItem(
+                    v_for="g in entry.groups",
+                    key="g",
+                    click=(ctrl[ctrl_func], _with_group(ctrl_func_args, "g")),
+                ):
+                    _check_icon(selected_arg, "g")
+                    vuetify.VListItemTitle("Group {{ g }}")
 
 
 def build_dataset_picker(
@@ -57,6 +154,7 @@ def build_dataset_picker(
     ctrl_func: str = "_noop",
     ctrl_func_args: str = "[]",
     allowed_arg=None,
+    group_arg=None,
 ):
     """Create trame UI for selecting a single dataset to be visualized
 
@@ -82,12 +180,20 @@ def build_dataset_picker(
                 v_bind="attrs",
                 v_on="on",
                 style=(
+                    "min-width: 0;"
                     "border-bottom: 1px solid rgba(0,0,0,0.42);"
                     "border-radius: 0;"
                     "padding-bottom: 2px;"
                 ),
             ):
                 _make_label(selected_label_arg)
+                if group_arg:
+                    vuetify.VChip(
+                        f"G{{{{ get(`{group_arg}`) }}}}",
+                        v_if=(f"get(`{group_arg}`) !== null",),
+                        x_small=True,
+                        classes="ml-1 flex-shrink-0",
+                    )
                 vuetify.VIcon("mdi-menu-down", small=True)
         with vuetify.VList(dense=True):
             with vuetify.VMenu(
@@ -118,12 +224,13 @@ def build_dataset_picker(
                                 with vuetify.VListItemIcon():
                                     vuetify.VIcon("mdi-menu-right", small=True)
                         with vuetify.VList(dense=True):
-                            with vuetify.VListItem(
-                                v_for="entry in group.entries",
-                                key="entry.value",
-                                click=(ctrl[ctrl_func], ctrl_func_args),
-                            ):
-                                vuetify.VListItemTitle("{{ entry.text }}")
+                            _build_entries(
+                                ctrl,
+                                ctrl_func,
+                                ctrl_func_args,
+                                close_on_content_click=True,
+                                allow_groups=bool(group_arg),
+                            )
 
 
 def build_dataset_multi_picker(
@@ -194,18 +301,11 @@ def build_dataset_multi_picker(
                                 with vuetify.VListItemIcon():
                                     vuetify.VIcon("mdi-menu-right", small=True)
                         with vuetify.VList(dense=True):
-                            with vuetify.VListItem(
-                                v_for="entry in group.entries",
-                                key="entry.value",
-                                click=(ctrl[ctrl_func], ctrl_func_args),
-                            ):
-                                with vuetify.VListItemIcon():
-                                    vuetify.VIcon(
-                                        "mdi-check",
-                                        small=True,
-                                        v_show=(
-                                            f"get(`{selected_arg}`)"
-                                            f".includes(src + '\x1f' + entry.value)",
-                                        ),
-                                    )
-                                vuetify.VListItemTitle("{{ entry.text }}")
+                            _build_entries(
+                                ctrl,
+                                ctrl_func,
+                                ctrl_func_args,
+                                close_on_content_click=False,
+                                selected_arg=selected_arg,
+                                allow_groups=True,
+                            )

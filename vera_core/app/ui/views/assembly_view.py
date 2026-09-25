@@ -9,7 +9,7 @@ from vera_core.data.registry import VeraDataRegistry
 # from vera_core.data.renders import AssemblyView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, set_info
+from ..helpers import get_safe_idxs, get_thresholds, is_non_active_view, pick_group, set_info
 from .save_image import register_photo_state
 
 
@@ -36,6 +36,8 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
+    selected_group_key = f"selected_group_{view_id}"
+
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
     assembly_keys = [f"assembly_array_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
@@ -53,6 +55,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         "assembly_view_size",
         selected_array_key,
         selected_src_key,
+        selected_group_key,
         "selected_assembly_ij",
         "selected_layer",
         "thresholds",
@@ -121,7 +124,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             cached_assembly_images[cache_key] = images_dataset
 
         # Update the client
+        images_dataset = pick_group(images_dataset, state[selected_group_key])
         for idx, image in enumerate(images_dataset):
+            if idx >= MAX_NUM_GROUPS:
+                break
             state[f"assembly_array_{view_id}_{idx}"] = image
         num_groups = len(images_dataset)
         for idx in range(num_groups, MAX_NUM_GROUPS):

@@ -60,7 +60,7 @@ def register_derived_state_ctrl(state: State, ctrl: Controller, registry: VeraDa
     state.derivation_methods = DERIVATION_METHODS
 
     @ctrl.set("set_derived_source")
-    def set_derived_source(file, array):
+    def set_derived_source(file, array, group: int | None = None):
         state.derivation_src_id = file
         state.derivation_src_dataset = array
         state.derivation_source_label = format_label(file, array)

@@ -34,6 +34,7 @@ class ViewSession:
     multi_selected: list
     multi_label: str
     locked: dict | bool
+    selected_group: int | None = None
     assembly_decimals: int = 2
     # Volume-view crop; defaulted so pre-crop sessions still deserialize.
     crop_enabled: bool = False
@@ -79,6 +80,7 @@ def build_session(state: State, registry: "VeraDataRegistry", all_view_ids: list
                 selected_src_id=state[f"selected_src_id_{vid}"],
                 selected_array=state[f"selected_array_{vid}"],
                 selected_label=state[f"selected_label_{vid}"],
+                selected_group=state[f"selected_group_{vid}"],
                 multi_selected=list(state[f"multi_selected_{vid}"]),
                 multi_label=state[f"multi_label_{vid}"],
                 locked=state[f"locked_{vid}"],

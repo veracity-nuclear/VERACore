@@ -11,11 +11,10 @@ from vera_core.data.thresholds import ThresholdCondition
 MULTI_SEP = "\x1f"
 
 
-def format_label(file: str, key: str, *, source_identifier: bool = True):
-    if source_identifier:
-        return f"{key.replace('_', ' ').upper()} | {file}"
-    else:
-        return f"{key.replace('_', ' ').upper()}"
+def format_label(file, key, group=None, *, source_identifier=True):
+    suffix = f" / Group {group}" if group is not None else ""
+    base = key.replace("_", " ").upper()
+    return f"{base}{suffix} | {file}" if source_identifier else f"{base}{suffix}"
 
 
 def get_next_y_from_layout(layout):
@@ -183,5 +182,40 @@ def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
     return thresholds_to_apply
 
 
-def get_multi_selected_src(state: State, view_id: int | str) -> list[tuple[str, str]]:
-    return [token.split(MULTI_SEP, 1) for token in state[f"multi_selected_{view_id}"]]
+def pick_group(groups: list, group: int | None = None):
+    """
+    The one selected group, or all of them when group is None.
+    group is the user selected 1-based group index so must subtract -1 to convert to 0-based
+    """
+    if group is None or not groups or group < 1:
+        return groups
+    group -= 1
+    return [groups[min(max(group, 0), len(groups) - 1)]]
+
+
+def decode_tokens(tokens):
+    """[(src_id, array_name, group)] from serialized multi-picker tokens.
+
+    A two-field token means all groups (group None); this includes every token
+    written before groups existed. `group` is 1-based. Malformed entries drop.
+    """
+    triples = []
+    for token in tokens:
+        src_id, sep, rest = token.partition(MULTI_SEP)
+        if not sep:
+            continue
+        array_name, _, group = rest.partition(MULTI_SEP)
+        triples.append((src_id, array_name, int(group) if group else None))
+    return triples
+
+
+def encode_tokens(triples):
+    return [
+        f"{s}{MULTI_SEP}{a}" if g is None else f"{s}{MULTI_SEP}{a}{MULTI_SEP}{g}"
+        for s, a, g in triples
+    ]
+
+
+def get_multi_selected_src(state: State, view_id: int | str) -> list[tuple[str, str, int | None]]:
+    """(src_id, dataset, group) per selection; group is 1-based, None = all."""
+    return decode_tokens(state[f"multi_selected_{view_id}"])

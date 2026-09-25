@@ -7,7 +7,7 @@ from vera_core.data.analysis.axial_lines import AxialLines
 from vera_core.data.dtypes import VeraDim
 from vera_core.data.registry import VeraDataRegistry
 
-from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
+from ..helpers import convert_ji_to_node, decode_tokens, get_safe_idxs, is_non_active_view
 
 SEP = "\x1f"
 
@@ -37,8 +37,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         vera_sources = []
         dataset_names = []
         all_indices = []
-        for token in state[selected_set_key]:
-            src_id, array_name = token.split(SEP, 1)
+        for src_id, array_name, group in decode_tokens(state[selected_set_key]):
             src = registry.get(src_id)
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
@@ -46,16 +45,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             j, i, layer, assy, _, _, time, surface = indices
             vera_sources.append(src)
             dataset_names.append(array_name)
-            all_indices.append(
-                {
-                    VeraDim.PIN_Y: j,
-                    VeraDim.PIN_X: i,
-                    VeraDim.NODE: convert_ji_to_node(j, i),
-                    VeraDim.SURFACE: surface,
-                    VeraDim.AXIAL: layer,
-                    VeraDim.ASSEMBLY: assy,
-                }
-            )
+            indices = {
+                VeraDim.PIN_Y: j,
+                VeraDim.PIN_X: i,
+                VeraDim.NODE: convert_ji_to_node(j, i),
+                VeraDim.SURFACE: surface,
+                VeraDim.AXIAL: layer,
+                VeraDim.ASSEMBLY: assy,
+            }
+            if group is not None and group >= 1:
+                group -= 1
+                indices |= {VeraDim.GROUP: group}
+            all_indices.append(indices)
 
         axial_lines = AxialLines.create_axial_lines(vera_sources, dataset_names, all_indices)
         for (x, y), identifier, mode in axial_lines.lines():

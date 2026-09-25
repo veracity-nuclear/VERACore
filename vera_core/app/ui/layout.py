@@ -159,6 +159,7 @@ def build_grid_card(ctrl: Controller):
                         "select_dataset",
                         "[item.i, src, entry.value]",
                         "get(`grid_view_${item.i}`).allowed_categories",
+                        group_arg="selected_group_${item.i}",
                     )
                 with vuetify.Template(v_if=("get(`grid_view_${item.i}`).multi_picker",)):
                     DatasetPicker.build_dataset_multi_picker(

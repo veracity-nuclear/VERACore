@@ -7,7 +7,14 @@ from vera_core.data.registry import VeraDataRegistry
 from vera_core.data.renders import CoreView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import format_label, get_safe_idxs, get_thresholds, is_non_active_view, set_info
+from ..helpers import (
+    format_label,
+    get_safe_idxs,
+    get_thresholds,
+    is_non_active_view,
+    pick_group,
+    set_info,
+)
 from .save_image import notification, register_photo_state, take_photo
 
 MAX_LABEL_SIDE = 2
@@ -32,6 +39,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
+    selected_group_key = f"selected_group_{view_id}"
 
     n_groups_key = f"n_groups_{view_id}"
     state.setdefault(n_groups_key, 0)
@@ -72,6 +80,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_array_key,
         selected_src_key,
+        selected_group_key,
         "selected_layer",
         "thresholds",
         f"grid_view_{view_id}",
@@ -105,11 +114,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             state=vera_source.active_state_index,
             thresholds=thresholds_to_apply,
         )
-        sel.title = format_label(selected_src_id, selected_array)
+        sel_group = state[selected_group_key]
+        sel.title = format_label(selected_src_id, selected_array, sel_group)
         nonlocal saved_sel
         saved_sel = sel
 
         results = core_slice.serialize_data_groups()
+        results = pick_group(results, sel_group)
         num_groups = len(results)
         for idx in range(MAX_VIS_GROUPS):
             state[f"core_assemblies_{view_id}_{idx}"] = [] if idx >= num_groups else results[idx][0]

@@ -9,11 +9,8 @@ from vera_core.data.registry import VeraDataRegistry
 # from vera_core.data.renders import AssemblySurfaceView, Selection
 from vera_core.widgets import vera
 
-from ..helpers import get_safe_idxs, is_non_active_view, set_info
+from ..helpers import get_safe_idxs, is_non_active_view, pick_group, set_info
 from .save_image import register_photo_state
-
-# Lateral faces are the first four of [W, N, E, S, T, B]
-LATERAL_FACE_SLICE = slice(0, 4)
 
 
 def option_for(view_id):
@@ -37,6 +34,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     selected_array_key = f"selected_array_{view_id}"
     selected_src_key = f"selected_src_id_{view_id}"
+    selected_group_key = f"selected_group_{view_id}"
 
     n_groups_key = f"n_groups_{view_id}"
     group_keys = [f"assy_surface_cells_{view_id}_{g}" for g in range(MAX_NUM_GROUPS)]
@@ -56,6 +54,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
     @state.change(
         selected_array_key,
         selected_src_key,
+        selected_group_key,
         "selected_assembly_ij",
         "selected_layer",
         f"grid_view_{view_id}",
@@ -82,7 +81,10 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             return
 
         serialized_data = assembly_surface_slice.serialize_data_groups()
+        serialized_data = pick_group(serialized_data, state[selected_group_key])
         for g, image in enumerate(serialized_data):
+            if g >= MAX_NUM_GROUPS:
+                break
             # (4_faces, n_nodes) for this assembly, group, layer
             state[group_keys[g]] = image
 

@@ -552,11 +552,16 @@ def initialize(server: Server, registry: VeraDataRegistry, state_queue: StateQue
                 state.grid_layout = []
                 _reset_view_pool()
                 activation_done = False
+
             max_time = registry.max_state
+            max_axial = max(len(registry.global_axial_mesh) - 1, 0)
             clamped_time = max(0, min(state.selected_time, max_time))
+            clamped_axial_idx = max(0, min(state.selected_layer, max_axial))
+
             state.max_time = max_time
-            state.max_layer = max(len(registry.global_axial_mesh) - 1, 0)
+            state.max_layer = max_axial
             state.selected_time = clamped_time
+            state.selected_layer = clamped_axial_idx
             registry.change_all_active_state(clamped_time)
             DatasetPicker.refresh_src_tree(state, registry)
             state.grid_rebuild_key += 1

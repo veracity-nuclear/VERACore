@@ -46,6 +46,7 @@ def _exposure(source: VeraDataSource, state_idx: int | None = None) -> float | N
     """
     if state_idx is None:
         state_idx = source.active_state_index
+    state_idx = max(0, min(state_idx, len(source.states) - 1))
     exposure = source.states[state_idx].get("exposure", None)
     if exposure is None or len(exposure) == 0:
         return None

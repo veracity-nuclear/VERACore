@@ -32,6 +32,13 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     update_fn_name = f"update_axial_plot_{view_id}"
 
+    def on_plot_click(event):
+        points = (event or {}).get("points") or []
+        if not points or points[0].get("y") is None:
+            return
+        mesh = np.asarray(registry.global_axial_mesh[: state.max_layer + 1])
+        state.selected_layer = int(np.abs(mesh - points[0]["y"]).argmin())
+
     def create_line():
         figure = go.Figure()
         vera_sources = []
@@ -69,21 +76,16 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 )
             )
 
-        # add_hline only spans x in [0, 1], so draw the layer marker manually.
-        float_info = np.finfo(np.float64)
-        figure.add_trace(
-            go.Scatter(
-                x=[float_info.min, float_info.max],
-                y=[registry.global_axial_mesh[state.selected_layer]] * 2,
-                mode="lines",
-                line=go.scatter.Line(color="red", dash="dash"),
-                showlegend=False,
-            )
+        figure.add_hline(
+            y=registry.global_axial_mesh[state.selected_layer],
+            line_color="red",
+            line_dash="dash",
         )
 
         figure.update_layout(
             margin=dict(t=0, b=0, l=0, r=0),
             template="plotly_dark" if state["dark_mode"] else "plotly",
+            hovermode="y unified",
             legend=dict(
                 orientation="h",
                 yanchor="top",
@@ -125,6 +127,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         figure = plotly.Figure(
             display_logo=False,
             display_mode_bar=False,
+            click=(on_plot_click, "[utils.safe($event)]"),
             style=style,
         )
         setattr(ctrl, update_fn_name, figure.update)

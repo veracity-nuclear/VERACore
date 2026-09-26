@@ -89,3 +89,12 @@ This version adds the following:
  - A button to toggle between the color bar range being derived over all states or just the current selected state.
 
 [2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.8
+
+## [2.0.9] - 2026-09-26
+
+This version adds the following:
+ - Users can now select/change axial level from the axial plot
+ - Users can now select/change selected state from the time plot
+
+
+[2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.9

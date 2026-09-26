@@ -732,7 +732,7 @@ class VeraOutCore(DatasetStore):
         i, j = self.reduced_core_map_ij(assembly_idx, is_comp)
         labels = (
             self.reduced_core_map_column_labels[i]
-            if not is_comp
+            if not is_comp or not self.has_comp_core()
             else self.comp_core_map_column_labels[i]
         )
         return labels
@@ -977,6 +977,7 @@ class VeraDataSource:
         self._time_axes["state_count"].append(len(self._states) - 1)
         if len(self._states) == 1:
             self._determine_time_axes()
+            self.active_state_index = 0
             return
         for name, values in self._time_axes.items():
             if name == "state_count":

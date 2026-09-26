@@ -39,9 +39,9 @@ def is_non_active_view(state: State, view_id: int, option: dict[str, str]) -> bo
 
 def get_time(state: State, view_id) -> int | None:
     frozen_sels = state[f"locked_{view_id}"]
-    if not frozen_sels:
+    if not frozen_sels or not isinstance(frozen_sels, dict):
         return state["selected_time"]
-    return frozen_sels.get("selected_time", None) if isinstance(frozen_sels, dict) else None
+    return frozen_sels.get("selected_time", None)
 
 
 def _layer_elevation(axial_mesh, layer):
@@ -119,8 +119,11 @@ def get_safe_idxs(
     )
     sel_j = int(selections["selected_j"])
     sel_i = int(selections["selected_i"])
+
     sel_layer = registry.global_axial_idx_to_src_idx(
-        src_id, vdtype, int(selections["selected_layer"])
+        src_id,
+        vdtype,
+        int(np.clip(selections["selected_layer"], 0, len(registry.global_axial_mesh) - 1)),
     )
 
     core_shape = core.get_core_shape(dataset_type=vdtype)

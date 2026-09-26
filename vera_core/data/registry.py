@@ -149,7 +149,8 @@ class VeraDataRegistry:
         ref = max(self._srcs.values(), key=lambda s: len(s.states))
         axes = ref.time_axes()
         if axis in axes and 0 <= state_index < len(axes[axis]):
-            return float(axes[axis][state_index])
+            value = axes[axis][state_index]
+            return float(value) if value is not None else float(state_index)
         return float(state_index)
 
     def remove_src(self, src_id: str) -> None:

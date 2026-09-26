@@ -137,7 +137,7 @@ def get_safe_idxs(
     safe_layer = int(np.clip(sel_layer, 0, nax - 1))
     safe_assy_idx = int(np.clip(sel_assy, 0, nass - 1))
 
-    sel_time = get_time(state, view_id)
+    sel_time = max(0, min(get_time(state, view_id), len(vera_source.states) - 1))
     surface = int(selections["selected_surface"])
     return (safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name, sel_time, surface)
 

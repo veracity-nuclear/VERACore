@@ -54,6 +54,12 @@ def initialize(server, registry: VeraDataRegistry, view_id):
 
     series_cache: OrderedDict = OrderedDict()
 
+    def on_plot_click(event):
+        points = (event or {}).get("points") or []
+        if not points or points[0].get("customdata") is None:
+            return
+        state.selected_time = int(points[0]["customdata"])
+
     def _value_at(st: VeraOutState, array_name, indices):
         """One point of a series."""
         array_shape = st.shape(array_name)
@@ -88,12 +94,15 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         figure = go.Figure()
         axis = state[time_axis_key]
         is_date = axis in DATE_AXES
+        state_label = "" if axis == "state_count" else " (state %{customdata})"
         for src_id, array_name, group in decode_tokens(state[selected_set_key]):
             src = registry.get(src_id)
-            time_axis = to_x(src.time_axes()[axis], axis)
             indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
             if not indices:
                 continue
+            raw_x = src.time_axes()[axis]
+            time_axis = to_x(raw_x, axis)
+            state_idx = np.arange(len(raw_x))
             ny, nx, nax, nass, _, _, time, selected_surface = indices
             array_dtype = src.get_dataset_dtype(array_name)
             array_shape = src.get_dataset_shape(array_name, state_idx=time)
@@ -108,31 +117,40 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             identifier = point_label(src.core, array_dtype, selection)
             units = src.get_dataset_units(array_name, state_idx=time)
             units_label = f" ({units}) " if units != "unitless" else ""
+            title = array_name.replace("_", " ").title()
             for idx_n, indices in enumerate(indices_list):
                 group_label = "" if len(indices_list) <= 1 else f" GROUP {idx_n + 1}"
+                prefix = f"G{idx_n + 1}: " if len(indices_list) > 1 else ""
                 values = series(src, src_id, array_name, indices)
                 figure.add_trace(
                     go.Scatter(
                         x=time_axis,
                         y=values,
                         mode="lines",
-                        name=f"{src_id} | {array_name.replace('_', ' ').title()}{units_label}{group_label + identifier}",
+                        name=f"{src_id} | {title}{units_label}{group_label + identifier}",
+                        hovertemplate=f"{prefix}%{{y:.4g}}{state_label}<extra></extra>",
+                        customdata=state_idx,
                     )
                 )
 
-        # add_vline only spans y in [0, 1], so draw the marker manually.
-        axis = state[time_axis_key]
         x_val = registry.time_axis_value(axis, int(state["selected_time"]))
         if is_date:
             x_val = str(np.datetime64(int(x_val), "us"))
         figure.add_vline(x=x_val, line=dict(color="red", dash="dash"))
 
-        yaxis = dict(type="log" if state[log_scale_key] else "linear")
         figure.update_layout(
             margin=dict(t=0, b=0, l=0, r=0),
             template="plotly_dark" if state["dark_mode"] else "plotly",
-            xaxis=dict(type="date") if is_date else dict(type="linear"),
-            yaxis=yaxis,
+            hovermode="x unified",
+            xaxis=dict(
+                type="date" if is_date else "linear",
+                showspikes=True,
+                spikemode="across",
+                spikesnap="hovered data",
+                spikethickness=1,
+                spikedash="dot",
+            ),
+            yaxis=dict(type="log" if state[log_scale_key] else "linear"),
             legend=dict(
                 orientation="h",
                 yanchor="top",
@@ -171,7 +189,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
             update_fn(create_line())
 
     with DivLayout(server, template_name=option["name"]) as layout:
-        layout.root.style = "height: 100%; width: 100%;display: flex; flex-direction: column;"
+        layout.root.style = "height: 100%; width: 100%; display: flex; flex-direction: column;"
         style = "; ".join(
             [
                 "width: 100%",
@@ -184,6 +202,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                 display_logo=False,
                 display_mode_bar=False,
                 style=style,
+                click=(on_plot_click, "[utils.safe($event)]"),
             )
             setattr(ctrl, update_fn_name, figure.update)
             vuetify.VBtn(

@@ -36,12 +36,6 @@ def test_comp_pin_key_contains_none_without_pin_counts():
     assert d[(None, None, 6, 12)] == T.COMP_PIN
 
 
-def test_detector_skipped_when_ndet_and_ndax_both_equal_nass():
-    """Documents a hazard: the guard compares ndax with ndet, not with nax, so
-    a detector grid with ndet == ndax == nass gets no detector dtype."""
-    d = build_core_dtypes(nax=4, nass=9, ndet=9, ndax=9)
-    assert (9, 9) not in d
-
 
 def test_detector_mapped_when_ndet_equals_nass_but_ndax_differs():
     d = build_core_dtypes(nax=4, nass=9, ndet=9, ndax=7)

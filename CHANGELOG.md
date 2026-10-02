@@ -97,4 +97,11 @@ This version adds the following:
  - Users can now select/change selected state from the time plot
 
 
-[2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.9
+[2.0.9]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.9
+
+## [2.0.10] - 2026-10-02
+
+This version fixes a bug where assembly dataset with the shape (nax, nass) did not
+appear in the dataset picker.
+
+[2.0.10]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.10

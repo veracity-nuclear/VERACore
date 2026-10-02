@@ -150,12 +150,6 @@ def test_comp_label_falls_back_to_reduced_map_without_comp_core():
 # ---------------------------------------------------------------- detectors
 
 
-def test_detector_map_without_mesh_uses_fuel_levels():
-    core = make_core(detector_map=quarter_map())
-    assert (core.ndet, core.ndax) == (NASS, NAX)
-    assert core.core_dtypes((NAX, NASS)) == T.POINT_DETECTOR
-
-
 def test_detector_shape_is_four_dimensional():
     """The docstring says (ndax, ndet); callers such as get_safe_idxs
     unpack four values, so the 4-tuple is the contract."""

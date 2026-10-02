@@ -822,6 +822,7 @@ def build_core_dtypes(
     shape_to_dtype = {}
     if nax and nass:
         shape_to_dtype |= {
+            (nax, nass): VeraDtype.ASSEMBLY,
             (1, nax, nass): VeraDtype.ASSEMBLY,
             (nax,): VeraDtype.AXIAL,
             (nass,): VeraDtype.RADIAL_ASSEMBLY,
@@ -837,7 +838,7 @@ def build_core_dtypes(
                 (n_groups, NUM_NODES, nax, nass): VeraDtype.NODAL_ENERGY,
                 (NUM_DF, n_groups, NUM_NODES, nax, nass): VeraDtype.NODAL_SURFACE,
             }
-    if ndet and ndax and (ndet != nass or ndax != ndet):
+    if ndet and ndax and (ndax, ndet) != (nax, nass):
         shape_to_dtype |= {
             (ndax, ndet): VeraDtype.CONTINOUS_DETECTOR
             if continous_det
@@ -868,3 +869,11 @@ def build_core_dtypes(
                 (NUM_DF, n_groups, NUM_NODES, comp_nax, comp_nass): VeraDtype.COMP_NODAL_SURFACE,
             }
     return shape_to_dtype
+
+
+def loaded_shape(shape: tuple[int, ...], dtype: VeraDtype) -> tuple[int, ...]:
+    """Shape a dataset has once loaded. Assembly data stored as (nax, nass)
+    gains the leading length-1 axis of the ASSEMBLY layout."""
+    if dtype == VeraDtype.ASSEMBLY and len(shape) == 2:
+        return (1, *shape)
+    return tuple(shape)

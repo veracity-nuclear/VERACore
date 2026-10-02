@@ -67,15 +67,25 @@ class H5DatasetSource(DatasetSource):
             return None
         return h5_ref
 
+    def _is_flat_assembly(self, raw_shape: tuple[int, ...] | None) -> bool:
+        """2D assembly data stored as (nax, nass); exposed as (1, nax, nass)."""
+        return (
+            raw_shape is not None
+            and len(raw_shape) == 2
+            and self._dataset_dtypes.get(raw_shape) == VeraDtype.ASSEMBLY
+        )
+
     def sample(self, name: str, indices):
         h5_ref = self._get_h5dataset_ref(name)
         if h5_ref is None:
             return None
         if h5_ref.shape == ():
             return h5_ref[()]
+        if self._is_flat_assembly(h5_ref.shape):
+            indices = indices[1:]
         return h5_ref[indices]
 
-    def shape(self, name):
+    def _raw_shape(self, name):
         if name in self._shapes:
             return self._shapes[name]
         h5_ref = self._get_h5dataset_ref(name)
@@ -85,6 +95,10 @@ class H5DatasetSource(DatasetSource):
             return (1,)
         return tuple(h5_ref.shape)
 
+    def shape(self, name):
+        raw = self._raw_shape(name)
+        return (1, *raw) if self._is_flat_assembly(raw) else raw
+
     def load(self, name):
         h5_ref = self._get_h5dataset_ref(name)
 
@@ -93,12 +107,11 @@ class H5DatasetSource(DatasetSource):
         units = _get_units(h5_ref)
         raw = h5_ref[()]
         shape = np.shape(raw)
-        dtype = VeraDtype.UNKNOWN
-        if self._dataset_dtypes.get(shape) is not None:
-            dtype = self._dataset_dtypes.get(shape)
+        dtype = self._dataset_dtypes.get(shape, VeraDtype.UNKNOWN)
         arr = raw if isinstance(raw, np.ndarray) else np.array([raw])
-        ds = VeraDataset(arr, dtype, name, units)
-        return ds
+        if self._is_flat_assembly(shape):
+            arr = arr[np.newaxis, ...]
+        return VeraDataset(arr, dtype, name, units)
 
 
 class RomH5DatasetSource(H5DatasetSource):

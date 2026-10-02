@@ -22,6 +22,7 @@ from vera_core.data.dtypes import (
     VeraDataset,
     VeraDim,
     VeraDtype,
+    loaded_shape,
     build_core_dtypes,
 )
 from vera_core.data.readers.mock import build_source
@@ -551,7 +552,7 @@ CORE = dict(npiny=5, npinx=5, nax=7, nass=11, comp_nax=9, comp_nass=13, ndet=15,
 def mapped_shapes():
     by_dtype = {}
     for shape, dtype in build_core_dtypes(**CORE).items():
-        by_dtype.setdefault(dtype, []).append(shape)
+        by_dtype.setdefault(dtype, []).append(loaded_shape(shape, dtype))
     return by_dtype
 
 

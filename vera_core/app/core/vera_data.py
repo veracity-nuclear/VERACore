@@ -595,9 +595,9 @@ class VeraOutState(LazyHDF5Loader):
 
         def _infer_dtype_from_name_shape(dataset_name: str, dataset_shape: tuple[int, ...]) -> VeraDtype:
             if dataset_name.startswith("assembly_"):
-                if len(dataset_shape) == 2 and dataset_shape[0] == self.core.nax:
+                if len(dataset_shape) == 2 and dataset_shape == (self.core.nax, self.core.nass):
                     return VeraDtype.ASSEMBLY
-                if len(dataset_shape) == 1:
+                if len(dataset_shape) == 1 and dataset_shape[0] == self.core.nass:
                     return VeraDtype.RADIAL_ASSEMBLY
             return VeraDtype.UNKNOWN
         

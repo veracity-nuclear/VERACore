@@ -592,6 +592,14 @@ class VeraOutState(LazyHDF5Loader):
         """Find all datasets with known shape and categorize them by VeraDdtype for one state."""
         if "pin_powers" in data and np.shape(data["pin_powers"]) != self.core.core_shape:
             raise RuntimeError(f"Mismatch between the shape of STATE_{self._index:04}'s data and the core shape")
+
+        def _infer_dtype_from_name_shape(dataset_name: str, dataset_shape: tuple[int, ...]) -> VeraDtype:
+            if dataset_name.startswith("assembly_"):
+                if len(dataset_shape) == 2 and dataset_shape[0] == self.core.nax:
+                    return VeraDtype.ASSEMBLY
+                if len(dataset_shape) == 1:
+                    return VeraDtype.RADIAL_ASSEMBLY
+            return VeraDtype.UNKNOWN
         
         def _loop_through_datasets(h5_group, group_name=""):
             for ds_name in h5_group.keys():
@@ -603,7 +611,9 @@ class VeraOutState(LazyHDF5Loader):
                 ds_shape = np.shape(ds)
                 ds_dtype = self.core.core_dtypes(ds_shape)
                 if ds_dtype == VeraDtype.UNKNOWN:
-                    continue
+                    ds_dtype = _infer_dtype_from_name_shape(ds_name, ds_shape)
+                    if ds_dtype == VeraDtype.UNKNOWN:
+                        continue
                 self.categorized_ds_names[ds_dtype].add(full_name)
                 self.dataset_dtypes[ds_shape] = ds_dtype
         _loop_through_datasets(data)

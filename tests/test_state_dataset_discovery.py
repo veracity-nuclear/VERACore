@@ -32,7 +32,7 @@ def test_discovers_postprocessed_assembly_datasets_by_name_fallback():
 
         with h5py.File(tmp.name, "r") as f:
             vc = VeraOutCore(f)
-            vc.core_dtypes = lambda _: VeraDtype.UNKNOWN
+            vc.core_dtypes = lambda *args, **kwargs: VeraDtype.UNKNOWN
             vs = VeraOutState(f, 1, vc)
 
             assert "assembly_powers" in vs.categorized_ds_names[VeraDtype.ASSEMBLY]

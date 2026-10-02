@@ -1,13 +1,17 @@
 <div class="container" style="width: 100%; height: 100%; overflow: hidden;">
   <div :style="scaleStyle" style="position: relative; width: 100%; height: 100%;">
-    <div :style="sizeStyle" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+    <div
+      :style="sizeStyle"
+      style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"
+    >
       <v-col class="content ma-0 pa-0">
         <v-row class="ma-0 pa-0 flex-nowrap">
           <v-sheet height="30" width="30" class="ma-0 pa-0" />
           <v-sheet
             v-for="i in coreWidth"
             :key="i"
-            height="30" width="30"
+            height="30"
+            width="30"
             class="d-flex flex-column justify-center ma-0 pa-0"
             rounded
             :dark="i == activeI + 1"
@@ -15,13 +19,10 @@
             <div class="text-center text-overline">{{ xLabels[i - 1] }}</div>
           </v-sheet>
         </v-row>
-        <v-row
-          v-for="(line, j) in value"
-          :key="j"
-          class="ma-0 pa-0 flex-nowrap"
-        >
+        <v-row v-for="(line, j) in value" :key="j" class="ma-0 pa-0 flex-nowrap">
           <v-sheet
-            height="30" width="30"
+            height="30"
+            width="30"
             class="d-flex flex-column justify-center ma-0 pa-0"
             rounded
             :dark="j == activeJ"
@@ -32,7 +33,8 @@
           <v-sheet
             v-for="(cell, i) in line"
             :key="i"
-            height="30" width="30"
+            height="30"
+            width="30"
             outlined
             color="transparent"
             class="ma-0 pa-0"
@@ -50,7 +52,7 @@
                 style="position: absolute; width: 100%; height: 100%; top: 0; left: 0;"
               >
                 <polygon
-                  v-for="(tri, ti) in cellTriangles(i, j)"
+                  v-for="(tri, ti) in triangleGrid[j][i]"
                   :key="ti"
                   :points="tri.points"
                   :fill="tri.fill"
@@ -58,6 +60,20 @@
                   stroke-width="0.75"
                   vector-effect="non-scaling-stroke"
                 />
+
+                <g v-if="showLabels" fill="black" :style="labelStyle">
+                  <text
+                    v-for="(tri, ti) in triangleGrid[j][i]"
+                    :key="'t' + ti"
+                    :x="tri.x"
+                    :y="tri.y"
+                    :font-size="tri.size"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >
+                    {{ tri.text }}
+                  </text>
+                </g>
               </svg>
             </div>
           </v-sheet>

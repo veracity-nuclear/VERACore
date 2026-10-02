@@ -1,19 +1,7 @@
-<div
-  class="d-flex align-center"
-  :class="{ busy, pointerCursor: !busy }"
->
-  <v-text-field
-    v-model="minValue"
-    @change="validateRange"
-    hide-details
-    dense
-    class="textField"
-  />
+<div class="d-flex align-center" :class="{ busy, pointerCursor: !busy }">
+  <v-text-field v-model="minValue" @change="validateRange" hide-details dense class="textField" />
   <div class="colorBarContainer">
-    <img
-      :src="imgSrc"
-      class="colorBar"
-    />
+    <img :src="imgSrc" class="colorBar" />
     <v-spacer />
   </div>
   <v-text-field
@@ -24,4 +12,4 @@
     reverse
     class="textField"
   />
-</v-row>
+</div>

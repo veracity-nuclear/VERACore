@@ -2,9 +2,10 @@ from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import client, grid, html, vuetify
 from trame_server.core import Controller, Server, State
 
-from vera_core.app.core import VeraDataRegistry
+from vera_core.data.registry import VeraDataRegistry
 
 from . import assets
+from .color_presets import PRESETS, css_gradient
 from .features import (
     DatasetPicker,
     DeriveMenu,
@@ -17,12 +18,57 @@ from .features import (
     VersionChecker,
 )
 
+MAX_TICKS = 60
+
+
+def build_color_map_menu():
+    with vuetify.VMenu(offset_y=True):
+        with vuetify.Template(v_slot_activator="{ on, attrs }"):
+            with vuetify.VBtn(icon=True, v_bind="attrs", v_on="on", disabled=("!has_data",)):
+                vuetify.VIcon("mdi-palette")
+        with vuetify.VList(dense=True):
+            for name, _points in PRESETS:
+                with vuetify.VListItem(click=f"color_preset = {name!r}"):
+                    with vuetify.VListItemTitle(classes="d-flex align-center"):
+                        html.Div(
+                            style=(
+                                "width: 44px; height: 14px; border-radius: 2px;"
+                                f" background: {css_gradient(name)};"
+                            )
+                        )
+                        html.Span(name, classes="ml-3")
+                        vuetify.VIcon(
+                            "mdi-check",
+                            small=True,
+                            v_if=(f"color_preset === {name!r}",),
+                            classes="ml-auto",
+                        )
+
+
+def build_color_scope_toggle():
+    """Switch every color bar between the displayed state and all states."""
+    with vuetify.VBtn(
+        small=True,
+        text=True,
+        disabled=("!has_data",),
+        click="color_all_states = !color_all_states",
+        title="Color range scope",
+    ):
+        vuetify.VIcon(
+            v_text="color_all_states ? 'mdi-layers-triple' : 'mdi-layers-outline'",
+            small=True,
+            left=True,
+        )
+        html.Span("{{ color_all_states ? 'Color: all states' : 'Color: this state' }}")
+
 
 def build_toolbar(tb, ctrl: Controller, registry):
     tb.clear()
     tb.height = 36
     html.Img(src=assets.LOGO, height=25, click=ctrl.open_version_dialog, style="cursor: pointer;")
     VersionChecker.build_version_notice(ctrl)
+    build_color_map_menu()
+    build_color_scope_toggle()
 
     vuetify.VSpacer()
     with html.Div(style="width: 25px", classes="mr-2"):
@@ -56,8 +102,8 @@ def build_toolbar(tb, ctrl: Controller, registry):
     with vuetify.VBtn(icon=True, click="show_session_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-content-save")
 
-    # with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
-    #     vuetify.VIcon("mdi-access-point")
+    with vuetify.VBtn(icon=True, click=ctrl.open_stream_dialog):
+        vuetify.VIcon("mdi-access-point")
 
     with vuetify.VBtn(icon=True, click="show_derived_dialog = true", disabled=("!has_data",)):
         vuetify.VIcon("mdi-calculator-variant")
@@ -117,6 +163,7 @@ def build_grid_card(ctrl: Controller):
                         "select_dataset",
                         "[item.i, src, entry.value]",
                         "get(`grid_view_${item.i}`).allowed_categories",
+                        group_arg="selected_group_${item.i}",
                     )
                 with vuetify.Template(v_if=("get(`grid_view_${item.i}`).multi_picker",)):
                     DatasetPicker.build_dataset_multi_picker(
@@ -133,10 +180,20 @@ def build_grid_card(ctrl: Controller):
                 with vuetify.VBtn(
                     icon=True,
                     x_small=True,
-                    click="set(`locked_${item.i}`, !get(`locked_${item.i}`))",
+                    click=(ctrl.toggle_lock, "[item.i]"),
                 ):
                     vuetify.VIcon(
-                        v_text="get(`locked_${item.i}`) ? 'mdi-lock' : 'mdi-lock-open-variant'",
+                        v_text="""
+                        (
+                            get(`locked_${item.i}`) === true ||
+                            (
+                                typeof get(`locked_${item.i}`) === 'object' &&
+                                Object.keys(get(`locked_${item.i}`) || {}).length > 0
+                            )
+                        )
+                        ? 'mdi-lock'
+                        : 'mdi-lock-open-variant'
+                        """,
                         small=True,
                     )
 
@@ -228,7 +285,7 @@ def build_footer(ft):
         max=("max_time", 0),
         dense=True,
         hide_details=True,
-        ticks="always",
+        ticks=(f"max_time <= {MAX_TICKS} ? 'always' : false",),
         tick_size="4",
         height=35,
     )

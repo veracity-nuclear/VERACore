@@ -1,9 +1,9 @@
 from trame.widgets import html, vuetify
 from trame_server.core import Controller, State
 
-from vera_core.app.core import VeraDataRegistry
-from vera_core.app.core import save_session as write_session
+from vera_core.data.registry import VeraDataRegistry
 
+from ..session import save_session as write_session
 from .file_picker_entry import launch_picker
 
 session_menu_state_initialized = False

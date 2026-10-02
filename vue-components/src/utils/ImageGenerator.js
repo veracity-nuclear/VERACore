@@ -1,13 +1,6 @@
 const CANVAS = document.createElement('canvas');
 
-export function toImageURL(
-  lut,
-  values,
-  width,
-  height,
-  xScaling = 1,
-  yScaling = 1
-) {
+export function toImageURL(lut, values, width, height, xScaling = 1, yScaling = 1) {
   CANVAS.width = width * xScaling;
   CANVAS.height = height * yScaling;
 
@@ -26,16 +19,6 @@ export function toImageURL(
     offset = lut.applyRGBA(values[i], offset, imgData.data);
   }
   ctx.putImageData(imgData, 0, 0);
-  ctx.drawImage(
-    CANVAS,
-    0,
-    0,
-    width,
-    height,
-    0,
-    0,
-    width * xScaling,
-    height * yScaling
-  );
+  ctx.drawImage(CANVAS, 0, 0, width, height, 0, 0, width * xScaling, height * yScaling);
   return CANVAS.toDataURL('image/png');
 }

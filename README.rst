@@ -59,3 +59,19 @@ Licensing
 ----------------------------------------
 
 VERACore is provided as an open source solution and follows the `Apache Software License <https://github.com/Kitware/VERACore/blob/master/LICENSE>`_
+
+
+python -m nuitka VeraCore.py \
+    --mode=app \
+    --macos-app-icon=VeraCoreIcon.icns \
+    --include-package-data=vera_core \
+    --include-package-data=trame \
+    --include-package-data=trame_client \
+    --include-package-data=trame_server \
+    --include-package-data=trame_vuetify \
+    --include-package-data=trame_vtk \
+    --include-package-data=trame_plotly \
+    --include-package-data=trame_grid \
+    --include-package-data=plotly \
+    --include-package=plotly.graph_objs \
+    --include-distribution-metadata=vera-core

@@ -1,6 +1,11 @@
 import vtkColorMaps from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction/ColorMaps';
 import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction';
 
+import { fitFontSize, formatValue } from '../../utils/format';
+
+const LABEL_MAX_SIZE = 12;
+const LABEL_WIDTH = 26;
+
 export default {
   name: 'VeraAssembly',
   props: {
@@ -118,19 +123,12 @@ export default {
       return (j - 1) * this.sideCount + (i - 1);
     },
     toValue(i, j) {
-      const v = this.value[this.toIdx(i, j)];
-      if (v === undefined || Number.isNaN(v)) {
-        return '';
-      }
-      if (v === 0) {
-        return '0';
-      }
-      const abs = Math.abs(v);
-      const d = this.decimals;
-      if (abs < 1e-2 || abs >= 1e5) {
-        return v.toExponential(d).replace(/\.?0+e/, 'e');
-      }
-      return v.toFixed(d);
+      return formatValue(this.value[this.toIdx(i, j)], this.decimals);
+    },
+    // Shrinks longer labels so a higher decimals setting stays inside the cell.
+    valueStyle(i, j) {
+      const size = fitFontSize(this.toValue(i, j), LABEL_MAX_SIZE, LABEL_WIDTH);
+      return { fontSize: `${size.toFixed(1)}px`, lineHeight: 1 };
     },
     toStyle(i, j) {
       if (i != this.activeI || j != this.activeJ) {

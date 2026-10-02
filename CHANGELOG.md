@@ -37,3 +37,64 @@ linked, interactive views arranged in a configurable grid.
 - In-application version notifications when a newer release is available.
 
 [2.0.0]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.0
+
+## [2.0.1] - 2026-08-06
+
+- This version adds functionality for viewing numeric values of nodal and assembly valued datasets on the core view, axial view, and surface core view.
+
+[2.0.1]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.1
+
+## [2.0.2] - 2026-08-07
+
+- This version adds functionality for changing the decimals displayed on the Surface Assembly View.
+
+[2.0.2]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.2
+
+## [2.0.3] - 2026-08-22
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.3]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.3
+
+## [2.0.4] - 2026-08-26
+
+- This version fixes bugs with difference dataset creation and bugs with saving sessions with locked views.
+
+[2.0.4]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.4
+
+## [2.0.5] - 2026-09-11
+
+- This version adds vera streams from roms
+
+[2.0.5]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.5
+
+## [2.0.6] - 2026-09-16
+
+- This version now identifies datasets with up to 51 energy groups, now determines if the core_map is unused and if the so, uses the computational_core_map as the core_map if present.
+
+[2.0.6]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.6
+
+## [2.0.7] - 2026-09-19
+
+- This version now identifies surface and energy datasets belonging to the normal core_map and axial_mesh
+instead of just for computational_core_map and comp_axial_mesh.
+
+[2.0.7]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.7
+
+## [2.0.8] - 2026-09-25
+
+This version adds the following:
+ - A UI dropdown to allow users change color map theme from UI.
+ - Individual groups from an energy dataset can now be selected from the dataset picker, and viewed on their own in their respective views.
+ - A button to toggle between the color bar range being derived over all states or just the current selected state.
+
+[2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.8
+
+## [2.0.9] - 2026-09-26
+
+This version adds the following:
+ - Users can now select/change axial level from the axial plot
+ - Users can now select/change selected state from the time plot
+
+
+[2.0.8]: https://github.com/veracity-nuclear/VERACore/releases/tag/v2.0.9

@@ -3,7 +3,8 @@ import plotly.graph_objects as go
 from trame.ui.html import DivLayout
 from trame.widgets import html, plotly, vuetify
 
-from vera_core.app.core import Surface, VeraDataRegistry, VeraDataset, VeraDtype
+from vera_core.data.dtypes import Surface, VeraDataset, VeraDtype
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import convert_ji_to_node, get_safe_idxs, is_non_active_view
 
@@ -31,6 +32,7 @@ def option_for(view_id):
         "icon": "mdi-chart-histogram",
         "allowed_categories": [
             VeraDtype.PIN.title,
+            VeraDtype.COMP_PIN.title,
             VeraDtype.CHANNEL.title,
             VeraDtype.AXIAL.title,
             VeraDtype.ASSEMBLY.title,
@@ -42,7 +44,6 @@ def option_for(view_id):
             VeraDtype.COMP_ASSY_ENERGY.title,
             VeraDtype.NODAL.title,
             VeraDtype.POINT_DETECTOR.title,
-            VeraDtype.CONTINOUS_DETECTOR.title,
         ],
     }
 
@@ -110,20 +111,18 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(src_id)
         if src is None or not array_name:
             return figure
-        full_array = src.array(array_name)
+        indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
+        if not indices:
+            return figure
+        j, i, layer, assy, _, _, time, surface = indices
+        full_array = src.get_dataset(array_name, state_idx=time)
 
         units = full_array.physical_units
         units_label = f" ({units})" if units != "unitless" else ""
         array_dtype: VeraDtype = full_array.dataset_type
 
-        indices = get_safe_idxs(view_id, state, registry, src_id, array_name)
-        if not indices:
-            return figure
-        j, i, layer, assy, _, _ = indices
-
         radial = state[f"hist_radial_{view_id}"]
         axial = state[f"hist_axial_{view_id}"]
-        surface = state.selected_surface
         groups = group_arrays(full_array, array_dtype, surface)
 
         for suffix, arr, layout in groups:

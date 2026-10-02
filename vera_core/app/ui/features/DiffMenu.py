@@ -1,9 +1,7 @@
 from trame.widgets import html, vuetify
 
-from vera_core.app.core import (
-    VeraDataRegistry,
-    diff_recipe,
-)
+from vera_core.data.dtypes import diff_recipe
+from vera_core.data.registry import VeraDataRegistry
 
 from ..helpers import format_label
 from .DatasetPicker import build_dataset_picker, refresh_src_tree
@@ -46,13 +44,16 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return ""
-        return src.array_units(dataset_name)
+        return src.get_dataset_units(dataset_name)
 
     def _ds_info(src_id, dataset_name):
         src = registry.get(src_id)
         if src is None or not dataset_name:
             return None
-        return src.array_shape(dataset_name), src.array_dtype(dataset_name)
+        ds_shape = src.get_dataset_shape(dataset_name)
+        if ds_shape is None:
+            return tuple(), "unitless"
+        return ds_shape, src.get_dataset_dtype(dataset_name)
 
     def _drop_axis(shape, axis):
         if axis is None:
@@ -74,7 +75,7 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         if ref_dtype != comp_dtype:
             state.diff_compatible = False
             state.diff_shape_error = (
-                f"Type mismatch: {ref.dataset_type} vs {comp.dataset_type}. "
+                f"Type mismatch: {ref_dtype} vs {comp_dtype}. "
                 "Datasets must be the same type to diff."
             )
             return
@@ -95,7 +96,7 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         state.diff_shape_error = ""
 
     @ctrl.set("set_ref_dataset")
-    def set_ref_datset(src_id, dataset_name):
+    def set_ref_datset(src_id, dataset_name, group: int | None = None):
         state.ref_src_id = src_id
         state.ref_dataset_name = dataset_name
         state.ref_label = format_label(src_id, dataset_name)
@@ -104,12 +105,12 @@ def register_diff_state_ctrl(state, ctrl, registry: VeraDataRegistry):
         _recompute_compat()
 
     @ctrl.set("set_comp_dataset")
-    def set_comp_datset(src_id, dataset_name):
+    def set_comp_datset(src_id, dataset_name, group: int | None = None):
         state.comp_src_id = src_id
         state.comp_dataset_name = dataset_name
         state.comp_label = format_label(src_id, dataset_name)
         state.comp_units = _units_of(src_id, dataset_name)
-        state.ref_shape = str((_ds_info(src_id, dataset_name) or (tuple(),))[0])
+        state.comp_shape = str((_ds_info(src_id, dataset_name) or (tuple(),))[0])
         _recompute_compat()
 
     @ctrl.set("create_diff_dataset")
@@ -187,7 +188,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Reference operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-2"):
-                    html.Div("Reference (A)", classes="text-caption font-weight-medium mb-2")
+                    html.Div("Comparison (A)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(
@@ -230,7 +231,7 @@ def build_diff_dialog(state, ctrl, registry):
 
                 # Comparison operand
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("Comparison (B)", classes="text-caption font-weight-medium mb-2")
+                    html.Div("Reference (B)", classes="text-caption font-weight-medium mb-2")
                     with html.Div(classes="d-flex align-center", style="gap: 12px;"):
                         with html.Div(style="flex: 1 1 auto; min-width: 0;"):
                             build_dataset_picker(

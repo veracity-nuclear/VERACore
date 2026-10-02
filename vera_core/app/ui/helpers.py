@@ -3,27 +3,18 @@ import functools
 import numpy as np
 from trame_server.core import State
 
-from vera_core.app.core import (
-    NUM_NODES,
-    VeraDataRegistry,
-    VeraDtype,
-    VeraOutCore,
-)
+from vera_core.data.dtypes import NUM_NODES, VeraDtype
+from vera_core.data.model import VeraOutCore
+from vera_core.data.registry import VeraDataRegistry
+from vera_core.data.thresholds import ThresholdCondition
+
+MULTI_SEP = "\x1f"
 
 
-def format_label(file: str, key: str):
-    return f"{key.replace('_', ' ').upper()} | {file}"
-
-
-def array_range(array):
-    lo = float(np.nanmin(array))
-    hi = float(np.nanmax(array))
-    if not np.isfinite(lo) or not np.isfinite(hi):
-        return (0.0, 1.0)
-    if lo == hi:
-        eps = max(abs(hi) * 1e-9, 1e-12)
-        return (lo, hi + eps)
-    return (lo, hi)
+def format_label(file, key, group=None, *, source_identifier=True):
+    suffix = f" / Group {group}" if group is not None else ""
+    base = key.replace("_", " ").upper()
+    return f"{base}{suffix} | {file}" if source_identifier else f"{base}{suffix}"
 
 
 def get_next_y_from_layout(layout):
@@ -35,12 +26,22 @@ def get_next_y_from_layout(layout):
     return next_y
 
 
-def is_view_locked(state, view_id):
-    return bool(state[f"locked_{view_id}"])
+def is_view_locked(state: State, view_id):
+    view_loading = False
+    if state.has(f"view_loading_{view_id}"):
+        view_loading = state[f"view_loading_{view_id}"]
+    return bool(state[f"locked_{view_id}"]) and not bool(view_loading)
 
 
 def is_non_active_view(state: State, view_id: int, option: dict[str, str]) -> bool:
     return state[f"grid_view_{view_id}"]["name"] != option["name"] or is_view_locked(state, view_id)
+
+
+def get_time(state: State, view_id) -> int | None:
+    frozen_sels = state[f"locked_{view_id}"]
+    if not frozen_sels or not isinstance(frozen_sels, dict):
+        return state["selected_time"]
+    return frozen_sels.get("selected_time", None)
 
 
 def _layer_elevation(axial_mesh, layer):
@@ -52,20 +53,24 @@ def _layer_elevation(axial_mesh, layer):
     return float(np.round(mesh[layer], 2))
 
 
-def set_info(view_id: int, state: State, registry: VeraDataRegistry):
+def set_info(view_id, state: State, registry: VeraDataRegistry):
+    if is_view_locked(state=state, view_id=view_id):
+        return
     indices = get_safe_idxs(view_id, state, registry)
     if not indices:
         return
-    j, i, layer, assy, src_id, ds_name = indices
+    j, i, layer, assy, src_id, ds_name, time, surface = indices
     vera_source = registry.get(src_id)
-    dtype = vera_source.array_dtype(ds_name)
+    dtype = vera_source.get_dataset_dtype(ds_name, state_idx=time)
     is_comp = dtype.is_computational()
     axial_mesh = vera_source.core.get_axial_mesh_means(dataset_type=dtype)
-    exposure = None
-    if vera_source.active_state.has_dataset("exposure"):
-        exposure = vera_source.active_state.exposure[0]
+    exposure = (
+        vera_source.get_dataset("exposure", state_idx=time)
+        if vera_source.get_dataset_shape("exposure", state_idx=time) is not None
+        else None
+    )
     state[f"label_info_{view_id}"] = {
-        "Exposure": np.round(exposure, decimals=3) if exposure is not None else "not recorded",
+        "Exposure": np.round(exposure[0], decimals=3) if exposure is not None else "not recorded",
         "Assembly": vera_source.core.reduced_core_map_label(assy, is_comp),
         "Layer": _layer_elevation(axial_mesh, layer),
         "Pin_x": int(i),
@@ -73,10 +78,17 @@ def set_info(view_id: int, state: State, registry: VeraDataRegistry):
     }
 
 
-def _get_assy_idx(ds_dtype: VeraDtype, state: State, src_core: VeraOutCore):
+def _get_assy_idx(ds_dtype: VeraDtype, state: State, src_core: VeraOutCore, view_id: int):
     is_comp = ds_dtype.is_computational()
     is_detector = ds_dtype.is_detector()
-    i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
+    frozen_selections = state[f"locked_{view_id}"]
+    if isinstance(frozen_selections, dict) and frozen_selections:
+        i, j = (
+            frozen_selections["selected_assembly_ij"]["i"],
+            frozen_selections["selected_assembly_ij"]["j"],
+        )
+    else:
+        i, j = state.selected_assembly_ij["i"], state.selected_assembly_ij["j"]
     assy = src_core.reduced_core_map_assembly(i, j, is_comp=is_comp, is_detector=is_detector)
     return assy
 
@@ -88,22 +100,31 @@ def get_safe_idxs(
     sel_src_id: str | None = None,
     sel_dataset_name: str | None = None,
 ) -> tuple | None:
-    """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name)"""
+    """Returns (selected_j, selected_i, selected_layer, selected_assembly, src_id, dataset_name, selected_time, selected_surface)"""
     dataset_name = state[f"selected_array_{view_id}"] if not sel_dataset_name else sel_dataset_name
     src_id = state[f"selected_src_id_{view_id}"] if not sel_src_id else sel_src_id
     vera_source = registry.get(src_id)
     if vera_source is None:
         return None
     core = vera_source.core
-    vdtype = vera_source.array_dtype(dataset_name)
+    vdtype = vera_source.get_dataset_dtype(dataset_name)
     if vdtype == VeraDtype.UNKNOWN:
         return None
-    sel_assy = _get_assy_idx(vdtype, state, core)
+    sel_assy = _get_assy_idx(vdtype, state, core, view_id)
     if sel_assy < 0:
         return None
-    sel_j = int(state.selected_j)
-    sel_i = int(state.selected_i)
-    sel_layer = registry.global_axial_idx_to_src_idx(src_id, vdtype, int(state.selected_layer))
+    frozen_selections = state[f"locked_{view_id}"]
+    selections = (
+        frozen_selections if frozen_selections and isinstance(frozen_selections, dict) else state
+    )
+    sel_j = int(selections["selected_j"])
+    sel_i = int(selections["selected_i"])
+
+    sel_layer = registry.global_axial_idx_to_src_idx(
+        src_id,
+        vdtype,
+        int(np.clip(selections["selected_layer"], 0, len(registry.global_axial_mesh) - 1)),
+    )
 
     core_shape = core.get_core_shape(dataset_type=vdtype)
     if len(core_shape) != 4:
@@ -119,7 +140,9 @@ def get_safe_idxs(
     safe_layer = int(np.clip(sel_layer, 0, nax - 1))
     safe_assy_idx = int(np.clip(sel_assy, 0, nass - 1))
 
-    return (safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name)
+    sel_time = max(0, min(get_time(state, view_id), len(vera_source.states) - 1))
+    surface = int(selections["selected_surface"])
+    return (safe_j, safe_i, safe_layer, safe_assy_idx, src_id, dataset_name, sel_time, surface)
 
 
 def convert_ji_to_node(selected_j, selected_i):
@@ -151,3 +174,53 @@ def default_dataset_name(names: dict) -> str | None:
     if pin in names:
         return names[pin]
     return next(iter(names.values()))
+
+
+def get_thresholds(state: State, view_id: int) -> list[ThresholdCondition]:
+    selected_src_id = state[f"selected_src_id_{view_id}"]
+    selected_array = state[f"selected_array_{view_id}"]
+    thres_key = format_label(selected_src_id, selected_array)
+    global_thres_key = format_label(selected_src_id, selected_array, source_identifier=False)
+    thresholds_to_apply = state["thresholds"].get(thres_key, []) + state["thresholds"].get(
+        global_thres_key, []
+    )
+    return thresholds_to_apply
+
+
+def pick_group(groups: list, group: int | None = None):
+    """
+    The one selected group, or all of them when group is None.
+    group is the user selected 1-based group index so must subtract -1 to convert to 0-based
+    """
+    if group is None or not groups or group < 1:
+        return groups
+    group -= 1
+    return [groups[min(max(group, 0), len(groups) - 1)]]
+
+
+def decode_tokens(tokens):
+    """[(src_id, array_name, group)] from serialized multi-picker tokens.
+
+    A two-field token means all groups (group None); this includes every token
+    written before groups existed. `group` is 1-based. Malformed entries drop.
+    """
+    triples = []
+    for token in tokens:
+        src_id, sep, rest = token.partition(MULTI_SEP)
+        if not sep:
+            continue
+        array_name, _, group = rest.partition(MULTI_SEP)
+        triples.append((src_id, array_name, int(group) if group else None))
+    return triples
+
+
+def encode_tokens(triples):
+    return [
+        f"{s}{MULTI_SEP}{a}" if g is None else f"{s}{MULTI_SEP}{a}{MULTI_SEP}{g}"
+        for s, a, g in triples
+    ]
+
+
+def get_multi_selected_src(state: State, view_id: int | str) -> list[tuple[str, str, int | None]]:
+    """(src_id, dataset, group) per selection; group is 1-based, None = all."""
+    return decode_tokens(state[f"multi_selected_{view_id}"])

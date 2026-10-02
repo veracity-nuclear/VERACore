@@ -2,10 +2,11 @@ import numpy as np
 from trame.ui.html import DivLayout
 from trame.widgets import html
 
-from vera_core.app.core import VeraDataRegistry, VeraDtype
+from vera_core.data.dtypes import VeraDtype
+from vera_core.data.registry import VeraDataRegistry
 from vera_core.widgets import vera
 
-from ..helpers import is_non_active_view
+from ..helpers import get_time, is_non_active_view
 
 ALLOWED_DTYPES = [
     VeraDtype.ASSEMBLY,
@@ -140,7 +141,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         src = registry.get(state[selected_src_key])
         if src is None:
             return
-        array = src.array(state[selected_array_key])
+        array = src.get_dataset(state[selected_array_key], state_idx=get_time(state, view_id))
         core = src.core
         dtype = array.dataset_type
         if dtype not in ALLOWED_DTYPES:
@@ -199,7 +200,7 @@ def initialize(server, registry: VeraDataRegistry, view_id):
                     selected_i=("selected_assembly_ij.i",),
                     selected_j=("selected_assembly_ij.j",),
                     aspect_ratio=(aspect_ratio_key, 1),
-                    color_preset="jet",
+                    color_preset=("color_preset",),
                     color_range=(f"color_range_{view_id}_0", [0.0, 1.0]),
                     dark=("$vuetify.theme.dark",),
                     x_labels=(xlabels_key,),
@@ -216,6 +217,6 @@ def initialize(server, registry: VeraDataRegistry, view_id):
         ):
             vera.VerticalColorMapEditor(
                 v_model=f"color_range_{view_id}_0",
-                color_preset="jet",
+                color_preset=("color_preset",),
                 units=(f"color_units_{view_id}",),
             )

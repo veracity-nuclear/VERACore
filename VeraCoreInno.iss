@@ -1,7 +1,10 @@
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 
 [Setup]
 AppName=VeraCore
-AppVersion=1.3.1
+AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\VeraCore
 DefaultGroupName=VeraCore
 OutputBaseFilename=VeraCoreSetup
@@ -37,4 +40,37 @@ begin
   Result := not RegQueryStringValue(HKLM,
     'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
     'pv', Version);
+end;
+
+// Remove all *.dist-info directories left over from a previous installation so
+// that importlib.metadata always finds exactly one version of each package.
+procedure RemoveStaleDistInfo(InternalDir: String);
+var
+  FindRec: TFindRec;
+  DirsToDelete: TStringList;
+  I: Integer;
+begin
+  DirsToDelete := TStringList.Create;
+  try
+    if FindFirst(InternalDir + '\*.dist-info', FindRec) then begin
+      try
+        repeat
+          if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+            DirsToDelete.Add(InternalDir + '\' + FindRec.Name);
+        until not FindNext(FindRec);
+      finally
+        FindClose(FindRec);
+      end;
+    end;
+    for I := 0 to DirsToDelete.Count - 1 do
+      DelTree(DirsToDelete.Strings[I], True, True, True);
+  finally
+    DirsToDelete.Free;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveStaleDistInfo(ExpandConstant('{app}\_internal'));
 end;

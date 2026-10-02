@@ -8,6 +8,7 @@ import VeraVerticalColorMapEditor from './VerticalColorMapEditor';
 import VeraCoreAxialView from './CoreAxialView';
 import VeraCoreSurfaceView from './CoreSurfaceView';
 import VeraAssemblySurfaceView from './AssemblySurfaceView';
+import VeraCipsView from './CipsView';
 
 export default {
   VeraAssemblyView,
@@ -18,4 +19,5 @@ export default {
   VeraColorMapEditor,
   VeraVerticalColorMapEditor,
   VeraAssemblySurfaceView,
+  VeraCipsView,
 };

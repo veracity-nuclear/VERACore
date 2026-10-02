@@ -1,9 +1,17 @@
 import numpy as np
 from trame.widgets import html, vuetify
-from trame_server.core import State, Controller
-from vera_core.app.core import VeraDataRegistry, VeraDtype, VeraDataSource, VeraDataset, nan_out_reflected
-from .DatasetPicker import build_dataset_picker
+from trame_server.core import Controller, State
+
+from vera_core.app.core import (
+    VeraDataRegistry,
+    VeraDataset,
+    VeraDataSource,
+    VeraDtype,
+    nan_out_reflected,
+)
+
 from ..helpers import format_label
+from .DatasetPicker import build_dataset_picker
 
 
 def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDataRegistry):
@@ -11,23 +19,23 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
     state.locate_source_file = registry.default_src_id
     state.locate_source_array = "pin_powers"
     state.locate_source_label = format_label(registry.default_src_id, "pin_powers")
-    state.locate_assembly_scope = "all" # "all" | "current"
-    state.locate_time_scope = "current" # "all" | "current"
+    state.locate_assembly_scope = "all"  # "all" | "current"
+    state.locate_time_scope = "current"  # "all" | "current"
     state.locate_error = ""
 
-    def _assembly_scope_data(data : VeraDataset, assembly_id : int):
+    def _assembly_scope_data(data: VeraDataset, assembly_id: int):
         dtype = data.dataset_type
         match dtype:
             case VeraDtype.PIN | VeraDtype.CHANNEL:
                 return data[:, :, :, assembly_id]
             case VeraDtype.ASSEMBLY:
-                return data[:, assembly_id]
+                return data[0, :, assembly_id]
             case VeraDtype.RADIAL:
                 return data[:, :, assembly_id]
             case VeraDtype.RADIAL_ASSEMBLY:
                 return data[assembly_id]
-    
-    def _nan_control_rods_pos(control_rod_positions, vera_array : VeraDataset):
+
+    def _nan_control_rods_pos(control_rod_positions, vera_array: VeraDataset):
         if vera_array.dataset_type in (VeraDtype.PIN, VeraDtype.RADIAL):
             vera_array = vera_array.copy()
             control_rod_positions = control_rod_positions
@@ -35,14 +43,15 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
             vera_array[rod_rows, rod_cols] = np.nan
             return vera_array
         return vera_array
-            
-    def _find_extremum(mode : str, 
-                       time_scope : str, 
-                       src : VeraDataSource, 
-                       array_name : str, 
-                       assembly_search : bool = False,
-                       assembly_id = 0
-        ):
+
+    def _find_extremum(
+        mode: str,
+        time_scope: str,
+        src: VeraDataSource,
+        array_name: str,
+        assembly_search: bool = False,
+        assembly_id=0,
+    ):
         extremum_arg_finder = np.nanargmax if mode == "max" else np.nanargmin
         extremum = -np.inf if mode == "max" else np.inf
         comparison = (lambda x, e: x >= e) if mode == "max" else (lambda x, e: x <= e)
@@ -51,7 +60,7 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
         reduced_core_map = src.core.reduced_core_map
         core_sym = src.core.core_sym
         controls_rod_pos = src.core.control_rod_positions
-        
+
         if time_scope == "all":
             for state_idx, state in enumerate(src.states):
                 if not state.has_dataset(array_name) or getattr(state, array_name) is None:
@@ -105,9 +114,9 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
         try:
             src = registry.get(state["locate_source_file"])
             array_name = state["locate_source_array"]
-            assembly_scope = state["locate_assembly_scope"]   # "all" | "current"
-            time_scope = state["locate_time_scope"]           # "all" | "current"
-            
+            assembly_scope = state["locate_assembly_scope"]  # "all" | "current"
+            time_scope = state["locate_time_scope"]  # "all" | "current"
+
             py = state["selected_j"]
             px = state["selected_i"]
             ax = state["selected_layer"]
@@ -117,23 +126,25 @@ def register_locate_state_ctrl(state: State, ctrl: Controller, registry: VeraDat
 
             if mode not in ("max", "min"):
                 raise RuntimeError(f"Unknown mode: {mode}. Cannot find extremum for this mode.")
-            
+
             vera_array = src.array(array_name)
             vera_dtype = vera_array.dataset_type
 
             if vera_array is None:
                 raise RuntimeError(f"Cannot find {array_name} in VERA data source.")
-                        
+
             # FIXME vvvvv, implement max/min for other veradtypes
             if vera_dtype not in (VeraDtype.PIN, VeraDtype.CHANNEL, VeraDtype.ASSEMBLY):
                 raise RuntimeError(f"Max/min not implemented for dataset type {vera_dtype}.")
 
-            indices, state_idx = _find_extremum(mode, time_scope, src, array_name, is_assembly_scoped, assy_id)
+            indices, state_idx = _find_extremum(
+                mode, time_scope, src, array_name, is_assembly_scoped, assy_id
+            )
 
             if indices is None or state_idx is None:
                 state.locate_error = "No valid values found in the selected dataset."
                 return
-            
+
             match vera_dtype:
                 case VeraDtype.PIN | VeraDtype.CHANNEL:
                     if is_assembly_scoped:
@@ -166,11 +177,22 @@ def build_locate_dialog(state, ctrl, registry):
             vuetify.VDivider()
             with vuetify.VCardText(classes="pt-4"):
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("1. Select Dataset", classes="text-caption font-weight-medium mb-2")
-                    build_dataset_picker(ctrl, "locate_source_label", "set_locate_source", "[src, entry.value]")
+                    html.Div(
+                        "1. Select Dataset",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
+                    build_dataset_picker(
+                        ctrl,
+                        "locate_source_label",
+                        "set_locate_source",
+                        "[src, entry.value]",
+                    )
 
                 with vuetify.VCard(outlined=True, classes="pa-3 mb-3"):
-                    html.Div("2. Assembly Scope", classes="text-caption font-weight-medium mb-2")
+                    html.Div(
+                        "2. Assembly Scope",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
                     with vuetify.VRadioGroup(
                         v_model=("locate_assembly_scope",),
                         row=True,
@@ -183,7 +205,10 @@ def build_locate_dialog(state, ctrl, registry):
                         vuetify.VRadio(label="Current Assembly", value="current")
 
                 with vuetify.VCard(outlined=True, classes="pa-3"):
-                    html.Div("3. State Point Scope", classes="text-caption font-weight-medium mb-2")
+                    html.Div(
+                        "3. State Point Scope",
+                        classes="text-caption font-weight-medium mb-2",
+                    )
                     with vuetify.VRadioGroup(
                         v_model=("locate_time_scope",),
                         row=True,

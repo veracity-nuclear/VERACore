@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+force-exclude = true
+extend-exclude = [
+    "build",
+    "dist",
+    "venv",
+    ".venv",
+    "vera_core.egg-info",
+    "vera_core/app/core/vera_tools"
+]
+
+[tool.ruff.lint]
+select = [
+    "E",  # Basic pycodestyle errors
+    "F",  # Pyflakes: undefined names, unused imports, etc.
+    "I",  # Import sorting
+    "B",  # Common bug-prone patterns
+]
+
+ignore = [
+    "E501",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

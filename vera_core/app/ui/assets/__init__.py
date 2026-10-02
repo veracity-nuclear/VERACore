@@ -1,4 +1,5 @@
 import os
+
 from trame.assets.local import LocalFileManager
 
 base_dir = os.path.dirname(os.path.abspath(__file__))

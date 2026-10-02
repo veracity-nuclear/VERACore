@@ -4,10 +4,11 @@
 }
 
 .colorBarContainer {
+  flex: 1;
+  max-height: 300px;
+  min-height: 100px;
   position: relative;
   width: 20px;
-  min-height: 100px;
-  flex: 1;
   border-radius: 2px;
   overflow: hidden;
   margin: 2px 0;
